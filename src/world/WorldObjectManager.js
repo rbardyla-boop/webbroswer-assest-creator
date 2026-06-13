@@ -217,7 +217,7 @@ export class WorldObjectManager {
     if (item?.assetRef && this.assetLibrary) {
       const resolved = await this.assetLibrary.resolve(item.assetRef);
       if (resolved) return resolved;
-      console.warn(`Missing asset "${item.assetRef}"; using placeholder.`);
+      console.warn(`Missing asset "${item.assetRef}" or local blob data; using placeholder.`);
       return {
         id: item.assetRef,
         type: "missing",

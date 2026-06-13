@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { AssetStore } from "./AssetStore.js";
-import { ASSET_TYPES, primitiveMetadata } from "./AssetTypes.js";
-import { normalizeAssetMetadata } from "./AssetValidation.js";
+import { ASSET_TYPES, createAssetId, primitiveMetadata } from "./AssetTypes.js";
+import { normalizeAssetMetadata, validateAssetMetadata } from "./AssetValidation.js";
 
 export class AssetLibrary {
   constructor({ store = new AssetStore() } = {}) {
@@ -14,8 +14,12 @@ export class AssetLibrary {
 
   async init() {
     try {
+      this._resetToPrimitives();
       for (const metadata of await this.store.listMetadata()) {
-        this.assets.set(metadata.id, normalizeAssetMetadata(metadata));
+        const result = validateAssetMetadata(metadata);
+        for (const warning of result.warnings) console.warn(warning);
+        if (!result.asset.id) continue;
+        this.assets.set(result.asset.id, result.asset);
       }
     } catch (error) {
       console.warn("Asset library storage unavailable; using in-memory primitives only.", error);
@@ -37,11 +41,13 @@ export class AssetLibrary {
 
   async storeAsset(metadata, blob = null) {
     const now = new Date().toISOString();
-    const safe = normalizeAssetMetadata({
+    let safe = normalizeAssetMetadata({
       ...metadata,
+      id: metadata.id || createAssetId(metadata.type || ASSET_TYPES.material, metadata.name || metadata.sourceName),
       createdAt: metadata.createdAt ?? now,
       updatedAt: now,
     });
+    if (this.assets.has(safe.id)) safe = { ...safe, id: this._uniqueId(safe.type, safe.name) };
     this.assets.set(safe.id, safe);
     await this.store.putAsset(safe, blob);
     return safe;
@@ -126,6 +132,17 @@ export class AssetLibrary {
     }
 
     return metadata;
+  }
+
+  _resetToPrimitives() {
+    this.assets.clear();
+    for (const asset of primitiveMetadata()) this.assets.set(asset.id, asset);
+  }
+
+  _uniqueId(type, name) {
+    let id = createAssetId(type, name);
+    while (this.assets.has(id)) id = createAssetId(type, name);
+    return id;
   }
 }
 

@@ -6,6 +6,36 @@ import { validateWorldDocument } from "../src/world/WorldValidation.js";
 import { WorldObjectManager } from "../src/world/WorldObjectManager.js";
 import { createAssetId, defaultColliderTypeForAsset } from "../src/assets/AssetTypes.js";
 import { normalizeAssetMetadata } from "../src/assets/AssetValidation.js";
+import { AssetLibrary } from "../src/assets/AssetLibrary.js";
+
+class MemoryAssetStore {
+  constructor() {
+    this.metadata = new Map();
+    this.blobs = new Map();
+  }
+
+  async listMetadata() {
+    return [...this.metadata.values()];
+  }
+
+  async putAsset(metadata, blob = null) {
+    this.metadata.set(metadata.id, structuredClone(metadata));
+    if (blob) this.blobs.set(metadata.id, blob);
+  }
+
+  async updateMetadata(metadata) {
+    this.metadata.set(metadata.id, structuredClone(metadata));
+  }
+
+  async getBlob(id) {
+    return this.blobs.get(id) ?? null;
+  }
+
+  async deleteAsset(id) {
+    this.metadata.delete(id);
+    this.blobs.delete(id);
+  }
+}
 
 const reliefGeometry = new THREE.BufferGeometry().copy(new THREE.BoxGeometry(1, 0.3, 1));
 const reliefGeometryData = reliefGeometry.toJSON();
@@ -187,5 +217,89 @@ assert.equal(metadata.id, assetId);
 assert.equal(metadata.name, "Stable Asset");
 assert.equal(metadata.defaultColliderType, "box");
 assert.deepEqual(metadata.defaultExclusion, { grass: true, trees: true });
+
+const memoryStore = new MemoryAssetStore();
+const assetLibrary = await new AssetLibrary({ store: memoryStore }).init();
+const reliefBlob = new Blob([JSON.stringify(reliefGeometryData)], { type: "application/json" });
+const reliefAsset = await assetLibrary.storeAsset({
+  id: "asset-relief-stable",
+  type: "relief",
+  name: "Stable Relief",
+  sourceName: "Stable Relief",
+  mimeType: "application/vnd.grass-world.relief+json",
+  sizeBytes: reliefBlob.size,
+}, reliefBlob);
+const duplicate = await assetLibrary.storeAsset({
+  id: "asset-relief-stable",
+  type: "relief",
+  name: "Stable Relief Copy",
+  sourceName: "Stable Relief Copy",
+  mimeType: "application/vnd.grass-world.relief+json",
+  sizeBytes: reliefBlob.size,
+}, reliefBlob);
+assert.equal(reliefAsset.id, "asset-relief-stable");
+assert.notEqual(duplicate.id, reliefAsset.id);
+
+const renamed = await assetLibrary.rename(reliefAsset.id, "Renamed Relief");
+assert.equal(renamed.name, "Renamed Relief");
+await assetLibrary.init();
+assert.equal(assetLibrary.get(reliefAsset.id).name, "Renamed Relief");
+
+const resolvedRelief = await assetLibrary.resolve(reliefAsset.id);
+assert.equal(resolvedRelief.id, reliefAsset.id);
+assert.ok(resolvedRelief.geometry);
+
+const assetScene = new THREE.Scene();
+const assetManager = new WorldObjectManager(assetScene, { assetLibrary });
+await assetManager.loadWorldObjects([
+  {
+    id: "obj-relief-a",
+    name: "Relief A",
+    type: "relief",
+    assetRef: reliefAsset.id,
+    transform: {
+      position: { x: 0, y: 1, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    collider: { type: "box", enabled: true },
+    exclusion: { grass: true, trees: true },
+  },
+  {
+    id: "obj-relief-b",
+    name: "Relief B",
+    type: "relief",
+    assetRef: reliefAsset.id,
+    transform: {
+      position: { x: 2, y: 1, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    collider: { type: "box", enabled: true },
+    exclusion: { grass: true, trees: true },
+  },
+  {
+    id: "obj-missing",
+    name: "Missing",
+    type: "image",
+    assetRef: "missing-image-asset",
+    transform: {
+      position: { x: 4, y: 1, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    collider: { type: "plane", enabled: true },
+    exclusion: { grass: true, trees: true },
+  },
+]);
+const assetRoundTrip = assetManager.serializeWorldObjects();
+assert.equal(assetRoundTrip.length, 3);
+assert.equal(assetRoundTrip[0].assetRef, reliefAsset.id);
+assert.equal(assetRoundTrip[1].assetRef, reliefAsset.id);
+assert.equal(assetRoundTrip[2].assetRef, "missing-image-asset");
+assert.equal(assetRoundTrip[2].asset, null);
+const manifest = assetLibrary.createManifest();
+assert.equal(manifest.localIndexedDB, true);
+assert.ok(manifest.items.some((item) => item.id === reliefAsset.id));
 
 console.log("world document regression checks passed");
