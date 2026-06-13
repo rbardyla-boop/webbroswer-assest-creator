@@ -21,6 +21,7 @@ import { DebugPanel } from "./debug/DebugPanel.js";
 import { createWorldDocument } from "./world/WorldDocument.js";
 import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
 import { WorldSerializer } from "./world/WorldSerializer.js";
+import { AssetLibrary } from "./assets/AssetLibrary.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -43,29 +44,24 @@ const camera = createCamera();
 const lights = createLights(scene);
 const input = new Input(renderer.domElement);
 const worldSerializer = new WorldSerializer();
+let assetLibrary = null;
 
 // --- world -------------------------------------------------------------------
 
 const colliders = new ColliderSystem();
 colliders.attachScene(scene);
 
-const worldLoader = new WorldRuntimeLoader({ scene, lights, fog: scene.fog, colliderSystem: colliders });
-const savedWorld = worldSerializer.load();
-let world = worldLoader.load(savedWorld?.document ?? createWorldDocument());
-for (const warning of world.warnings) console.warn(warning);
-let terrain = world.terrain;
-let grass = world.grass;
-let trees = world.trees;
-let objectManager = world.objectManager;
+let worldLoader = null;
+let world = null;
+let terrain = null;
+let grass = null;
+let trees = null;
+let objectManager = null;
 
 const player = new Player();
-// Start on open, fairly flat ground with a vista across the field.
-const spawn = world.document.player.spawn ?? findGoodSpawn();
-player.position.set(spawn.x, spawn.y ?? 0, spawn.z);
 scene.add(player.mesh);
 
 const cameraController = new PlayerCameraController(camera, player, input, { toggleKey: "KeyV" });
-setCameraMode(world.document.player.cameraMode);
 const playerController = new PlayerController(player, input, cameraController, colliders);
 
 function handleWorldChanged(change = {}) {
@@ -79,11 +75,9 @@ function handleWorldChanged(change = {}) {
     trees.queueRebuildForBox(box);
   }
 }
-objectManager.onChange = handleWorldChanged;
-
-function applyLoadedWorld(document) {
+async function applyLoadedWorld(document) {
   resetWorldReady();
-  world = worldLoader.load(document);
+  world = await worldLoader.load(document);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;
   grass = world.grass;
@@ -117,13 +111,30 @@ function setCameraMode(mode) {
 // --- ui ----------------------------------------------------------------------
 
 const debug = new DebugPanel({ visible: !runtimeMode });
-
 let editor = null;
-if (runtimeMode) {
-  toolbarEl.style.display = "none";
-  hintEl.style.display = "none";
-} else {
-  import("./editor/WorldEditor.js").then(({ WorldEditor }) => {
+
+async function boot() {
+  assetLibrary = await new AssetLibrary().init();
+  worldLoader = new WorldRuntimeLoader({ scene, lights, fog: scene.fog, colliderSystem: colliders, assetLibrary });
+  const savedWorld = worldSerializer.load();
+  world = await worldLoader.load(savedWorld?.document ?? createWorldDocument());
+  for (const warning of world.warnings) console.warn(warning);
+  terrain = world.terrain;
+  grass = world.grass;
+  trees = world.trees;
+  objectManager = world.objectManager;
+  objectManager.onChange = handleWorldChanged;
+
+  // Start on open, fairly flat ground with a vista across the field.
+  const spawn = world.document.player.spawn ?? findGoodSpawn();
+  player.position.set(spawn.x, spawn.y ?? 0, spawn.z);
+  setCameraMode(world.document.player.cameraMode);
+
+  if (runtimeMode) {
+    toolbarEl.style.display = "none";
+    hintEl.style.display = "none";
+  } else {
+    const { WorldEditor } = await import("./editor/WorldEditor.js");
     editor = new WorldEditor({
       scene,
       camera,
@@ -132,6 +143,7 @@ if (runtimeMode) {
       input,
       colliderSystem: colliders,
       objectManager,
+      assetLibrary,
       worldLoader,
       worldSerializer,
       player,
@@ -146,7 +158,12 @@ if (runtimeMode) {
       },
     });
     document.getElementById("open-editor").addEventListener("click", () => editor.open());
-  });
+  }
+
+  cameraController.update(0.016);
+  grass.prewarm(camera, 80);
+  updateSun();
+  requestAnimationFrame(frame);
 }
 
 // --- shadow rig follows the player so the shadow map stays useful ------------
@@ -164,10 +181,6 @@ function updateSun() {
 // Seat the camera before warming grass so the first patches load around it.
 // Prewarm only the closest patches for an instant near-field; streaming fills
 // the rest over the first second so the load never hangs.
-cameraController.update(0.016);
-grass.prewarm(camera, 80);
-updateSun();
-
 function resetWorldReady() {
   window.__WORLD_READY__ = false;
   document.body.dataset.worldReady = "false";
@@ -231,7 +244,10 @@ function frame(now) {
   });
 }
 
-requestAnimationFrame(frame);
+boot().catch((error) => {
+  console.error("Failed to initialize world", error);
+  loaderEl.querySelector(".sub").textContent = "failed to initialize world";
+});
 
 // --- resize ------------------------------------------------------------------
 

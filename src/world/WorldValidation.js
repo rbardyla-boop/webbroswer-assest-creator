@@ -29,6 +29,7 @@ export function validateWorldDocument(input) {
   doc.metadata.updatedAt = stringOrNow(doc.metadata.updatedAt);
   doc.metadata.createdAt = stringOrNow(doc.metadata.createdAt);
   doc.objects = sanitizeObjects(doc.objects, warnings);
+  doc.assets = sanitizeAssets(doc.assets);
   doc.player.spawn = sanitizeVec3Object(doc.player.spawn, { x: 0, y: 0, z: 0 });
   if (!CAMERA_MODES.has(doc.player.cameraMode)) doc.player.cameraMode = "third";
 
@@ -125,6 +126,39 @@ function sanitizeObjects(objects, warnings) {
     });
   }
   return safe;
+}
+
+function sanitizeAssets(assets = {}) {
+  return {
+    version: Math.max(1, Math.floor(numberOr(assets.version, 1))),
+    embedded: Array.isArray(assets.embedded) ? assets.embedded : [],
+    localIndexedDB: assets.localIndexedDB === true,
+    warning: typeof assets.warning === "string" ? assets.warning : null,
+    items: Array.isArray(assets.items) ? assets.items.map(sanitizeAssetManifestItem).filter(Boolean) : [],
+    reliefs: Array.isArray(assets.reliefs) ? assets.reliefs : [],
+    images: Array.isArray(assets.images) ? assets.images : [],
+    imported: Array.isArray(assets.imported) ? assets.imported : [],
+  };
+}
+
+function sanitizeAssetManifestItem(item) {
+  if (!item?.id || !item?.type) return null;
+  return {
+    id: String(item.id),
+    type: String(item.type),
+    kind: item.kind,
+    name: String(item.name ?? item.id),
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    sourceName: item.sourceName,
+    mimeType: item.mimeType,
+    sizeBytes: numberOr(item.sizeBytes, 0),
+    thumbnailRef: item.thumbnailRef ?? null,
+    bounds: item.bounds ?? null,
+    defaultColliderType: item.defaultColliderType,
+    defaultExclusion: item.defaultExclusion,
+    runtime: item.runtime ?? {},
+  };
 }
 
 function sanitizeTransform(transform = {}) {

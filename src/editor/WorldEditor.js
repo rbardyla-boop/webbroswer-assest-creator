@@ -1,13 +1,13 @@
 import * as THREE from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { getHeight } from "../terrain/terrainSampling.js";
-import { AssetLibrary } from "./AssetLibrary.js";
 import { ColliderInspector } from "./ColliderInspector.js";
 import { ReliefAssetTool } from "./ReliefAssetTool.js";
 import { getCollider } from "../physics/ColliderProxy.js";
 import { WorldSerializer } from "../world/WorldSerializer.js";
 import { exportWorldDocument, importWorldDocumentFile } from "../world/WorldExport.js";
+import { AssetImporter } from "../assets/AssetImporter.js";
+import { AssetLibrary } from "../assets/AssetLibrary.js";
 
 export class WorldEditor {
   constructor({
@@ -18,6 +18,7 @@ export class WorldEditor {
     input,
     colliderSystem,
     objectManager,
+    assetLibrary,
     worldLoader,
     worldSerializer,
     player,
@@ -44,15 +45,16 @@ export class WorldEditor {
     this.cameraController = cameraController;
     this.onLoadWorld = onLoadWorld;
     this.treeSystem = treeSystem;
+    this.assetLibrary = assetLibrary ?? new AssetLibrary();
+    this.assetImporter = new AssetImporter(this.assetLibrary);
     this.getGrassStats = getGrassStats;
     this.getTreeStats = getTreeStats;
     this.isOpen = false;
 
-    this.assets = new AssetLibrary();
     this.manager = objectManager;
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
-    this.selectedAsset = this.assets.list()[0];
+    this.selectedAsset = this.assetLibrary.list()[0];
     this.selectedObject = null;
     this._transformStartBox = null;
     this._transformUpdates = 0;
@@ -85,8 +87,8 @@ export class WorldEditor {
     scene.add(this.transform.getHelper());
 
     this.reliefTool = new ReliefAssetTool({
-      onCreateAsset: (asset) => {
-        const stored = this.assets.add(asset);
+      onCreateAsset: async (asset) => {
+        const stored = await this.assetImporter.importRelief(asset);
         this.selectedAsset = stored;
         this._renderAssetList();
       },
@@ -169,6 +171,7 @@ export class WorldEditor {
     const importRow = document.createElement("div");
     Object.assign(importRow.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     importRow.appendChild(this._button("Import GLB", () => this.fileInput.click()));
+    importRow.appendChild(this._button("Import Image", () => this.imageFileInput.click()));
     importRow.appendChild(this._button("Create Relief", () => this.reliefTool.open()));
     root.appendChild(importRow);
 
@@ -177,6 +180,12 @@ export class WorldEditor {
     this.fileInput.accept = ".glb,.gltf,model/gltf-binary,model/gltf+json";
     this.fileInput.style.display = "none";
     root.appendChild(this.fileInput);
+
+    this.imageFileInput = document.createElement("input");
+    this.imageFileInput.type = "file";
+    this.imageFileInput.accept = "image/*";
+    this.imageFileInput.style.display = "none";
+    root.appendChild(this.imageFileInput);
 
     this.worldFileInput = document.createElement("input");
     this.worldFileInput.type = "file";
@@ -193,7 +202,7 @@ export class WorldEditor {
 
     const actions = document.createElement("div");
     Object.assign(actions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
-    actions.appendChild(this._button("Duplicate", () => this._select(this.manager.duplicate(this.selectedObject))));
+    actions.appendChild(this._button("Duplicate", () => this._duplicateSelected()));
     actions.appendChild(this._button("Delete", () => this._deleteSelected()));
     actions.appendChild(this._button("Save World", () => this._save()));
     actions.appendChild(this._button("Load World", () => this._load()));
@@ -201,6 +210,13 @@ export class WorldEditor {
     actions.appendChild(this._button("Import World JSON", () => this.worldFileInput.click()));
     actions.appendChild(this._button("Close", () => this.close()));
     root.appendChild(actions);
+
+    const assetActions = document.createElement("div");
+    Object.assign(assetActions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
+    assetActions.appendChild(this._button("Rename Asset", () => this._renameSelectedAsset()));
+    assetActions.appendChild(this._button("Delete Asset", () => this._deleteSelectedAsset()));
+    assetActions.appendChild(this._button("Refresh Library", () => this._refreshAssetLibrary()));
+    root.appendChild(this._section("Asset Library", assetActions));
 
     this.colliderInspector = new ColliderInspector({
       onChange: (collider) => {
@@ -333,11 +349,26 @@ export class WorldEditor {
 
   _renderAssetList() {
     this.assetList.replaceChildren();
-    for (const asset of this.assets.list()) {
-      const button = this._button(asset.name, () => {
+    for (const asset of this.assetLibrary.list()) {
+      const button = this._button("", () => {
         this.selectedAsset = asset;
         this._renderAssetList();
       });
+      button.style.display = "grid";
+      button.style.gridTemplateColumns = asset.thumbnailRef ? "34px 1fr" : "1fr";
+      button.style.gap = "7px";
+      button.style.alignItems = "center";
+      if (asset.thumbnailRef) {
+        const img = document.createElement("img");
+        img.src = asset.thumbnailRef;
+        Object.assign(img.style, { width: "30px", height: "30px", objectFit: "cover", borderRadius: "5px" });
+        button.appendChild(img);
+      }
+      const label = document.createElement("span");
+      label.textContent = `${asset.name}\n${asset.type}`;
+      label.style.whiteSpace = "pre-line";
+      label.style.textAlign = "left";
+      button.appendChild(label);
       if (asset.id === this.selectedAsset?.id) {
         button.style.borderColor = "#7fdca0";
         button.style.color = "#7fdca0";
@@ -362,9 +393,15 @@ export class WorldEditor {
       if (event.code === "KeyR") this.transform.setMode("scale");
     });
 
-    this.fileInput.addEventListener("change", (event) => {
+    this.fileInput.addEventListener("change", async (event) => {
       const file = event.target.files?.[0];
-      if (file) this._importGLTF(file);
+      if (file) await this._importGLTF(file);
+      event.target.value = "";
+    });
+
+    this.imageFileInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await this._importImage(file);
       event.target.value = "";
     });
 
@@ -375,7 +412,7 @@ export class WorldEditor {
     });
   }
 
-  _handleCanvasClick(event) {
+  async _handleCanvasClick(event) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -394,7 +431,7 @@ export class WorldEditor {
     }
     const point = terrainHits[0].point;
     point.y = getHeight(point.x, point.z);
-    this._select(this.manager.addFromAsset(this.selectedAsset, point));
+    this._select(await this.manager.addFromAsset(this.selectedAsset, point));
   }
 
   _findEditorRoot(object) {
@@ -416,6 +453,10 @@ export class WorldEditor {
     this.manager.remove(object);
   }
 
+  async _duplicateSelected() {
+    this._select(await this.manager.duplicate(this.selectedObject));
+  }
+
   _save() {
     const t0 = performance.now();
     const document = this.worldLoader.updateDocumentFromRuntime({
@@ -432,10 +473,10 @@ export class WorldEditor {
     this._refreshPerf();
   }
 
-  _load() {
+  async _load() {
     const result = this.worldSerializer.load();
     this._select(null);
-    if (result) this.onLoadWorld?.(result.document);
+    if (result) await this.onLoadWorld?.(result.document);
     this.selectionLabel.textContent = result
       ? `Loaded ${result.document.objects.length} object(s) from localStorage.`
       : "No saved world found.";
@@ -453,7 +494,7 @@ export class WorldEditor {
   async _importWorld(file) {
     try {
       const result = await importWorldDocumentFile(file);
-      this.onLoadWorld?.(result.document);
+      await this.onLoadWorld?.(result.document);
       this.selectionLabel.textContent = `Imported ${result.document.objects.length} object(s) from ${file.name}.`;
     } catch (error) {
       console.error("Failed to import world", error);
@@ -490,21 +531,55 @@ export class WorldEditor {
       `localStorage ${this.stats.saveWriteMs.toFixed(2)} ms`;
   }
 
-  _importGLTF(file) {
-    const url = URL.createObjectURL(file);
-    new GLTFLoader().load(
-      url,
-      (gltf) => {
-        const asset = this.assets.add({ type: "gltf", name: file.name.replace(/\.(glb|gltf)$/i, ""), scene: gltf.scene });
-        this.selectedAsset = asset;
-        this._renderAssetList();
-        URL.revokeObjectURL(url);
-      },
-      undefined,
-      (error) => {
-        console.error("Failed to import GLTF", error);
-        URL.revokeObjectURL(url);
-      }
-    );
+  async _importGLTF(file) {
+    try {
+      this.selectedAsset = await this.assetImporter.importGLTF(file);
+      this._renderAssetList();
+    } catch (error) {
+      console.error("Failed to import GLTF", error);
+      this.selectionLabel.textContent = `Could not import ${file.name}.`;
+    }
+  }
+
+  async _importImage(file) {
+    try {
+      this.selectedAsset = await this.assetImporter.importImage(file);
+      this._renderAssetList();
+    } catch (error) {
+      console.error("Failed to import image", error);
+      this.selectionLabel.textContent = `Could not import ${file.name}.`;
+    }
+  }
+
+  async _renameSelectedAsset() {
+    if (!this.selectedAsset) return;
+    const name = prompt("Asset name", this.selectedAsset.name);
+    if (!name) return;
+    this.selectedAsset = await this.assetLibrary.rename(this.selectedAsset.id, name);
+    this._renderAssetList();
+  }
+
+  async _deleteSelectedAsset() {
+    if (!this.selectedAsset) return;
+    if (this.selectedAsset.type === "primitive") {
+      this.selectionLabel.textContent = "Built-in primitive assets cannot be deleted.";
+      return;
+    }
+    const used = [...this.manager.objects.values()].filter((object) => object.userData.assetRef === this.selectedAsset.id).length;
+    const message = used
+      ? `Delete "${this.selectedAsset.name}"? It is used by ${used} placed object(s). Missing placeholders will appear.`
+      : `Delete "${this.selectedAsset.name}"?`;
+    if (!confirm(message)) return;
+    await this.assetLibrary.delete(this.selectedAsset.id);
+    this.selectedAsset = this.assetLibrary.list()[0] ?? null;
+    this._renderAssetList();
+  }
+
+  async _refreshAssetLibrary() {
+    await this.assetLibrary.init();
+    if (!this.selectedAsset || !this.assetLibrary.get(this.selectedAsset.id)) {
+      this.selectedAsset = this.assetLibrary.list()[0] ?? null;
+    }
+    this._renderAssetList();
   }
 }

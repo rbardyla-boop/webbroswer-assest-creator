@@ -35,6 +35,36 @@ export function createPrimitiveMesh(kind) {
   return mesh;
 }
 
+export function createImageMesh(texture) {
+  const geometry = new THREE.PlaneGeometry(4, 3);
+  geometry.rotateX(-Math.PI / 2);
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.78,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = "Image";
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+export function createMissingAssetMesh(label = "Missing Asset") {
+  const group = new THREE.Group();
+  group.name = label;
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 1.8, 1.8),
+    new THREE.MeshStandardMaterial({ color: 0xff4f6d, roughness: 0.8 })
+  );
+  mesh.position.y = 0.9;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  return group;
+}
+
 export function createPlacedObject({ id, asset, object3D, position, rotation, scale }) {
   const root = new THREE.Group();
   root.name = asset.name ?? "Placed Object";

@@ -2,6 +2,7 @@ import { validateWorldDocument } from "./WorldValidation.js";
 
 export function exportWorldDocument(document, filename = null) {
   const { document: safe } = validateWorldDocument(document);
+  if (safe.assets?.localIndexedDB && safe.assets?.warning) console.warn(safe.assets.warning);
   const name = filename ?? `${slug(safe.metadata.name)}.world.json`;
   const blob = new Blob([JSON.stringify(safe, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);

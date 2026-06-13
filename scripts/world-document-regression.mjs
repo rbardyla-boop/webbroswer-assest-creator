@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { createWorldDocument } from "../src/world/WorldDocument.js";
 import { validateWorldDocument } from "../src/world/WorldValidation.js";
 import { WorldObjectManager } from "../src/world/WorldObjectManager.js";
+import { createAssetId, defaultColliderTypeForAsset } from "../src/assets/AssetTypes.js";
+import { normalizeAssetMetadata } from "../src/assets/AssetValidation.js";
 
 const reliefGeometry = new THREE.BufferGeometry().copy(new THREE.BoxGeometry(1, 0.3, 1));
 const reliefGeometryData = reliefGeometry.toJSON();
@@ -38,6 +40,7 @@ const source = createWorldDocument({
       id: "obj-primitive",
       name: "Persisted Cube",
       type: "primitive",
+      assetRef: "primitive-cube",
       primitive: "cube",
       asset: { type: "primitive", kind: "cube", name: "Cube" },
       transform: {
@@ -92,10 +95,12 @@ assert.equal(validated.document.player.spawn.y, 4.25);
 
 const scene = new THREE.Scene();
 const manager = new WorldObjectManager(scene);
-manager.loadWorldObjects(validated.document.objects);
+await manager.loadWorldObjects(validated.document.objects);
 const roundTripObjects = manager.serializeWorldObjects();
 
 assert.equal(roundTripObjects.length, 2);
+assert.equal(roundTripObjects[0].assetRef, "primitive-cube");
+assert.equal(roundTripObjects[0].asset, null);
 assert.equal(roundTripObjects[0].primitive, "cube");
 assert.equal(roundTripObjects[0].collider.type, "box");
 assert.deepEqual(roundTripObjects[0].collider.dimensions, { width: 2, height: 3, depth: 4 });
@@ -167,5 +172,20 @@ assert.equal(invalid.document.objects[0].collider.type, "none");
 assert.match(invalid.warnings.join("\n"), /Unsupported world version 999/);
 assert.match(invalid.warnings.join("\n"), /invalid collider type/);
 assert.match(invalid.warnings.join("\n"), /Skipped object bad-transform/);
+
+const assetId = createAssetId("gltf", "Test Asset.glb");
+assert.match(assetId, /^gltf-test-asset-/);
+assert.equal(defaultColliderTypeForAsset({ type: "image" }), "plane");
+const metadata = normalizeAssetMetadata({
+  id: assetId,
+  type: "gltf",
+  name: "Stable Asset",
+  sourceName: "stable.glb",
+  sizeBytes: 123,
+});
+assert.equal(metadata.id, assetId);
+assert.equal(metadata.name, "Stable Asset");
+assert.equal(metadata.defaultColliderType, "box");
+assert.deepEqual(metadata.defaultExclusion, { grass: true, trees: true });
 
 console.log("world document regression checks passed");

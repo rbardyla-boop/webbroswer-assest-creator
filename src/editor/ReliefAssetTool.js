@@ -466,9 +466,9 @@ export class ReliefAssetTool {
     return plane;
   }
 
-  _createAsset() {
+  async _createAsset() {
     const geometry = this.createGeometry();
-    this.onCreateAsset?.({
+    await this.onCreateAsset?.({
       type: "relief",
       name: "Relief Asset",
       geometry,

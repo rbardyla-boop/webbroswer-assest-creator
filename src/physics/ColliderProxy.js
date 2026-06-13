@@ -10,6 +10,14 @@ export const COLLIDER_TYPES = {
 };
 
 export function defaultColliderForAsset(asset) {
+  if (asset?.defaultColliderType) {
+    return {
+      type: asset.defaultColliderType,
+      dimensions: {},
+      excludeGrass: asset.defaultExclusion?.grass ?? true,
+      excludeTrees: asset.defaultExclusion?.trees ?? asset.defaultExclusion?.grass ?? true,
+    };
+  }
   if (asset.type === "primitive") {
     if (asset.kind === "sphere" || asset.kind === "cylinder") return { type: COLLIDER_TYPES.cylinder, excludeGrass: true };
     if (asset.kind === "plane") return { type: COLLIDER_TYPES.plane, excludeGrass: true };
@@ -18,6 +26,7 @@ export function defaultColliderForAsset(asset) {
   }
   if (asset.type === "relief") return { type: COLLIDER_TYPES.box, excludeGrass: true };
   if (asset.type === "gltf") return { type: COLLIDER_TYPES.box, excludeGrass: true };
+  if (asset.type === "image") return { type: COLLIDER_TYPES.plane, excludeGrass: true };
   return { type: COLLIDER_TYPES.none, excludeGrass: false };
 }
 

@@ -54,6 +54,11 @@ export function createWorldDocument(overrides = {}) {
     },
     objects: [],
     assets: {
+      version: 1,
+      embedded: [],
+      localIndexedDB: false,
+      warning: null,
+      items: [],
       reliefs: [],
       images: [],
       imported: [],

@@ -1,12 +1,14 @@
 import * as THREE from "three";
 import { getHeight } from "../terrain/terrainSampling.js";
 import { normalizeCollider } from "../physics/ColliderProxy.js";
-import { createPlacedObject, createPrimitiveMesh } from "./PlacedObject.js";
+import { createImageMesh, createMissingAssetMesh, createPlacedObject, createPrimitiveMesh } from "./PlacedObject.js";
+import { ASSET_TYPES } from "../assets/AssetTypes.js";
 
 export class WorldObjectManager {
-  constructor(scene, { colliderSystem, onChange } = {}) {
+  constructor(scene, { colliderSystem, onChange, assetLibrary } = {}) {
     this.scene = scene;
     this.colliderSystem = colliderSystem;
+    this.assetLibrary = assetLibrary;
     this.onChange = onChange;
     this.root = new THREE.Group();
     this.root.name = "World Objects";
@@ -18,9 +20,9 @@ export class WorldObjectManager {
     this._boxScratch = new THREE.Box3();
   }
 
-  addFromAsset(asset, position) {
+  async addFromAsset(asset, position) {
     const id = `obj-${this._nextId++}`;
-    const object3D = this._buildObject3D(asset);
+    const object3D = await this._buildObject3D(asset);
     const snapped = position.clone();
     snapped.y = getHeight(snapped.x, snapped.z);
 
@@ -30,6 +32,7 @@ export class WorldObjectManager {
       object3D,
       position: snapped.toArray(),
     });
+    object.userData.assetRef = asset.id ?? null;
     this.root.add(object);
     this.objects.set(id, object);
     this._changed({ boxes: [this.getWorldBox(object)] });
@@ -38,7 +41,12 @@ export class WorldObjectManager {
 
   duplicate(object) {
     if (!object) return null;
-    const copy = this.addFromAsset(object.userData.asset, object.position.clone().add(new THREE.Vector3(3, 0, 3)));
+    const copy = this.addFromObject(object, object.position.clone().add(new THREE.Vector3(3, 0, 3)));
+    return copy;
+  }
+
+  async addFromObject(object, position) {
+    const copy = await this.addFromAsset(object.userData.asset, position);
     copy.rotation.copy(object.rotation);
     copy.scale.copy(object.scale);
     copy.userData.collider = normalizeCollider(object.userData.collider);
@@ -89,10 +97,10 @@ export class WorldObjectManager {
       return {
         id: object.userData.objectId,
         name: object.name,
-        type: asset.type === "relief" ? "relief" : "primitive",
-        assetRef: object.userData.asset?.id ?? null,
-        primitive,
-        asset,
+        type: asset.type === "relief" || asset.type === "gltf" || asset.type === "image" ? asset.type : "primitive",
+        assetRef: object.userData.assetRef ?? object.userData.asset?.id ?? null,
+        primitive: asset.type === "primitive" ? primitive : null,
+        asset: object.userData.assetRef ? null : asset,
         transform: {
           position: vectorToObject(object.position),
           rotation: { x: object.rotation.x, y: object.rotation.y, z: object.rotation.z },
@@ -140,22 +148,23 @@ export class WorldObjectManager {
     this._changed({ full: true });
   }
 
-  loadWorldObjects(objects = []) {
+  async loadWorldObjects(objects = []) {
     this.clear();
     for (const item of objects) {
-      const asset = assetFromWorldObject(item);
+      const asset = await this.resolveAssetForWorldObject(item);
       if (!asset) continue;
       const id = item.id ?? `obj-${this._nextId++}`;
       const t = item.transform ?? {};
       const object = createPlacedObject({
         id,
         asset,
-        object3D: this._buildObject3D(asset),
+        object3D: await this._buildObject3D(asset),
         position: vecObjectToArray(t.position, [0, 0, 0]),
         rotation: vecObjectToArray(t.rotation, [0, 0, 0]),
         scale: vecObjectToArray(t.scale, [1, 1, 1]),
       });
       object.visible = item.runtime?.visible !== false;
+      object.userData.assetRef = item.assetRef ?? asset.id ?? null;
       object.userData.collider = normalizeCollider({
         type: item.collider?.enabled === false ? "none" : item.collider?.type,
         dimensions: item.collider?.dimensions ?? {},
@@ -204,9 +213,25 @@ export class WorldObjectManager {
     this.onChange?.(change);
   }
 
-  _buildObject3D(asset) {
-    if (asset.type === "primitive") return createPrimitiveMesh(asset.kind);
-    if (asset.type === "relief" && (asset.geometry || asset.geometryData)) {
+  async resolveAssetForWorldObject(item) {
+    if (item?.assetRef && this.assetLibrary) {
+      const resolved = await this.assetLibrary.resolve(item.assetRef);
+      if (resolved) return resolved;
+      console.warn(`Missing asset "${item.assetRef}"; using placeholder.`);
+      return {
+        id: item.assetRef,
+        type: "missing",
+        name: `Missing ${item.assetRef}`,
+        kind: "cube",
+      };
+    }
+    return assetFromWorldObject(item);
+  }
+
+  async _buildObject3D(asset) {
+    if (asset.type === ASSET_TYPES.primitive) return createPrimitiveMesh(asset.kind);
+    if (asset.type === ASSET_TYPES.image && asset.texture) return createImageMesh(asset.texture);
+    if (asset.type === ASSET_TYPES.relief && (asset.geometry || asset.geometryData)) {
       const geometry = asset.geometry
         ? asset.geometry.clone()
         : new THREE.BufferGeometryLoader().parse(asset.geometryData);
@@ -218,7 +243,7 @@ export class WorldObjectManager {
       mesh.receiveShadow = true;
       return mesh;
     }
-    if (asset.type === "gltf" && asset.scene) {
+    if (asset.type === ASSET_TYPES.gltf && asset.scene) {
       const clone = asset.scene.clone(true);
       clone.traverse((child) => {
         if (child.isMesh) {
@@ -228,6 +253,7 @@ export class WorldObjectManager {
       });
       return clone;
     }
+    if (asset.type === "missing") return createMissingAssetMesh(asset.name);
     return createPrimitiveMesh("cube");
   }
 }
@@ -241,7 +267,8 @@ function serializeAsset(asset) {
       geometryData: asset.geometry?.toJSON() ?? asset.geometryData,
     };
   }
-  if (asset.type === "gltf") return { type: "primitive", kind: "cube", name: `${asset.name} placeholder` };
+  if (asset.type === "image") return { type: "image", name: asset.name };
+  if (asset.type === "gltf") return { type: "gltf", name: asset.name };
   return { type: "primitive", kind: "cube", name: "Cube" };
 }
 

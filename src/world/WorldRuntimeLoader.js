@@ -10,11 +10,12 @@ import { WorldObjectManager } from "./WorldObjectManager.js";
 import { validateWorldDocument } from "./WorldValidation.js";
 
 export class WorldRuntimeLoader {
-  constructor({ scene, lights, fog, colliderSystem = null } = {}) {
+  constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null } = {}) {
     this.scene = scene;
     this.lights = lights;
     this.fog = fog;
     this.colliderSystem = colliderSystem ?? new ColliderSystem();
+    this.assetLibrary = assetLibrary;
     this.terrain = null;
     this.grass = null;
     this.trees = null;
@@ -23,7 +24,7 @@ export class WorldRuntimeLoader {
     this.warnings = [];
   }
 
-  load(inputDocument) {
+  async load(inputDocument) {
     const result = validateWorldDocument(inputDocument);
     const document = result.document;
     this.warnings = result.warnings;
@@ -37,12 +38,13 @@ export class WorldRuntimeLoader {
 
     this.manager = new WorldObjectManager(this.scene, {
       colliderSystem: this.colliderSystem,
+      assetLibrary: this.assetLibrary,
       onChange: () => {
         this.grass?.rebuildActivePatches();
         this.trees?.rebuildActivePatches();
       },
     });
-    this.manager.loadWorldObjects(document.objects);
+    await this.manager.loadWorldObjects(document.objects);
 
     this.grass = new GrassSystem(this.scene, this.lights, this.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
     this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees), this.colliderSystem);
@@ -64,6 +66,7 @@ export class WorldRuntimeLoader {
     this.document.grass = grassDocumentFromRuntime(this.grass?.cfg, this.document.grass);
     this.document.trees = treeDocumentFromRuntime(this.trees?.cfg, this.document.trees);
     this.document.objects = this.manager?.serializeWorldObjects() ?? [];
+    if (this.assetLibrary) this.document.assets = this.assetLibrary.createManifest();
     if (player) {
       this.document.player.spawn = { x: player.position.x, y: player.position.y, z: player.position.z };
     }
