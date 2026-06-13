@@ -453,6 +453,63 @@ const importedPrefab = validateWorldDocument(JSON.parse(exportedPrefabJson));
 assert.equal(importedPrefab.document.objects[0].prefabRef, "prefab-known-123");
 assert.equal(importedPrefab.document.prefabs.items.length, 1);
 
+// --- Stage 6A: grouped prefab round-trip ------------------------------------
+
+function worldObjectDescriptor(id, assetRef, primitive, x) {
+  return {
+    id,
+    name: primitive,
+    type: "primitive",
+    assetRef,
+    primitive,
+    asset: null,
+    transform: {
+      position: { x, y: 1, z: 10 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    collider: { type: "box", dimensions: {}, enabled: true },
+    exclusion: { grass: true, trees: true, radius: 0, bounds: null },
+    runtime: { visible: true, static: true, castShadow: true, receiveShadow: true },
+  };
+}
+
+const groupLibrary = await new PrefabLibrary({ store: new MemoryPrefabStore() }).init();
+const groupA = worldObjectDescriptor("g-a", "primitive-cube", "cube", 10);
+const groupB = worldObjectDescriptor("g-b", "primitive-sphere", "sphere", 13); // 3 units apart
+const groupPrefab = await groupLibrary.createFromObjects([groupA, groupB], { name: "Two Block Group" });
+
+assert.equal(groupPrefab.kind, "group");
+assert.equal(groupPrefab.objects.length, 2);
+assert.equal(groupPrefab.metadata.objectCount, 2);
+// Relative offset preserved as local transforms about the group origin.
+const localDx = groupPrefab.objects[1].localTransform.position.x - groupPrefab.objects[0].localTransform.position.x;
+assert.ok(Math.abs(localDx - 3) < 1e-6);
+
+// Expansion preserves relative layout and tags both children with prefabRef.
+const groupExpanded = worldObjectsFromPrefab(groupPrefab, { position: { x: 50, y: 0, z: 50 } });
+assert.equal(groupExpanded.length, 2);
+assert.equal(groupExpanded[0].prefabRef, groupPrefab.id);
+assert.equal(groupExpanded[1].prefabRef, groupPrefab.id);
+const worldDx = groupExpanded[1].transform.position.x - groupExpanded[0].transform.position.x;
+assert.ok(Math.abs(worldDx - 3) < 1e-6);
+assert.equal(groupExpanded[0].assetRef, "primitive-cube");
+assert.equal(groupExpanded[1].assetRef, "primitive-sphere");
+
+// Instancing the grouped prefab creates two real placed objects.
+const groupScene = new THREE.Scene();
+const groupManager = new WorldObjectManager(groupScene, { assetLibrary });
+const groupInstancer = new PrefabInstancer(groupManager);
+const groupPlaced = await groupInstancer.instantiate(groupPrefab, { position: { x: -30, y: 0, z: -30 } });
+assert.equal(groupPlaced.length, 2);
+assert.equal(groupManager.objects.size, 2);
+const groupRoundTrip = groupManager.serializeWorldObjects();
+assert.equal(groupRoundTrip.every((o) => o.prefabRef === groupPrefab.id), true);
+assert.equal(groupRoundTrip[0].collider.type, "box");
+assert.equal(groupRoundTrip[0].exclusion.grass, true);
+const placedDx = Math.abs(groupRoundTrip[1].transform.position.x - groupRoundTrip[0].transform.position.x);
+assert.ok(Math.abs(placedDx - 3) < 1e-6); // relative layout reconstructed
+
 // Garbage prefab input is skipped, never thrown.
 assert.equal(validatePrefabDocument(null).prefab, null);
 assert.equal(validatePrefabDocument({ name: "Empty", objects: [] }).prefab, null);

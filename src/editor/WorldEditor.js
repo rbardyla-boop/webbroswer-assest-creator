@@ -11,6 +11,7 @@ import { AssetLibrary } from "../assets/AssetLibrary.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
 import { PrefabInstancer } from "../prefabs/PrefabInstancer.js";
 import { PrefabPanel } from "./PrefabPanel.js";
+import { SelectionGroup } from "./SelectionGroup.js";
 
 export class WorldEditor {
   constructor({
@@ -60,10 +61,10 @@ export class WorldEditor {
     this.armedPrefab = null;
 
     this.manager = objectManager;
+    this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.selectedAsset = this.assetLibrary.list()[0];
-    this.selectedObject = null;
     this._transformStartBox = null;
     this._transformUpdates = 0;
     this.stats = {
@@ -79,15 +80,25 @@ export class WorldEditor {
     this.transform.addEventListener("objectChange", () => {
       this._transformUpdates++;
       this.stats.transformUpdates++;
+      // Group drag: move every selected object this tick (visual only, cheap).
+      if (this.selection.isMulti) this.selection.applyDrag();
       this._refreshSelectionLabel();
     });
     this.transform.addEventListener("mouseDown", () => {
-      this._transformStartBox = this.selectedObject ? this.manager.getWorldBox(this.selectedObject) : null;
+      if (this.selection.isMulti) this.selection.beginDrag();
+      else this._transformStartBox = this.selection.primary ? this.manager.getWorldBox(this.selection.primary) : null;
       this._transformUpdates = 0;
     });
     this.transform.addEventListener("mouseUp", () => {
       const t0 = performance.now();
-      if (this.selectedObject) this.manager.commitObjectChange(this.selectedObject, this._transformStartBox);
+      // Commit once on drag end: rebuild grass/trees for all touched boxes.
+      if (this.selection.isMulti) {
+        const { boxes } = this.selection.endDrag();
+        this.manager._changed({ boxes });
+        this.transform.attach(this.selection.pivot); // follow recentered pivot
+      } else if (this.selection.primary) {
+        this.manager.commitObjectChange(this.selection.primary, this._transformStartBox);
+      }
       this.stats.lastActionMs = performance.now() - t0;
       this._transformStartBox = null;
       this._refreshPerf();
@@ -106,10 +117,19 @@ export class WorldEditor {
     this._bind();
   }
 
+  // Primary selected object — preserves the Stage 1–5 single-selection API.
+  get selectedObject() {
+    return this.selection.primary;
+  }
+
   setWorldContext({ terrain, objectManager, treeSystem, getGrassStats, getTreeStats }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
-    if (objectManager) this.prefabInstancer.setManager(objectManager);
+    if (objectManager) {
+      this.prefabInstancer.setManager(objectManager);
+      this.selection.setManager(objectManager);
+    }
+    this.selection.clear();
     this._armPrefabPlacement(null);
     this.prefabPanel?.refresh();
     this.treeSystem = treeSystem ?? this.treeSystem;
@@ -139,7 +159,7 @@ export class WorldEditor {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.root.style.display = "none";
-    this.transform.detach();
+    this._clearSelection();
     this.input?.setEnabled?.(true);
     this.onClose?.();
   }
@@ -240,8 +260,11 @@ export class WorldEditor {
 
     this.colliderInspector = new ColliderInspector({
       onChange: (collider) => {
-        if (!this.selectedObject) return;
-        this.selectedObject.userData.collider = { ...this.selectedObject.userData.collider, ...collider };
+        if (!this.selection.count) return;
+        // Apply the collider/exclusion change to every selected object.
+        for (const object of this.selection.objects) {
+          object.userData.collider = { ...object.userData.collider, ...collider };
+        }
         this.manager._changed();
         this._refreshSelectionLabel();
       },
@@ -454,15 +477,22 @@ export class WorldEditor {
       return;
     }
 
+    // Shift/Ctrl/Cmd-click toggles an object in the multi-selection.
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+
     const objectHits = this.raycaster.intersectObjects([...this.manager.objects.values()], true);
     if (objectHits.length) {
-      this._select(this._findEditorRoot(objectHits[0].object));
+      const root = this._findEditorRoot(objectHits[0].object);
+      if (additive) this._toggleInSelection(root);
+      else this._select(root);
       return;
     }
 
     const terrainHits = this.raycaster.intersectObject(this.terrain.mesh, false);
-    if (!terrainHits.length || !this.selectedAsset) {
-      this._select(null);
+    // Modifier-click or no-asset terrain click clears the selection rather than
+    // placing — gives an explicit "deselect" gesture while multi-selecting.
+    if (!terrainHits.length || additive || !this.selectedAsset) {
+      this._clearSelection();
       return;
     }
     const point = terrainHits[0].point;
@@ -476,42 +506,78 @@ export class WorldEditor {
     return current;
   }
 
+  // Replace the selection with a single object (or clear when null).
   _select(object) {
-    this.selectedObject = object;
-    if (object) this.transform.attach(object);
-    else this.transform.detach();
+    this.selection.set(object ? [object] : []);
+    this._applySelection();
+  }
+
+  _toggleInSelection(object) {
+    if (!object) return;
+    this.selection.toggle(object);
+    this._applySelection();
+  }
+
+  _clearSelection() {
+    this.selection.clear();
+    this._applySelection();
+  }
+
+  // Point the transform gizmo at the right target: the object (single), the
+  // group pivot (multi), or nothing (empty), then refresh dependent UI.
+  _applySelection() {
+    const count = this.selection.count;
+    if (count === 0) {
+      this.transform.detach();
+    } else if (count === 1) {
+      this.transform.attach(this.selection.primary);
+    } else {
+      this.selection.recenterPivot();
+      this.transform.attach(this.selection.pivot);
+    }
     this._refreshSelectionLabel();
   }
 
   _deleteSelected() {
-    const object = this.selectedObject;
-    this._select(null);
-    this.manager.remove(object);
+    if (!this.selection.count) return;
+    const objects = [...this.selection.objects];
+    this._clearSelection();
+    for (const object of objects) this.manager.remove(object);
   }
 
   async _duplicateSelected() {
-    this._select(await this.manager.duplicate(this.selectedObject));
+    if (!this.selection.count) return;
+    // Duplicate every selected object by the same offset → relative layout kept.
+    const sources = [...this.selection.objects];
+    const copies = [];
+    for (const source of sources) {
+      const copy = await this.manager.duplicate(source);
+      if (copy) copies.push(copy);
+    }
+    this.selection.set(copies);
+    this._applySelection();
   }
 
   // --- prefabs ----------------------------------------------------------------
 
   async _createPrefabFromSelection() {
-    if (!this.selectedObject) {
-      this.prefabPanel.setStatus("Select an object first, then save it as a prefab.");
+    const selected = [...this.selection.objects];
+    if (!selected.length) {
+      this.prefabPanel.setStatus("Select one or more objects first, then save them as a prefab.");
       return;
     }
-    // Multi-select does not exist yet, so v1 captures a single object. The
-    // prefab format and instancer already support grouped prefabs for later.
-    const descriptor = this.manager.serializeWorldObject(this.selectedObject);
-    const suggested = this.selectedObject.name || "Prefab";
+    // One object → single prefab; multiple → grouped prefab. The serializer
+    // captures child local transforms relative to the group root either way.
+    const descriptors = selected.map((object) => this.manager.serializeWorldObject(object));
+    const suggested = selected.length > 1 ? `Group (${selected.length})` : selected[0].name || "Prefab";
     const name = prompt("Prefab name", suggested);
     if (name === null) return;
     try {
-      const prefab = await this.prefabLibrary.createFromObjects([descriptor], {
+      const prefab = await this.prefabLibrary.createFromObjects(descriptors, {
         name: name || suggested,
       });
       this.prefabPanel.refresh();
-      this.prefabPanel.setStatus(`Saved prefab "${prefab.name}".`);
+      this.prefabPanel.setStatus(`Saved ${prefab.kind} prefab "${prefab.name}" (${prefab.objects.length} object).`);
     } catch (error) {
       console.warn("Could not create prefab", error);
       this.prefabPanel.setStatus("Could not create prefab from selection.");
@@ -618,14 +684,20 @@ export class WorldEditor {
 
   _refreshSelectionLabel() {
     if (!this.selectionLabel) return;
-    if (!this.selectedObject) {
+    const count = this.selection.count;
+    if (count === 0) {
       this.selectionLabel.textContent = "No object selected.";
       this.colliderInspector?.setObject(null);
       return;
     }
-    this.colliderInspector?.setObject(this.selectedObject);
-    const p = this.selectedObject.position;
-    this.selectionLabel.textContent = `Selected ${this.selectedObject.name}: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+    const primary = this.selection.primary;
+    this.colliderInspector?.setObject(primary);
+    if (count > 1) {
+      this.selectionLabel.textContent = `${count} objects selected — group transform active.`;
+    } else {
+      const p = primary.position;
+      this.selectionLabel.textContent = `Selected ${primary.name}: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+    }
     this._refreshPerf();
   }
 

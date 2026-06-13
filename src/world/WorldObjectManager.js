@@ -50,6 +50,9 @@ export class WorldObjectManager {
     copy.rotation.copy(object.rotation);
     copy.scale.copy(object.scale);
     copy.userData.collider = normalizeCollider(object.userData.collider);
+    // Preserve identity metadata so duplicates keep their asset + prefab links.
+    if (object.userData.assetRef) copy.userData.assetRef = object.userData.assetRef;
+    copy.userData.prefabRef = object.userData.prefabRef ?? null;
     copy.position.y = object.position.y;
     this._changed({ boxes: [this.getWorldBox(copy)] });
     return copy;
