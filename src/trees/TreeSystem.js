@@ -71,7 +71,7 @@ export class TreeSystem {
 
   setEnabled(enabled) {
     this.cfg.enabled = enabled;
-    if (!enabled) for (const patch of this.patches.values()) patch.setVisible(false);
+    if (!enabled) this._resetPatches();
   }
 
   updateSettings(settings) {
