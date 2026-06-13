@@ -32,7 +32,8 @@ npm run build && npm run preview
 | Open World Builder | toolbar button (top-right) |
 
 The debug panel shows FPS, visible vs. active patches, approximate visible blade
-count, LOD distribution, draw calls, player position, and the camera mode.
+count, tree patch/tree counts, LOD distribution, draw calls, player position,
+and the camera mode.
 
 ## Architecture
 
@@ -55,6 +56,13 @@ src/
     GrassPlacement.js         # deterministic per-patch instance data via placement rules
     GrassPatch.js             # one chunk: instanced attributes + per-LOD geometries
     GrassSystem.js            # streaming, frustum cull, LOD assignment, stats
+  trees/
+    TreeConfig.js             # forest density, LOD, streaming, exclusion, variation
+    TreeGeometry.js           # shared low-poly trunk/canopy geometries per LOD
+    TreeMaterial.js           # shared tree materials with instance colors
+    TreePlacement.js          # deterministic terrain-aware tree instance data
+    TreePatch.js              # one chunk: instanced trunks + canopies per LOD
+    TreeSystem.js             # streaming, cull, budgeted rebuilds, debug stats
   player/
     Player.js                 # capsule avatar + state
     PlayerController.js        # input → grounded movement
@@ -95,6 +103,22 @@ src/
   (instance count), thinning far grass while keeping the near field lush.
 - **Placement rules.** Blades are placed through `terrainSampling` — never on
   steep slopes, clustered by a meadow mask, always grounded on the terrain.
+
+### Tree system
+
+- **Instanced patches.** Forest chunks are patch-based like grass. Each visible
+  patch renders shared trunk and canopy geometries through `InstancedMesh`;
+  trees are not individual scene meshes.
+- **Terrain/exclusion aware.** Placement samples the same terrain height/slope
+  functions and respects World Builder exclusion footprints, so roads, planes,
+  ramps, and placed meshes can keep trees out.
+- **LOD and streaming.** Tree patches build lazily around the camera, cull by
+  distance/frustum, swap near/mid/far procedural LODs at patch level, and dispose
+  outside the keep distance.
+- **Editor-safe rebuilds.** Moving exclusion objects queues affected tree patch
+  rebuilds instead of rebuilding the whole forest synchronously.
+- **World Builder controls.** The editor exposes enable, density, visible
+  distance, seed, and exclusion-respect settings for the tree system.
 
 ### Player & camera
 

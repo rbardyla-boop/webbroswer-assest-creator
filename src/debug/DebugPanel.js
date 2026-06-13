@@ -55,6 +55,7 @@ export class DebugPanel {
     if (!this.visible) return;
 
     const s = data.grass;
+    const trees = data.trees;
     const p = data.player;
     const lod = s.lod;
     const lodTotal = Math.max(1, lod[0] + lod[1] + lod[2]);
@@ -73,6 +74,7 @@ export class DebugPanel {
       `<span style="color:#8fa899">blades~    </span>${k(s.visibleBlades)}\n` +
       `<span style="color:#8fa899">LOD 0/1/2  </span>${lod[0]}/${lod[1]}/${lod[2]}  (${pct(lod[0])}/${pct(lod[1])}/${pct(lod[2])}%)\n` +
       `<span style="color:#8fa899">build queue</span>${s.queueLength} (+${s.builtThisFrame}/f)\n` +
+      treeLines(trees, k) +
       `<span style="color:#8fa899">player xyz </span>${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `<span style="color:#8fa899">grounded   </span>${data.grounded ? "yes" : "airborne"}`;
   }
@@ -80,4 +82,17 @@ export class DebugPanel {
   dispose() {
     this.el.remove();
   }
+}
+
+function treeLines(trees, k) {
+  if (!trees) return "";
+  return (
+    `<span style="color:#7fdca0;letter-spacing:.12em">TREES</span>\n` +
+    `<span style="color:#8fa899">patches    </span>${trees.visiblePatches} vis / ${trees.activePatches} active\n` +
+    `<span style="color:#8fa899">trees~     </span>${k(trees.visibleTrees)}\n` +
+    `<span style="color:#8fa899">LOD 0/1/2  </span>${trees.lod[0]}/${trees.lod[1]}/${trees.lod[2]}\n` +
+    `<span style="color:#8fa899">tree queue </span>${trees.queueLength} (+${trees.builtThisFrame}/f) rebuild ${trees.rebuildQueueLength} (+${trees.rebuiltThisFrame}/f)\n` +
+    `<span style="color:#8fa899">tree free  </span>${trees.disposedThisFrame}/f · rebuild ${trees.lastRebuildMs.toFixed(2)}ms\n` +
+    `<span style="color:#8fa899">tree draws </span>${trees.drawCalls}\n`
+  );
 }

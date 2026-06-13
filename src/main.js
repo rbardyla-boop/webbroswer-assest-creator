@@ -15,6 +15,8 @@ import { findGoodSpawn } from "./terrain/terrainSampling.js";
 import { createGrassConfig } from "./grass/GrassConfig.js";
 import { GrassSystem } from "./grass/GrassSystem.js";
 import { ColliderSystem } from "./physics/ColliderSystem.js";
+import { createTreeConfig } from "./trees/TreeConfig.js";
+import { TreeSystem } from "./trees/TreeSystem.js";
 
 import { Player } from "./player/Player.js";
 import { PlayerController } from "./player/PlayerController.js";
@@ -46,6 +48,7 @@ const colliders = new ColliderSystem();
 colliders.attachScene(scene);
 
 const grass = new GrassSystem(scene, lights, scene.fog, grassConfig, colliders);
+const trees = new TreeSystem(scene, createTreeConfig(), colliders);
 
 const player = new Player();
 // Start on open, fairly flat ground with a vista across the field.
@@ -68,12 +71,18 @@ const editor = new WorldEditor({
   input,
   colliderSystem: colliders,
   getGrassStats: () => grass.stats,
+  treeSystem: trees,
+  getTreeStats: () => trees.stats,
   onWorldChanged: (change = {}) => {
     if (change.full) {
       grass.rebuildActivePatches();
+      trees.rebuildActivePatches();
       return;
     }
-    for (const box of change.boxes ?? []) grass.queueRebuildForBox(box);
+    for (const box of change.boxes ?? []) {
+      grass.queueRebuildForBox(box);
+      trees.queueRebuildForBox(box);
+    }
   },
   onOpen: () => {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -120,6 +129,7 @@ function frame(now) {
     elapsed += dt;
     editor.update(dt);
     grass.update(camera, elapsed);
+    trees.update(camera);
     renderer.render(scene, camera);
     crosshairEl.style.display = "none";
     return;
@@ -135,6 +145,7 @@ function frame(now) {
   playerController.update(dt);
   updateSun();
   grass.update(camera, elapsed);
+  trees.update(camera);
 
   renderer.render(scene, camera);
 
@@ -144,6 +155,7 @@ function frame(now) {
 
   debug.update(dt, {
     grass: grass.stats,
+    trees: trees.stats,
     player: player.position,
     cameraMode: cameraController.modeLabel,
     grounded: player.grounded,

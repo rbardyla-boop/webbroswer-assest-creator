@@ -10,7 +10,20 @@ import { getCollider } from "../physics/ColliderProxy.js";
 import { WorldObjectManager } from "../world/WorldObjectManager.js";
 
 export class WorldEditor {
-  constructor({ scene, camera, renderer, terrain, input, colliderSystem, getGrassStats, onWorldChanged, onOpen, onClose }) {
+  constructor({
+    scene,
+    camera,
+    renderer,
+    terrain,
+    input,
+    colliderSystem,
+    treeSystem,
+    getGrassStats,
+    getTreeStats,
+    onWorldChanged,
+    onOpen,
+    onClose,
+  }) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
@@ -19,7 +32,9 @@ export class WorldEditor {
     this.onOpen = onOpen;
     this.onClose = onClose;
     this.colliderSystem = colliderSystem;
+    this.treeSystem = treeSystem;
     this.getGrassStats = getGrassStats;
+    this.getTreeStats = getTreeStats;
     this.isOpen = false;
 
     this.assets = new AssetLibrary();
@@ -162,6 +177,7 @@ export class WorldEditor {
       onToggleDebug: () => this.colliderSystem?.toggleDebug(),
     });
     root.appendChild(this._section("Collider", this.colliderInspector.root));
+    root.appendChild(this._section("Trees", this._buildTreeControls()));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });
@@ -204,6 +220,80 @@ export class WorldEditor {
     });
     button.addEventListener("click", onClick);
     return button;
+  }
+
+  _buildTreeControls() {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, { display: "grid", gap: "8px" });
+
+    this.treeEnabled = this._checkbox("Enable", this.treeSystem?.cfg.enabled ?? true);
+    this.treeRespect = this._checkbox("Respect roads", this.treeSystem?.cfg.respectExclusions ?? true);
+    this.treeDensity = this._numberInput(this.treeSystem?.cfg.density ?? 0.018, 0.001);
+    this.treeVisible = this._numberInput(this.treeSystem?.cfg.visibleDistance ?? 190, 5);
+    this.treeSeed = this._numberInput(this.treeSystem?.cfg.seed ?? 1337, 1);
+
+    wrap.appendChild(this.treeEnabled.label);
+    wrap.appendChild(this._labeledControl("Density", this.treeDensity));
+    wrap.appendChild(this._labeledControl("Visible", this.treeVisible));
+    wrap.appendChild(this._labeledControl("Seed", this.treeSeed));
+    wrap.appendChild(this.treeRespect.label);
+    wrap.appendChild(this._button("Apply Trees", () => this._applyTreeSettings()));
+    return wrap;
+  }
+
+  _checkbox(label, checked) {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    const wrap = document.createElement("label");
+    Object.assign(wrap.style, { display: "flex", alignItems: "center", gap: "8px", color: "#8fa899" });
+    wrap.appendChild(input);
+    wrap.appendChild(document.createTextNode(label));
+    return { input, label: wrap };
+  }
+
+  _numberInput(value, step) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = step;
+    input.value = value;
+    Object.assign(input.style, {
+      width: "100%",
+      font: "inherit",
+      fontSize: "11px",
+      padding: "6px 8px",
+      color: "#d7e6dc",
+      background: "rgba(127,220,160,0.08)",
+      border: "1px solid rgba(120,200,140,0.25)",
+      borderRadius: "7px",
+    });
+    return input;
+  }
+
+  _labeledControl(label, control) {
+    const wrap = document.createElement("label");
+    Object.assign(wrap.style, { display: "grid", gridTemplateColumns: "74px 1fr", gap: "8px", alignItems: "center" });
+    const span = document.createElement("span");
+    span.textContent = label;
+    span.style.color = "#8fa899";
+    wrap.appendChild(span);
+    wrap.appendChild(control);
+    return wrap;
+  }
+
+  _applyTreeSettings() {
+    if (!this.treeSystem) return;
+    const t0 = performance.now();
+    this.treeSystem.updateSettings({
+      enabled: this.treeEnabled.input.checked,
+      respectExclusions: this.treeRespect.input.checked,
+      density: Math.max(0, parseFloat(this.treeDensity.value) || 0),
+      visibleDistance: Math.max(24, parseFloat(this.treeVisible.value) || 190),
+      keepDistance: Math.max(48, (parseFloat(this.treeVisible.value) || 190) + 40),
+      seed: Math.floor(parseFloat(this.treeSeed.value) || 1),
+    });
+    this.stats.lastActionMs = performance.now() - t0;
+    this._refreshPerf();
   }
 
   _renderAssetList() {
@@ -323,12 +413,14 @@ export class WorldEditor {
   _refreshPerf() {
     if (!this.perfLabel) return;
     const grass = this.getGrassStats?.() ?? {};
+    const trees = this.getTreeStats?.() ?? {};
     const colliders = [...this.manager.objects.values()].filter((object) => getCollider(object).type !== "none").length;
     const exclusions = [...this.manager.objects.values()].filter((object) => getCollider(object).excludeGrass).length;
     this.perfLabel.textContent =
       `editor action ${this.stats.lastActionMs.toFixed(2)} ms\n` +
       `objects ${this.manager.objects.size} · colliders ${colliders} · exclusions ${exclusions}\n` +
       `grass rebuilt ${grass.rebuiltThisFrame ?? 0} · queued ${grass.rebuildQueueLength ?? 0}\n` +
+      `trees ${trees.visibleTrees ?? 0} · rebuilt ${trees.rebuiltThisFrame ?? 0} · queued ${trees.rebuildQueueLength ?? 0}\n` +
       `transform updates ${this.stats.transformUpdates}\n` +
       `save serialize ${this.stats.saveSerializeMs.toFixed(2)} ms\n` +
       `localStorage ${this.stats.saveWriteMs.toFixed(2)} ms`;
