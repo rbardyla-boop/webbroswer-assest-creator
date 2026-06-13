@@ -30,6 +30,7 @@ export function normalizeCollider(collider) {
   return {
     type,
     excludeGrass: collider?.excludeGrass ?? collider?.grassExclusion ?? false,
+    excludeTrees: collider?.excludeTrees ?? collider?.treeExclusion ?? collider?.excludeGrass ?? collider?.grassExclusion ?? false,
   };
 }
 

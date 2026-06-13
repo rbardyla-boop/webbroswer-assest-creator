@@ -71,9 +71,17 @@ export class ColliderSystem {
   }
 
   isGrassExcluded(x, z) {
+    return this._isExcluded(x, z, "excludeGrass");
+  }
+
+  isTreeExcluded(x, z) {
+    return this._isExcluded(x, z, "excludeTrees");
+  }
+
+  _isExcluded(x, z, flag) {
     for (const object of this.objects) {
       const collider = getCollider(object);
-      if (!collider.excludeGrass || collider.type === COLLIDER_TYPES.none || collider.type === COLLIDER_TYPES.trigger) continue;
+      if (!collider[flag] || collider.type === COLLIDER_TYPES.none || collider.type === COLLIDER_TYPES.trigger) continue;
       const box = getWorldBox(object, _box);
       if (pointInFootprint(box, x, z, 0.35)) return true;
     }

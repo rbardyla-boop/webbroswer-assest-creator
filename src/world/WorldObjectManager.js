@@ -81,6 +81,44 @@ export class WorldObjectManager {
     };
   }
 
+  serializeWorldObjects() {
+    return [...this.objects.values()].map((object) => {
+      const asset = serializeAsset(object.userData.asset);
+      const collider = normalizeCollider(object.userData.collider);
+      const primitive = asset.kind ?? object.userData.asset?.kind ?? "cube";
+      return {
+        id: object.userData.objectId,
+        name: object.name,
+        type: asset.type === "relief" ? "relief" : "primitive",
+        assetRef: object.userData.asset?.id ?? null,
+        primitive,
+        asset,
+        transform: {
+          position: vectorToObject(object.position),
+          rotation: { x: object.rotation.x, y: object.rotation.y, z: object.rotation.z },
+          scale: vectorToObject(object.scale),
+        },
+        collider: {
+          type: collider.type,
+          dimensions: {},
+          enabled: collider.type !== "none",
+        },
+        exclusion: {
+          grass: collider.excludeGrass,
+          trees: object.userData.collider?.excludeTrees ?? collider.excludeGrass,
+          radius: 0,
+          bounds: null,
+        },
+        runtime: {
+          visible: object.visible,
+          static: true,
+          castShadow: true,
+          receiveShadow: true,
+        },
+      };
+    });
+  }
+
   load(document) {
     this.clear();
     for (const item of document?.objects ?? []) {
@@ -98,6 +136,35 @@ export class WorldObjectManager {
       this.root.add(object);
       this.objects.set(id, object);
       this._nextId = Math.max(this._nextId, parseInt(id.replace("obj-", ""), 10) + 1 || this._nextId);
+    }
+    this._changed({ full: true });
+  }
+
+  loadWorldObjects(objects = []) {
+    this.clear();
+    for (const item of objects) {
+      const asset = assetFromWorldObject(item);
+      if (!asset) continue;
+      const id = item.id ?? `obj-${this._nextId++}`;
+      const t = item.transform ?? {};
+      const object = createPlacedObject({
+        id,
+        asset,
+        object3D: this._buildObject3D(asset),
+        position: vecObjectToArray(t.position, [0, 0, 0]),
+        rotation: vecObjectToArray(t.rotation, [0, 0, 0]),
+        scale: vecObjectToArray(t.scale, [1, 1, 1]),
+      });
+      object.visible = item.runtime?.visible !== false;
+      object.userData.collider = normalizeCollider({
+        type: item.collider?.enabled === false ? "none" : item.collider?.type,
+        excludeGrass: item.exclusion?.grass ?? false,
+        excludeTrees: item.exclusion?.trees ?? item.exclusion?.grass ?? false,
+      });
+      object.userData.collider.excludeTrees = item.exclusion?.trees ?? item.exclusion?.grass ?? false;
+      this.root.add(object);
+      this.objects.set(id, object);
+      this._nextId = Math.max(this._nextId, parseInt(String(id).replace("obj-", ""), 10) + 1 || this._nextId);
     }
     this._changed({ full: true });
   }
@@ -175,4 +242,25 @@ function serializeAsset(asset) {
   }
   if (asset.type === "gltf") return { type: "primitive", kind: "cube", name: `${asset.name} placeholder` };
   return { type: "primitive", kind: "cube", name: "Cube" };
+}
+
+function assetFromWorldObject(item) {
+  if (item.asset?.type) return item.asset;
+  if (item.type === "relief" && item.asset?.geometryData) return item.asset;
+  if (item.type === "primitive" || item.primitive) {
+    return {
+      type: "primitive",
+      kind: item.primitive ?? "cube",
+      name: item.name ?? item.primitive ?? "Primitive",
+    };
+  }
+  return { type: "primitive", kind: "cube", name: item.name ?? "Cube" };
+}
+
+function vectorToObject(vector) {
+  return { x: vector.x, y: vector.y, z: vector.z };
+}
+
+function vecObjectToArray(value, fallback) {
+  return [value?.x ?? fallback[0], value?.y ?? fallback[1], value?.z ?? fallback[2]];
 }

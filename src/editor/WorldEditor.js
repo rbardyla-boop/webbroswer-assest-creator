@@ -4,10 +4,10 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { getHeight } from "../terrain/terrainSampling.js";
 import { AssetLibrary } from "./AssetLibrary.js";
 import { ColliderInspector } from "./ColliderInspector.js";
-import { SceneSerializer } from "./SceneSerializer.js";
 import { ReliefAssetTool } from "./ReliefAssetTool.js";
 import { getCollider } from "../physics/ColliderProxy.js";
-import { WorldObjectManager } from "../world/WorldObjectManager.js";
+import { WorldSerializer } from "../world/WorldSerializer.js";
+import { exportWorldDocument, importWorldDocumentFile } from "../world/WorldExport.js";
 
 export class WorldEditor {
   constructor({
@@ -17,9 +17,15 @@ export class WorldEditor {
     terrain,
     input,
     colliderSystem,
+    objectManager,
+    worldLoader,
+    worldSerializer,
+    player,
+    cameraController,
     treeSystem,
     getGrassStats,
     getTreeStats,
+    onLoadWorld,
     onWorldChanged,
     onOpen,
     onClose,
@@ -32,14 +38,18 @@ export class WorldEditor {
     this.onOpen = onOpen;
     this.onClose = onClose;
     this.colliderSystem = colliderSystem;
+    this.worldLoader = worldLoader;
+    this.worldSerializer = worldSerializer ?? new WorldSerializer();
+    this.player = player;
+    this.cameraController = cameraController;
+    this.onLoadWorld = onLoadWorld;
     this.treeSystem = treeSystem;
     this.getGrassStats = getGrassStats;
     this.getTreeStats = getTreeStats;
     this.isOpen = false;
 
     this.assets = new AssetLibrary();
-    this.manager = new WorldObjectManager(scene, { colliderSystem, onChange: onWorldChanged });
-    this.serializer = new SceneSerializer(this.manager);
+    this.manager = objectManager;
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.selectedAsset = this.assets.list()[0];
@@ -84,6 +94,23 @@ export class WorldEditor {
 
     this._buildDOM();
     this._bind();
+  }
+
+  setWorldContext({ terrain, objectManager, treeSystem, getGrassStats, getTreeStats }) {
+    this.terrain = terrain ?? this.terrain;
+    this.manager = objectManager ?? this.manager;
+    this.treeSystem = treeSystem ?? this.treeSystem;
+    this.getGrassStats = getGrassStats ?? this.getGrassStats;
+    this.getTreeStats = getTreeStats ?? this.getTreeStats;
+    if (this.treeSystem && this.treeEnabled) {
+      this.treeEnabled.input.checked = this.treeSystem.cfg.enabled;
+      this.treeRespect.input.checked = this.treeSystem.cfg.respectExclusions;
+      this.treeDensity.value = this.treeSystem.cfg.density;
+      this.treeVisible.value = this.treeSystem.cfg.visibleDistance;
+      this.treeSeed.value = this.treeSystem.cfg.seed;
+    }
+    this._select(null);
+    this._refreshPerf();
   }
 
   open() {
@@ -151,6 +178,12 @@ export class WorldEditor {
     this.fileInput.style.display = "none";
     root.appendChild(this.fileInput);
 
+    this.worldFileInput = document.createElement("input");
+    this.worldFileInput.type = "file";
+    this.worldFileInput.accept = ".world.json,application/json";
+    this.worldFileInput.style.display = "none";
+    root.appendChild(this.worldFileInput);
+
     const modes = document.createElement("div");
     Object.assign(modes.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     modes.appendChild(this._button("Move", () => this.transform.setMode("translate")));
@@ -162,8 +195,10 @@ export class WorldEditor {
     Object.assign(actions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     actions.appendChild(this._button("Duplicate", () => this._select(this.manager.duplicate(this.selectedObject))));
     actions.appendChild(this._button("Delete", () => this._deleteSelected()));
-    actions.appendChild(this._button("Save", () => this._save()));
-    actions.appendChild(this._button("Load", () => this._load()));
+    actions.appendChild(this._button("Save World", () => this._save()));
+    actions.appendChild(this._button("Load World", () => this._load()));
+    actions.appendChild(this._button("Export World JSON", () => this._exportWorld()));
+    actions.appendChild(this._button("Import World JSON", () => this.worldFileInput.click()));
     actions.appendChild(this._button("Close", () => this.close()));
     root.appendChild(actions);
 
@@ -333,6 +368,11 @@ export class WorldEditor {
       event.target.value = "";
     });
 
+    this.worldFileInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await this._importWorld(file);
+      event.target.value = "";
+    });
   }
 
   _handleCanvasClick(event) {
@@ -378,23 +418,47 @@ export class WorldEditor {
 
   _save() {
     const t0 = performance.now();
-    const document = this.manager.serialize();
+    const document = this.worldLoader.updateDocumentFromRuntime({
+      player: this.player,
+      cameraController: this.cameraController,
+    });
     const t1 = performance.now();
-    localStorage.setItem("grass-world-builder-save", JSON.stringify(document));
+    const result = this.worldSerializer.save(document);
     const t2 = performance.now();
     this.stats.saveSerializeMs = t1 - t0;
     this.stats.saveWriteMs = t2 - t1;
     this.stats.lastActionMs = t2 - t0;
-    this.selectionLabel.textContent = `Saved ${document.objects.length} object(s) to localStorage.`;
+    this.selectionLabel.textContent = `Saved ${result.document.objects.length} object(s) to localStorage.`;
     this._refreshPerf();
   }
 
   _load() {
-    const document = this.serializer.load();
+    const result = this.worldSerializer.load();
     this._select(null);
-    this.selectionLabel.textContent = document
-      ? `Loaded ${document.objects.length} object(s) from localStorage.`
+    if (result) this.onLoadWorld?.(result.document);
+    this.selectionLabel.textContent = result
+      ? `Loaded ${result.document.objects.length} object(s) from localStorage.`
       : "No saved world found.";
+  }
+
+  _exportWorld() {
+    const document = this.worldLoader.updateDocumentFromRuntime({
+      player: this.player,
+      cameraController: this.cameraController,
+    });
+    const exported = exportWorldDocument(document);
+    this.selectionLabel.textContent = `Exported ${exported.objects.length} object(s) to .world.json.`;
+  }
+
+  async _importWorld(file) {
+    try {
+      const result = await importWorldDocumentFile(file);
+      this.onLoadWorld?.(result.document);
+      this.selectionLabel.textContent = `Imported ${result.document.objects.length} object(s) from ${file.name}.`;
+    } catch (error) {
+      console.error("Failed to import world", error);
+      this.selectionLabel.textContent = `Could not import ${file.name}.`;
+    }
   }
 
   _refreshSelectionLabel() {

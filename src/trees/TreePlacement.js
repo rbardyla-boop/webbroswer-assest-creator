@@ -31,7 +31,7 @@ export function generateTreePatchData(gx, gz, cfg, exclusionSystem = null) {
     const x = originX + rng() * size;
     const z = originZ + rng() * size;
     if (getSlope(x, z) > cfg.slopeLimit) continue;
-    if (cfg.respectExclusions && exclusionSystem?.isGrassExcluded(x, z)) continue;
+    if (cfg.respectExclusions && (exclusionSystem?.isTreeExcluded?.(x, z) ?? exclusionSystem?.isGrassExcluded?.(x, z))) continue;
 
     const y = getHeight(x, z);
     const height = cfg.treeSize.height * (1 + (rng() * 2 - 1) * cfg.variation.height);

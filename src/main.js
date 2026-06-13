@@ -9,14 +9,9 @@ import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
 import { Input } from "./core/input.js";
 
-import { Terrain } from "./terrain/Terrain.js";
 import { findGoodSpawn } from "./terrain/terrainSampling.js";
 
-import { createGrassConfig } from "./grass/GrassConfig.js";
-import { GrassSystem } from "./grass/GrassSystem.js";
 import { ColliderSystem } from "./physics/ColliderSystem.js";
-import { createTreeConfig } from "./trees/TreeConfig.js";
-import { TreeSystem } from "./trees/TreeSystem.js";
 
 import { Player } from "./player/Player.js";
 import { PlayerController } from "./player/PlayerController.js";
@@ -24,71 +19,128 @@ import { PlayerCameraController } from "./player/PlayerCameraController.js";
 
 import { DebugPanel } from "./debug/DebugPanel.js";
 import { WorldEditor } from "./editor/WorldEditor.js";
+import { createWorldDocument } from "./world/WorldDocument.js";
+import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
+import { WorldSerializer } from "./world/WorldSerializer.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
 const crosshairEl = document.getElementById("crosshair");
+const toolbarEl = document.getElementById("toolbar");
+const hintEl = document.getElementById("hint");
+const runtimeMode = new URLSearchParams(window.location.search).has("runtime")
+  || new URLSearchParams(window.location.search).has("play");
 
 // --- core --------------------------------------------------------------------
 
-const grassConfig = createGrassConfig();
-
 const renderer = createRenderer(container);
-const scene = createScene({ fogNear: 70, fogFar: grassConfig.visibleDistance + 60 });
+const scene = createScene({ fogNear: 70, fogFar: 225 });
 const camera = createCamera();
 const lights = createLights(scene);
 const input = new Input(renderer.domElement);
+const worldSerializer = new WorldSerializer();
 
 // --- world -------------------------------------------------------------------
-
-const terrain = new Terrain({ size: 700, segments: 240 });
-scene.add(terrain.mesh);
 
 const colliders = new ColliderSystem();
 colliders.attachScene(scene);
 
-const grass = new GrassSystem(scene, lights, scene.fog, grassConfig, colliders);
-const trees = new TreeSystem(scene, createTreeConfig(), colliders);
+const worldLoader = new WorldRuntimeLoader({ scene, lights, fog: scene.fog, colliderSystem: colliders });
+const savedWorld = worldSerializer.load();
+let world = worldLoader.load(savedWorld?.document ?? createWorldDocument());
+for (const warning of world.warnings) console.warn(warning);
+let terrain = world.terrain;
+let grass = world.grass;
+let trees = world.trees;
+let objectManager = world.objectManager;
 
 const player = new Player();
 // Start on open, fairly flat ground with a vista across the field.
-const spawn = findGoodSpawn();
-player.position.set(spawn.x, 0, spawn.z);
+const spawn = world.document.player.spawn ?? findGoodSpawn();
+player.position.set(spawn.x, spawn.y ?? 0, spawn.z);
 scene.add(player.mesh);
 
 const cameraController = new PlayerCameraController(camera, player, input, { toggleKey: "KeyV" });
+setCameraMode(world.document.player.cameraMode);
 const playerController = new PlayerController(player, input, cameraController, colliders);
+
+function handleWorldChanged(change = {}) {
+  if (change.full) {
+    grass.rebuildActivePatches();
+    trees.rebuildActivePatches();
+    return;
+  }
+  for (const box of change.boxes ?? []) {
+    grass.queueRebuildForBox(box);
+    trees.queueRebuildForBox(box);
+  }
+}
+objectManager.onChange = handleWorldChanged;
+
+function applyLoadedWorld(document) {
+  world = worldLoader.load(document);
+  for (const warning of world.warnings) console.warn(warning);
+  terrain = world.terrain;
+  grass = world.grass;
+  trees = world.trees;
+  objectManager = world.objectManager;
+  objectManager.onChange = handleWorldChanged;
+
+  const spawn = world.document.player.spawn;
+  player.position.set(spawn.x, spawn.y, spawn.z);
+  player.velocityY = 0;
+  player.syncMesh();
+  setCameraMode(world.document.player.cameraMode);
+  cameraController.update(0.016);
+  grass.prewarm(camera, 80);
+  updateSun();
+  editor?.setWorldContext({
+    terrain,
+    objectManager,
+    treeSystem: trees,
+    getGrassStats: () => grass.stats,
+    getTreeStats: () => trees.stats,
+  });
+}
+
+function setCameraMode(mode) {
+  cameraController.mode = mode === "first" ? "first" : "third";
+  player.mesh.visible = cameraController.mode !== "first";
+  cameraController._initialized = false;
+}
 
 // --- ui ----------------------------------------------------------------------
 
-const debug = new DebugPanel({ visible: grassConfig.debug });
+const debug = new DebugPanel({ visible: !runtimeMode });
 
-const editor = new WorldEditor({
-  scene,
-  camera,
-  renderer,
-  terrain,
-  input,
-  colliderSystem: colliders,
-  getGrassStats: () => grass.stats,
-  treeSystem: trees,
-  getTreeStats: () => trees.stats,
-  onWorldChanged: (change = {}) => {
-    if (change.full) {
-      grass.rebuildActivePatches();
-      trees.rebuildActivePatches();
-      return;
-    }
-    for (const box of change.boxes ?? []) {
-      grass.queueRebuildForBox(box);
-      trees.queueRebuildForBox(box);
-    }
-  },
-  onOpen: () => {
-    if (document.pointerLockElement) document.exitPointerLock();
-  },
-});
-document.getElementById("open-editor").addEventListener("click", () => editor.open());
+let editor = null;
+if (runtimeMode) {
+  toolbarEl.style.display = "none";
+  hintEl.style.display = "none";
+} else {
+  editor = new WorldEditor({
+    scene,
+    camera,
+    renderer,
+    terrain,
+    input,
+    colliderSystem: colliders,
+    objectManager,
+    worldLoader,
+    worldSerializer,
+    player,
+    cameraController,
+    getGrassStats: () => grass.stats,
+    treeSystem: trees,
+    getTreeStats: () => trees.stats,
+    onLoadWorld: applyLoadedWorld,
+    onWorldChanged: handleWorldChanged,
+    onOpen: () => {
+      if (document.pointerLockElement) document.exitPointerLock();
+    },
+  });
+  document.getElementById("open-editor").addEventListener("click", () => editor.open());
+}
 
 // --- shadow rig follows the player so the shadow map stays useful ------------
 
@@ -125,7 +177,7 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05); // clamp to avoid jumps
   last = now;
 
-  if (editor.isOpen) {
+  if (editor?.isOpen) {
     elapsed += dt;
     editor.update(dt);
     grass.update(camera, elapsed);
