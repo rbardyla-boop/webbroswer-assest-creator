@@ -66,12 +66,16 @@ function decomposeMatrix(matrix) {
  * The prefab origin is the XZ centroid at the lowest object base, so placement
  * snaps the origin to terrain while child Y offsets are preserved.
  */
-export function prefabFromWorldObjects(descriptors, { name, tags = [], id = null } = {}) {
+export function prefabFromWorldObjects(descriptors, { name, tags = [], id = null, origin = null } = {}) {
   const list = Array.isArray(descriptors) ? descriptors.filter(Boolean) : [descriptors].filter(Boolean);
   if (!list.length) throw new Error("prefabFromWorldObjects requires at least one object");
 
-  const origin = computeOrigin(list);
-  const objects = list.map((descriptor, index) => childFromDescriptor(descriptor, origin, index));
+  // `origin` lets callers (e.g. built-in kits authored in local ground space)
+  // override the computed centroid so child local offsets are taken as-is.
+  const resolvedOrigin = origin
+    ? { x: numberOr(origin.x, 0), y: numberOr(origin.y, 0), z: numberOr(origin.z, 0) }
+    : computeOrigin(list);
+  const objects = list.map((descriptor, index) => childFromDescriptor(descriptor, resolvedOrigin, index));
   const prefabName = (name && String(name).trim()) || list[0]?.name || "Prefab";
   const now = new Date().toISOString();
 

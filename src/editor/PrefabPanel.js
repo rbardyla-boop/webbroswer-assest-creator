@@ -6,6 +6,8 @@
 // The list is re-rendered explicitly (on refresh), never per frame, and prefab
 // thumbnails are fetched lazily when a row is drawn.
 
+import { isBuiltinPrefab } from "../prefabs/BuiltinKits.js";
+
 export class PrefabPanel {
   constructor({
     library,
@@ -65,6 +67,7 @@ export class PrefabPanel {
 
   _row(prefab) {
     const armed = prefab.id === this.armedId;
+    const builtin = isBuiltinPrefab(prefab);
     const row = document.createElement("div");
     Object.assign(row.style, {
       display: "grid",
@@ -103,8 +106,8 @@ export class PrefabPanel {
 
     const meta = document.createElement("div");
     const count = prefab.metadata?.objectCount ?? prefab.objects?.length ?? 0;
-    meta.textContent = `${prefab.kind} · ${count} obj`;
-    Object.assign(meta.style, { color: "#8fa899", fontSize: "10px" });
+    meta.textContent = `${builtin ? "system · " : ""}${prefab.kind} · ${count} obj`;
+    Object.assign(meta.style, { color: builtin ? "#7fb0dc" : "#8fa899", fontSize: "10px" });
     main.appendChild(meta);
 
     const actions = document.createElement("div");
@@ -112,8 +115,11 @@ export class PrefabPanel {
     actions.appendChild(this._miniButton(armed ? "Stop" : "Place", () => {
       this.onArmPlacement?.(armed ? null : prefab);
     }, armed));
-    actions.appendChild(this._miniButton("Rename", () => this.onRenamePrefab?.(prefab.id)));
-    actions.appendChild(this._miniButton("Del", () => this.onDeletePrefab?.(prefab.id)));
+    // Built-in/system kits cannot be renamed or deleted.
+    if (!builtin) {
+      actions.appendChild(this._miniButton("Rename", () => this.onRenamePrefab?.(prefab.id)));
+      actions.appendChild(this._miniButton("Del", () => this.onDeletePrefab?.(prefab.id)));
+    }
     main.appendChild(actions);
 
     row.appendChild(main);

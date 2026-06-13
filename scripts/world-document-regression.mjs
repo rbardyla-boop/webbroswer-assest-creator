@@ -11,6 +11,7 @@ import { PrefabLibrary } from "../src/prefabs/PrefabLibrary.js";
 import { PrefabInstancer } from "../src/prefabs/PrefabInstancer.js";
 import { worldObjectsFromPrefab } from "../src/prefabs/PrefabSerializer.js";
 import { validatePrefabDocument } from "../src/prefabs/PrefabValidation.js";
+import { createBuiltinPrefabs, isBuiltinPrefab } from "../src/prefabs/BuiltinKits.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -509,6 +510,67 @@ assert.equal(groupRoundTrip[0].collider.type, "box");
 assert.equal(groupRoundTrip[0].exclusion.grass, true);
 const placedDx = Math.abs(groupRoundTrip[1].transform.position.x - groupRoundTrip[0].transform.position.x);
 assert.ok(Math.abs(placedDx - 3) < 1e-6); // relative layout reconstructed
+
+// --- Stage 6B: built-in structural kit library ------------------------------
+
+const kitStore = new MemoryPrefabStore();
+const kitLibrary = await new PrefabLibrary({ store: kitStore }).init();
+
+// Built-ins are registered, marked, and NOT persisted to the user store.
+const kitList = kitLibrary.list();
+assert.ok(kitList.length >= 10);
+assert.ok(kitLibrary.isBuiltin("builtin-straight-road"));
+assert.equal(isBuiltinPrefab(kitLibrary.get("builtin-wall")), true);
+assert.equal(kitStore.data.length, 0); // built-ins never written to storage
+assert.ok(createBuiltinPrefabs().some((p) => p.id === "builtin-hut")); // stable ids
+
+// Road defaults: walkable plane collider + grass/tree exclusion.
+const road = kitLibrary.get("builtin-straight-road");
+assert.equal(road.objects[0].collider.type, "plane");
+assert.equal(road.objects[0].exclusion.grass, true);
+assert.equal(road.objects[0].exclusion.trees, true);
+
+// Ramp defaults: ramp collider + exclusion.
+const ramp = kitLibrary.get("builtin-ramp");
+assert.equal(ramp.objects[0].collider.type, "ramp");
+assert.equal(ramp.objects[0].exclusion.grass, true);
+
+// Wall defaults: box collider (blocks the player).
+assert.equal(kitLibrary.get("builtin-wall").objects[0].collider.type, "box");
+
+// Built-ins cannot be deleted or renamed.
+assert.equal(await kitLibrary.delete("builtin-wall"), false);
+assert.equal((await kitLibrary.rename("builtin-wall", "Hacked")).name, "Wall Segment");
+
+// World export manifest excludes built-ins (they regenerate locally).
+assert.equal(kitLibrary.createManifest().items.length, 0);
+
+// Placing a built-in creates real placed objects carrying prefabRef.
+const kitScene = new THREE.Scene();
+const kitManager = new WorldObjectManager(kitScene, { assetLibrary });
+const kitInstancer = new PrefabInstancer(kitManager);
+const placedRoad = await kitInstancer.instantiate(road, { position: { x: 5, y: 0, z: 5 } });
+assert.equal(placedRoad.length, 1);
+const roadSerialized = kitManager.serializeWorldObjects();
+assert.equal(roadSerialized[0].prefabRef, "builtin-straight-road");
+assert.equal(roadSerialized[0].collider.type, "plane");
+assert.equal(roadSerialized[0].exclusion.grass, true);
+assert.equal(roadSerialized[0].exclusion.trees, true);
+
+// Multi-part kit (hut) places every part and tags each with prefabRef.
+const hut = kitLibrary.get("builtin-hut");
+const placedHut = await kitInstancer.instantiate(hut, { position: { x: 30, y: 0, z: 30 } });
+assert.equal(placedHut.length, hut.objects.length);
+const hutSerialized = kitManager.serializeWorldObjects().filter((o) => o.prefabRef === "builtin-hut");
+assert.equal(hutSerialized.length, hut.objects.length);
+assert.ok(hutSerialized.every((o) => o.collider.type === "box"));
+
+// A world referencing a built-in prefabRef survives validation + reload.
+const kitWorld = validateWorldDocument(
+  createWorldDocument({ objects: kitManager.serializeWorldObjects() })
+);
+assert.equal(kitWorld.warnings.length, 0);
+assert.ok(kitWorld.document.objects.every((o) => typeof o.prefabRef === "string"));
 
 // Garbage prefab input is skipped, never thrown.
 assert.equal(validatePrefabDocument(null).prefab, null);
