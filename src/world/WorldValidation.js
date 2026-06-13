@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { COLLIDER_TYPES } from "../physics/ColliderProxy.js";
 import { createWorldDocument, WORLD_DOCUMENT_FORMAT, WORLD_DOCUMENT_VERSION } from "./WorldDocument.js";
+import { sanitizePrefabManifest } from "../prefabs/PrefabValidation.js";
 
 const PRIMITIVES = new Set(["cube", "sphere", "cylinder", "plane", "ramp"]);
 const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom"]);
@@ -30,6 +31,9 @@ export function validateWorldDocument(input) {
   doc.metadata.createdAt = stringOrNow(doc.metadata.createdAt);
   doc.objects = sanitizeObjects(doc.objects, warnings);
   doc.assets = sanitizeAssets(doc.assets);
+  const prefabResult = sanitizePrefabManifest(doc.prefabs);
+  doc.prefabs = prefabResult.manifest;
+  warnings.push(...prefabResult.warnings);
   doc.player.spawn = sanitizeVec3Object(doc.player.spawn, { x: 0, y: 0, z: 0 });
   if (!CAMERA_MODES.has(doc.player.cameraMode)) doc.player.cameraMode = "third";
 
@@ -107,6 +111,7 @@ function sanitizeObjects(objects, warnings) {
       name: typeof item?.name === "string" && item.name ? item.name : item?.asset?.name ?? "Placed Object",
       type,
       assetRef: item?.assetRef ?? item?.asset?.id ?? null,
+      prefabRef: typeof item?.prefabRef === "string" && item.prefabRef ? item.prefabRef : null,
       primitive: PRIMITIVES.has(primitive) ? primitive : "cube",
       asset: item?.asset ?? null,
       transform,

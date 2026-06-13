@@ -63,6 +63,12 @@ export function createWorldDocument(overrides = {}) {
       images: [],
       imported: [],
     },
+    // Optional prefab manifest (metadata only — no binary asset blobs). Placed
+    // prefab instances live in `objects` as normal objects carrying prefabRef.
+    prefabs: {
+      version: 1,
+      items: [],
+    },
   }, overrides);
 }
 

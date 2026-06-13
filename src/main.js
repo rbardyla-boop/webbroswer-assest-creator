@@ -22,6 +22,7 @@ import { createWorldDocument } from "./world/WorldDocument.js";
 import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
 import { WorldSerializer } from "./world/WorldSerializer.js";
 import { AssetLibrary } from "./assets/AssetLibrary.js";
+import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -134,6 +135,9 @@ async function boot() {
     toolbarEl.style.display = "none";
     hintEl.style.display = "none";
   } else {
+    const prefabLibrary = await new PrefabLibrary().init();
+    // Bring any prefabs embedded in the initially-loaded world into the library.
+    await prefabLibrary.importManifest(world.document.prefabs);
     const { WorldEditor } = await import("./editor/WorldEditor.js");
     editor = new WorldEditor({
       scene,
@@ -151,6 +155,7 @@ async function boot() {
       getGrassStats: () => grass.stats,
       treeSystem: trees,
       getTreeStats: () => trees.stats,
+      prefabLibrary,
       onLoadWorld: applyLoadedWorld,
       onWorldChanged: handleWorldChanged,
       onOpen: () => {

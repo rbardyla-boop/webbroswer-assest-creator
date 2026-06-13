@@ -90,41 +90,46 @@ export class WorldObjectManager {
   }
 
   serializeWorldObjects() {
-    return [...this.objects.values()].map((object) => {
-      const asset = serializeAsset(object.userData.asset);
-      const collider = normalizeCollider(object.userData.collider);
-      const primitive = asset.kind ?? object.userData.asset?.kind ?? "cube";
-      return {
-        id: object.userData.objectId,
-        name: object.name,
-        type: asset.type === "relief" || asset.type === "gltf" || asset.type === "image" ? asset.type : "primitive",
-        assetRef: object.userData.assetRef ?? object.userData.asset?.id ?? null,
-        primitive: asset.type === "primitive" ? primitive : null,
-        asset: object.userData.assetRef ? null : asset,
-        transform: {
-          position: vectorToObject(object.position),
-          rotation: { x: object.rotation.x, y: object.rotation.y, z: object.rotation.z },
-          scale: vectorToObject(object.scale),
-        },
-        collider: {
-          type: collider.type,
-          dimensions: collider.dimensions ?? {},
-          enabled: collider.type !== "none",
-        },
-        exclusion: {
-          grass: collider.excludeGrass,
-          trees: object.userData.collider?.excludeTrees ?? collider.excludeGrass,
-          radius: 0,
-          bounds: null,
-        },
-        runtime: {
-          visible: object.visible,
-          static: true,
-          castShadow: true,
-          receiveShadow: true,
-        },
-      };
-    });
+    return [...this.objects.values()].map((object) => this.serializeWorldObject(object));
+  }
+
+  // Serialize a single placed object to a world-object descriptor. Used by the
+  // export path and by prefab creation (capturing the selected object).
+  serializeWorldObject(object) {
+    const asset = serializeAsset(object.userData.asset);
+    const collider = normalizeCollider(object.userData.collider);
+    const primitive = asset.kind ?? object.userData.asset?.kind ?? "cube";
+    return {
+      id: object.userData.objectId,
+      name: object.name,
+      type: asset.type === "relief" || asset.type === "gltf" || asset.type === "image" ? asset.type : "primitive",
+      assetRef: object.userData.assetRef ?? object.userData.asset?.id ?? null,
+      primitive: asset.type === "primitive" ? primitive : null,
+      asset: object.userData.assetRef ? null : asset,
+      prefabRef: object.userData.prefabRef ?? null,
+      transform: {
+        position: vectorToObject(object.position),
+        rotation: { x: object.rotation.x, y: object.rotation.y, z: object.rotation.z },
+        scale: vectorToObject(object.scale),
+      },
+      collider: {
+        type: collider.type,
+        dimensions: collider.dimensions ?? {},
+        enabled: collider.type !== "none",
+      },
+      exclusion: {
+        grass: collider.excludeGrass,
+        trees: object.userData.collider?.excludeTrees ?? collider.excludeGrass,
+        radius: 0,
+        bounds: null,
+      },
+      runtime: {
+        visible: object.visible,
+        static: true,
+        castShadow: true,
+        receiveShadow: true,
+      },
+    };
   }
 
   load(document) {
@@ -151,32 +156,55 @@ export class WorldObjectManager {
   async loadWorldObjects(objects = []) {
     this.clear();
     for (const item of objects) {
-      const asset = await this.resolveAssetForWorldObject(item);
-      if (!asset) continue;
-      const id = item.id ?? `obj-${this._nextId++}`;
-      const t = item.transform ?? {};
-      const object = createPlacedObject({
-        id,
-        asset,
-        object3D: await this._buildObject3D(asset),
-        position: vecObjectToArray(t.position, [0, 0, 0]),
-        rotation: vecObjectToArray(t.rotation, [0, 0, 0]),
-        scale: vecObjectToArray(t.scale, [1, 1, 1]),
-      });
-      object.visible = item.runtime?.visible !== false;
-      object.userData.assetRef = item.assetRef ?? asset.id ?? null;
-      object.userData.collider = normalizeCollider({
-        type: item.collider?.enabled === false ? "none" : item.collider?.type,
-        dimensions: item.collider?.dimensions ?? {},
-        excludeGrass: item.exclusion?.grass ?? false,
-        excludeTrees: item.exclusion?.trees ?? item.exclusion?.grass ?? false,
-      });
-      object.userData.collider.excludeTrees = item.exclusion?.trees ?? item.exclusion?.grass ?? false;
+      const object = await this._buildPlacedFromDescriptor(item, { id: item.id ?? null });
+      if (!object) continue;
+      const objectId = object.userData.objectId;
       this.root.add(object);
-      this.objects.set(id, object);
-      this._nextId = Math.max(this._nextId, parseInt(String(id).replace("obj-", ""), 10) + 1 || this._nextId);
+      this.objects.set(objectId, object);
+      this._nextId = Math.max(this._nextId, parseInt(String(objectId).replace("obj-", ""), 10) + 1 || this._nextId);
     }
     this._changed({ full: true });
+  }
+
+  // Add a single placed object from a world-object descriptor without clearing
+  // the scene. Allocates a fresh id and rebuilds grass/trees around its box.
+  // Used by the prefab instancer to place prefabs as normal world objects.
+  async addWorldObject(item) {
+    const object = await this._buildPlacedFromDescriptor(item, { id: null });
+    if (!object) return null;
+    this.root.add(object);
+    this.objects.set(object.userData.objectId, object);
+    this._changed({ boxes: [this.getWorldBox(object)] });
+    return object;
+  }
+
+  // Shared builder for load + prefab placement. Resolves the asset (falling back
+  // to a placeholder for missing assetRefs), applies transform/collider/
+  // exclusion, and threads assetRef + prefabRef onto userData.
+  async _buildPlacedFromDescriptor(item, { id = null } = {}) {
+    const asset = await this.resolveAssetForWorldObject(item);
+    if (!asset) return null;
+    const objectId = id ?? `obj-${this._nextId++}`;
+    const t = item.transform ?? {};
+    const object = createPlacedObject({
+      id: objectId,
+      asset,
+      object3D: await this._buildObject3D(asset),
+      position: vecObjectToArray(t.position, [0, 0, 0]),
+      rotation: vecObjectToArray(t.rotation, [0, 0, 0]),
+      scale: vecObjectToArray(t.scale, [1, 1, 1]),
+    });
+    object.visible = item.runtime?.visible !== false;
+    object.userData.assetRef = item.assetRef ?? asset.id ?? null;
+    object.userData.prefabRef = item.prefabRef ?? null;
+    object.userData.collider = normalizeCollider({
+      type: item.collider?.enabled === false ? "none" : item.collider?.type,
+      dimensions: item.collider?.dimensions ?? {},
+      excludeGrass: item.exclusion?.grass ?? false,
+      excludeTrees: item.exclusion?.trees ?? item.exclusion?.grass ?? false,
+    });
+    object.userData.collider.excludeTrees = item.exclusion?.trees ?? item.exclusion?.grass ?? false;
+    return object;
   }
 
   clear() {

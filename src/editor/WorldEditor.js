@@ -8,6 +8,9 @@ import { WorldSerializer } from "../world/WorldSerializer.js";
 import { exportWorldDocument, importWorldDocumentFile } from "../world/WorldExport.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
+import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
+import { PrefabInstancer } from "../prefabs/PrefabInstancer.js";
+import { PrefabPanel } from "./PrefabPanel.js";
 
 export class WorldEditor {
   constructor({
@@ -26,6 +29,7 @@ export class WorldEditor {
     treeSystem,
     getGrassStats,
     getTreeStats,
+    prefabLibrary,
     onLoadWorld,
     onWorldChanged,
     onOpen,
@@ -50,6 +54,10 @@ export class WorldEditor {
     this.getGrassStats = getGrassStats;
     this.getTreeStats = getTreeStats;
     this.isOpen = false;
+
+    this.prefabLibrary = prefabLibrary ?? new PrefabLibrary();
+    this.prefabInstancer = new PrefabInstancer(objectManager);
+    this.armedPrefab = null;
 
     this.manager = objectManager;
     this.raycaster = new THREE.Raycaster();
@@ -101,6 +109,9 @@ export class WorldEditor {
   setWorldContext({ terrain, objectManager, treeSystem, getGrassStats, getTreeStats }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
+    if (objectManager) this.prefabInstancer.setManager(objectManager);
+    this._armPrefabPlacement(null);
+    this.prefabPanel?.refresh();
     this.treeSystem = treeSystem ?? this.treeSystem;
     this.getGrassStats = getGrassStats ?? this.getGrassStats;
     this.getTreeStats = getTreeStats ?? this.getTreeStats;
@@ -217,6 +228,15 @@ export class WorldEditor {
     assetActions.appendChild(this._button("Delete Asset", () => this._deleteSelectedAsset()));
     assetActions.appendChild(this._button("Refresh Library", () => this._refreshAssetLibrary()));
     root.appendChild(this._section("Asset Library", assetActions));
+
+    this.prefabPanel = new PrefabPanel({
+      library: this.prefabLibrary,
+      onCreatePrefab: () => this._createPrefabFromSelection(),
+      onArmPlacement: (prefab) => this._armPrefabPlacement(prefab),
+      onRenamePrefab: (id) => this._renamePrefab(id),
+      onDeletePrefab: (id) => this._deletePrefab(id),
+    });
+    root.appendChild(this._section("Prefabs", this.prefabPanel.root));
 
     this.colliderInspector = new ColliderInspector({
       onChange: (collider) => {
@@ -387,7 +407,11 @@ export class WorldEditor {
     window.addEventListener("keydown", (event) => {
       if (!this.isOpen || this.reliefTool.isOpen) return;
       if (event.code === "Delete" || event.code === "Backspace") this._deleteSelected();
-      if (event.code === "Escape") this.close();
+      if (event.code === "Escape") {
+        // Escape disarms prefab placement first, then closes the editor.
+        if (this.armedPrefab) this._armPrefabPlacement(null);
+        else this.close();
+      }
       if (event.code === "KeyQ") this.transform.setMode("translate");
       if (event.code === "KeyE") this.transform.setMode("rotate");
       if (event.code === "KeyR") this.transform.setMode("scale");
@@ -417,6 +441,18 @@ export class WorldEditor {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    // When a prefab is armed, terrain clicks place it (repeatedly) and object
+    // selection is suppressed so multiple placements stay fast.
+    if (this.armedPrefab) {
+      const armedHits = this.raycaster.intersectObject(this.terrain.mesh, false);
+      if (armedHits.length) {
+        const hit = armedHits[0].point;
+        hit.y = getHeight(hit.x, hit.z);
+        await this._placeArmedPrefab(hit);
+      }
+      return;
+    }
 
     const objectHits = this.raycaster.intersectObjects([...this.manager.objects.values()], true);
     if (objectHits.length) {
@@ -457,12 +493,74 @@ export class WorldEditor {
     this._select(await this.manager.duplicate(this.selectedObject));
   }
 
+  // --- prefabs ----------------------------------------------------------------
+
+  async _createPrefabFromSelection() {
+    if (!this.selectedObject) {
+      this.prefabPanel.setStatus("Select an object first, then save it as a prefab.");
+      return;
+    }
+    // Multi-select does not exist yet, so v1 captures a single object. The
+    // prefab format and instancer already support grouped prefabs for later.
+    const descriptor = this.manager.serializeWorldObject(this.selectedObject);
+    const suggested = this.selectedObject.name || "Prefab";
+    const name = prompt("Prefab name", suggested);
+    if (name === null) return;
+    try {
+      const prefab = await this.prefabLibrary.createFromObjects([descriptor], {
+        name: name || suggested,
+      });
+      this.prefabPanel.refresh();
+      this.prefabPanel.setStatus(`Saved prefab "${prefab.name}".`);
+    } catch (error) {
+      console.warn("Could not create prefab", error);
+      this.prefabPanel.setStatus("Could not create prefab from selection.");
+    }
+  }
+
+  _armPrefabPlacement(prefab) {
+    this.armedPrefab = prefab ?? null;
+    if (this.armedPrefab) this._select(null);
+    this.prefabPanel.setArmed(this.armedPrefab);
+    if (!this.armedPrefab) this.prefabPanel.setStatus("Placement finished.");
+  }
+
+  async _placeArmedPrefab(point) {
+    const prefab = this.armedPrefab;
+    if (!prefab) return;
+    const placed = await this.prefabInstancer.instantiate(prefab, {
+      position: { x: point.x, y: point.y, z: point.z },
+    });
+    if (placed.length) this._select(placed[0]);
+    this.prefabPanel.setStatus(`Placed "${prefab.name}" (${placed.length} object). Click again to place more.`);
+  }
+
+  async _renamePrefab(id) {
+    const prefab = this.prefabLibrary.get(id);
+    if (!prefab) return;
+    const name = prompt("Prefab name", prefab.name);
+    if (!name) return;
+    await this.prefabLibrary.rename(id, name);
+    this.prefabPanel.refresh();
+  }
+
+  async _deletePrefab(id) {
+    const prefab = this.prefabLibrary.get(id);
+    if (!prefab) return;
+    if (!confirm(`Delete prefab "${prefab.name}"? Objects already placed in the world are kept.`)) return;
+    if (this.armedPrefab?.id === id) this._armPrefabPlacement(null);
+    await this.prefabLibrary.delete(id);
+    this.prefabPanel.refresh();
+    this.prefabPanel.setStatus(`Deleted prefab "${prefab.name}". Placed objects were kept.`);
+  }
+
   _save() {
     const t0 = performance.now();
     const document = this.worldLoader.updateDocumentFromRuntime({
       player: this.player,
       cameraController: this.cameraController,
     });
+    document.prefabs = this.prefabLibrary.createManifest();
     const t1 = performance.now();
     const result = this.worldSerializer.save(document);
     const t2 = performance.now();
@@ -476,10 +574,24 @@ export class WorldEditor {
   async _load() {
     const result = this.worldSerializer.load();
     this._select(null);
-    if (result) await this.onLoadWorld?.(result.document);
+    if (result) {
+      await this._mergePrefabManifest(result.document);
+      await this.onLoadWorld?.(result.document);
+    }
     this.selectionLabel.textContent = result
       ? `Loaded ${result.document.objects.length} object(s) from localStorage.`
       : "No saved world found.";
+  }
+
+  // Bring any prefabs embedded in a loaded/imported world into the library
+  // (additive — existing prefabs are kept). Unknown prefabRefs never crash.
+  async _mergePrefabManifest(document) {
+    try {
+      await this.prefabLibrary.importManifest(document?.prefabs);
+      this.prefabPanel?.refresh();
+    } catch (error) {
+      console.warn("Could not merge prefab manifest from world", error);
+    }
   }
 
   _exportWorld() {
@@ -487,6 +599,7 @@ export class WorldEditor {
       player: this.player,
       cameraController: this.cameraController,
     });
+    document.prefabs = this.prefabLibrary.createManifest();
     const exported = exportWorldDocument(document);
     this.selectionLabel.textContent = `Exported ${exported.objects.length} object(s) to .world.json.`;
   }
@@ -494,6 +607,7 @@ export class WorldEditor {
   async _importWorld(file) {
     try {
       const result = await importWorldDocumentFile(file);
+      await this._mergePrefabManifest(result.document);
       await this.onLoadWorld?.(result.document);
       this.selectionLabel.textContent = `Imported ${result.document.objects.length} object(s) from ${file.name}.`;
     } catch (error) {

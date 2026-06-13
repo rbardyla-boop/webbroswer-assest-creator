@@ -7,6 +7,37 @@ import { WorldObjectManager } from "../src/world/WorldObjectManager.js";
 import { createAssetId, defaultColliderTypeForAsset } from "../src/assets/AssetTypes.js";
 import { normalizeAssetMetadata } from "../src/assets/AssetValidation.js";
 import { AssetLibrary } from "../src/assets/AssetLibrary.js";
+import { PrefabLibrary } from "../src/prefabs/PrefabLibrary.js";
+import { PrefabInstancer } from "../src/prefabs/PrefabInstancer.js";
+import { worldObjectsFromPrefab } from "../src/prefabs/PrefabSerializer.js";
+import { validatePrefabDocument } from "../src/prefabs/PrefabValidation.js";
+
+class MemoryPrefabStore {
+  constructor() {
+    this.data = [];
+    this.thumbs = new Map();
+  }
+
+  async loadAll() {
+    return this.data.map((entry) => structuredClone(entry));
+  }
+
+  async saveAll(prefabs) {
+    this.data = (prefabs ?? []).map((entry) => structuredClone(entry));
+  }
+
+  async putThumbnail(ref, url) {
+    this.thumbs.set(ref, url);
+  }
+
+  async getThumbnail(ref) {
+    return this.thumbs.get(ref) ?? null;
+  }
+
+  async deleteThumbnail(ref) {
+    this.thumbs.delete(ref);
+  }
+}
 
 class MemoryAssetStore {
   constructor() {
@@ -301,5 +332,153 @@ assert.equal(assetRoundTrip[2].asset, null);
 const manifest = assetLibrary.createManifest();
 assert.equal(manifest.localIndexedDB, true);
 assert.ok(manifest.items.some((item) => item.id === reliefAsset.id));
+
+// --- Stage 5: prefab / template objects -------------------------------------
+
+// Build a prefab from a placed (asset-backed) object's serialized descriptor.
+const reliefDescriptor = assetRoundTrip[0];
+assert.equal(reliefDescriptor.assetRef, reliefAsset.id);
+assert.equal(reliefDescriptor.collider.type, "box");
+assert.equal(reliefDescriptor.exclusion.grass, true);
+
+const prefabStore = new MemoryPrefabStore();
+const prefabLibrary = await new PrefabLibrary({ store: prefabStore }).init();
+const prefab = await prefabLibrary.createFromObjects([reliefDescriptor], { name: "Stable Prefab" });
+
+// prefab shape + asset/collider/exclusion captured, no blob duplication.
+assert.match(prefab.id, /^prefab-stable-prefab-/);
+assert.equal(prefab.version, 1);
+assert.equal(prefab.objects.length, 1);
+assert.equal(prefab.metadata.objectCount, 1);
+assert.equal(prefab.objects[0].assetRef, reliefAsset.id);
+assert.equal(prefab.objects[0].asset, null); // asset-backed → no inline blob
+assert.equal(prefab.objects[0].collider.type, "box");
+assert.equal(prefab.objects[0].exclusion.grass, true);
+assert.equal(prefab.objects[0].exclusion.trees, true);
+
+// Prefab ID stability across persistence reloads.
+const reloadedPrefabs = await new PrefabLibrary({ store: prefabStore }).init();
+assert.ok(reloadedPrefabs.get(prefab.id));
+assert.equal(reloadedPrefabs.get(prefab.id).id, prefab.id);
+assert.equal(reloadedPrefabs.get(prefab.id).objects[0].assetRef, reliefAsset.id);
+
+// Pure expansion: placement transform + prefabRef + preserved metadata.
+const expanded = worldObjectsFromPrefab(prefab, { position: { x: 10, y: 0, z: -4 }, yaw: 0 });
+assert.equal(expanded.length, 1);
+assert.equal(expanded[0].prefabRef, prefab.id);
+assert.equal(expanded[0].assetRef, reliefAsset.id);
+assert.equal(expanded[0].collider.type, "box");
+assert.equal(expanded[0].exclusion.trees, true);
+assert.ok(Math.abs(expanded[0].transform.position.x - 10) < 1e-6);
+assert.ok(Math.abs(expanded[0].transform.position.z + 4) < 1e-6);
+
+// Placing a prefab creates real placed objects that preserve prefabRef.
+const prefabScene = new THREE.Scene();
+const prefabManager = new WorldObjectManager(prefabScene, { assetLibrary });
+const instancer = new PrefabInstancer(prefabManager);
+const placedA = await instancer.instantiate(prefab, { position: { x: 5, y: 0, z: 5 } });
+assert.equal(placedA.length, 1);
+const placedB = await instancer.instantiate(prefab, { position: { x: 8, y: 0, z: 8 } });
+assert.equal(placedB.length, 1);
+assert.equal(prefabManager.objects.size, 2); // placed multiple times
+
+const placedSerialized = prefabManager.serializeWorldObjects();
+assert.equal(placedSerialized.length, 2);
+assert.equal(placedSerialized[0].prefabRef, prefab.id);
+assert.equal(placedSerialized[0].assetRef, reliefAsset.id);
+assert.equal(placedSerialized[0].collider.type, "box");
+assert.equal(placedSerialized[1].prefabRef, prefab.id);
+
+// Deleting the prefab must not remove already-placed world objects.
+assert.equal(await prefabLibrary.delete(prefab.id), true);
+assert.equal(prefabLibrary.get(prefab.id), null);
+assert.equal(prefabManager.objects.size, 2);
+
+// World document round-trip: prefabRef on objects + prefab manifest preserved,
+// and an unknown prefabRef must not crash validation or load.
+const prefabWorldDoc = createWorldDocument({
+  objects: [
+    {
+      id: "obj-from-prefab",
+      name: "From Prefab",
+      type: "primitive",
+      assetRef: "primitive-cube",
+      primitive: "cube",
+      prefabRef: "prefab-known-123",
+      transform: {
+        position: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+    },
+    {
+      id: "obj-unknown-prefab",
+      name: "Unknown Prefab Ref",
+      type: "primitive",
+      assetRef: "primitive-sphere",
+      primitive: "sphere",
+      prefabRef: "prefab-does-not-exist",
+      transform: {
+        position: { x: 2, y: 2, z: 2 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      },
+      exclusion: { grass: false, trees: false },
+    },
+  ],
+  prefabs: { version: 1, items: [prefab] },
+});
+const prefabValidated = validateWorldDocument(prefabWorldDoc);
+assert.equal(prefabValidated.warnings.length, 0);
+assert.equal(prefabValidated.document.objects[0].prefabRef, "prefab-known-123");
+assert.equal(prefabValidated.document.objects[1].prefabRef, "prefab-does-not-exist");
+assert.equal(prefabValidated.document.prefabs.items.length, 1);
+assert.equal(prefabValidated.document.prefabs.items[0].id, prefab.id);
+
+// Loading a world with a placed-but-orphaned prefabRef does not crash and the
+// prefabRef survives the manager round-trip.
+const missingScene = new THREE.Scene();
+const missingManager = new WorldObjectManager(missingScene, { assetLibrary });
+await missingManager.loadWorldObjects(prefabValidated.document.objects);
+const missingRoundTrip = missingManager.serializeWorldObjects();
+assert.equal(missingRoundTrip.length, 2);
+assert.equal(missingRoundTrip[0].prefabRef, "prefab-known-123");
+assert.equal(missingRoundTrip[1].prefabRef, "prefab-does-not-exist");
+
+// Export → import keeps prefabRef and the prefab manifest.
+const exportedPrefabJson = JSON.stringify({ ...prefabValidated.document, objects: missingRoundTrip });
+const importedPrefab = validateWorldDocument(JSON.parse(exportedPrefabJson));
+assert.equal(importedPrefab.document.objects[0].prefabRef, "prefab-known-123");
+assert.equal(importedPrefab.document.prefabs.items.length, 1);
+
+// Garbage prefab input is skipped, never thrown.
+assert.equal(validatePrefabDocument(null).prefab, null);
+assert.equal(validatePrefabDocument({ name: "Empty", objects: [] }).prefab, null);
+
+// GLTF-backed prefab children keep their advisory type through validation
+// (PREFAB_OBJECT_TYPES includes "gltf"), and are classified as asset prefabs.
+const gltfPrefab = validatePrefabDocument({
+  name: "Gltf Prefab",
+  objects: [
+    {
+      localId: "c0",
+      name: "Model",
+      type: "gltf",
+      assetRef: "gltf-abc",
+      localTransform: {
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+    },
+  ],
+});
+assert.ok(gltfPrefab.prefab);
+assert.equal(gltfPrefab.prefab.objects[0].type, "gltf");
+assert.equal(gltfPrefab.prefab.kind, "asset");
 
 console.log("world document regression checks passed");
