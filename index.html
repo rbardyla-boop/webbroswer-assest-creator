@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Grass World — Three.js Prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --panel-bg: rgba(14, 18, 16, 0.82);
+        --panel-border: rgba(120, 200, 140, 0.22);
+        --accent: #7fdca0;
+        --text: #d7e6dc;
+        --text-dim: #8fa899;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0f0d;
+        font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+        color: var(--text);
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      /* Loading veil */
+      #loader {
+        position: fixed; inset: 0; z-index: 50;
+        display: grid; place-content: center; gap: 0.6rem;
+        background: radial-gradient(120% 120% at 50% 30%, #14201a 0%, #0b0f0d 70%);
+        text-align: center;
+        transition: opacity 0.6s ease;
+      }
+      #loader.hidden { opacity: 0; pointer-events: none; }
+      #loader .title { font-size: 1.1rem; letter-spacing: 0.18em; color: var(--accent); text-transform: uppercase; }
+      #loader .sub { font-size: 0.8rem; color: var(--text-dim); }
+
+      /* Controls hint */
+      #hint {
+        position: fixed; left: 16px; bottom: 14px; z-index: 20;
+        max-width: 320px; padding: 10px 12px;
+        background: var(--panel-bg); border: 1px solid var(--panel-border);
+        border-radius: 10px; font-size: 11px; line-height: 1.55; color: var(--text-dim);
+        backdrop-filter: blur(8px); pointer-events: none;
+      }
+      #hint b { color: var(--text); }
+      #hint kbd {
+        display: inline-block; min-width: 16px; padding: 1px 5px; margin: 0 1px;
+        background: rgba(127, 220, 160, 0.12); border: 1px solid var(--panel-border);
+        border-radius: 4px; color: var(--accent); font-size: 10px; text-align: center;
+      }
+
+      /* Crosshair (first-person) */
+      #crosshair {
+        position: fixed; left: 50%; top: 50%; z-index: 15;
+        width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+        background: rgba(230, 245, 235, 0.65); box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+        display: none; pointer-events: none;
+      }
+
+      /* Top-right action buttons */
+      #toolbar { position: fixed; right: 16px; top: 14px; z-index: 25; display: flex; gap: 8px; }
+      .btn {
+        appearance: none; cursor: pointer; font: inherit; font-size: 11px; letter-spacing: 0.04em;
+        padding: 7px 12px; color: var(--text); background: var(--panel-bg);
+        border: 1px solid var(--panel-border); border-radius: 8px; backdrop-filter: blur(8px);
+        transition: border-color 0.18s ease, color 0.18s ease, transform 0.06s ease;
+      }
+      .btn:hover { border-color: var(--accent); color: var(--accent); }
+      .btn:active { transform: translateY(1px); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="crosshair"></div>
+
+    <div id="toolbar">
+      <button id="open-editor" class="btn">▣ World Builder</button>
+    </div>
+
+    <div id="hint">
+      <b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &nbsp;
+      <b>Jump</b> <kbd>Space</kbd> &nbsp; <b>Sprint</b> <kbd>Shift</kbd><br />
+      <b>Look</b> click to capture mouse · <kbd>Esc</kbd> release<br />
+      <b>Camera</b> <kbd>V</kbd> first/third person &nbsp; <b>Debug</b> <kbd>H</kbd>
+    </div>
+
+    <div id="loader">
+      <div class="title">Grass World</div>
+      <div class="sub">building terrain &amp; planting grass…</div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

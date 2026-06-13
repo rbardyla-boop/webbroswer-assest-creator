@@ -1,0 +1,18 @@
+{
+  "name": "grass-world-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reusable high-performance Three.js grass system with a capsule character, FP/TP cameras, and an in-browser image-to-3D relief editor.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
