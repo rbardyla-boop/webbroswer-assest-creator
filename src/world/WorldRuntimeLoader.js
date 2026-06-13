@@ -75,8 +75,11 @@ export class WorldRuntimeLoader {
   dispose() {
     this.grass?.dispose();
     this.trees?.dispose();
-    this.manager?.clear();
-    this.manager?.root?.removeFromParent();
+    if (this.manager) {
+      this.manager.onChange = null;
+      this.manager.clear();
+      this.manager.root?.removeFromParent();
+    }
     if (this.terrain) {
       this.scene.remove(this.terrain.mesh);
       this.terrain.dispose();

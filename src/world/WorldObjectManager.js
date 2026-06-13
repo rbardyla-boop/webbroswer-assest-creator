@@ -100,7 +100,7 @@ export class WorldObjectManager {
         },
         collider: {
           type: collider.type,
-          dimensions: {},
+          dimensions: collider.dimensions ?? {},
           enabled: collider.type !== "none",
         },
         exclusion: {
@@ -158,6 +158,7 @@ export class WorldObjectManager {
       object.visible = item.runtime?.visible !== false;
       object.userData.collider = normalizeCollider({
         type: item.collider?.enabled === false ? "none" : item.collider?.type,
+        dimensions: item.collider?.dimensions ?? {},
         excludeGrass: item.exclusion?.grass ?? false,
         excludeTrees: item.exclusion?.trees ?? item.exclusion?.grass ?? false,
       });

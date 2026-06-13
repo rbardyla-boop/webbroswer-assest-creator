@@ -16,7 +16,7 @@ export function validateWorldDocument(input) {
     source = {};
   }
 
-  if (source.version === 1 || !source.metadata?.format) {
+  if (source.version === 1 || isLegacyObjectOnlySave(source)) {
     source = migrateLegacyDocument(source);
     warnings.push("Loaded legacy world save and migrated it to world-builder-v2.");
   } else if (source.version !== WORLD_DOCUMENT_VERSION) {
@@ -100,6 +100,7 @@ function sanitizeObjects(objects, warnings) {
     }
     const primitive = PRIMITIVES.has(item?.primitive) ? item.primitive : item?.asset?.kind;
     const type = OBJECT_TYPES.has(item?.type) ? item.type : item?.asset?.type === "relief" ? "relief" : "primitive";
+    const collider = colliderToV2(item?.collider, warnings, item?.id);
     safe.push({
       id: typeof item?.id === "string" && item.id ? item.id : `obj-${cryptoRandomId()}`,
       name: typeof item?.name === "string" && item.name ? item.name : item?.asset?.name ?? "Placed Object",
@@ -108,7 +109,7 @@ function sanitizeObjects(objects, warnings) {
       primitive: PRIMITIVES.has(primitive) ? primitive : "cube",
       asset: item?.asset ?? null,
       transform,
-      collider: colliderToV2(item?.collider),
+      collider,
       exclusion: {
         grass: item?.exclusion?.grass ?? item?.collider?.excludeGrass ?? false,
         trees: item?.exclusion?.trees ?? item?.collider?.excludeTrees ?? item?.collider?.excludeGrass ?? false,
@@ -135,13 +136,32 @@ function sanitizeTransform(transform = {}) {
   return { position, rotation, scale };
 }
 
-function colliderToV2(collider = {}) {
+function colliderToV2(collider = {}, warnings = null, objectId = null) {
   const type = COLLIDERS.has(collider?.type) ? collider.type : COLLIDER_TYPES.none;
+  if (collider?.type && type === COLLIDER_TYPES.none) {
+    warnings?.push(`Object ${objectId ?? "(unknown)"} had invalid collider type "${collider.type}"; using none.`);
+  }
   return {
     type,
-    dimensions: collider?.dimensions ?? {},
+    dimensions: sanitizeDimensions(collider?.dimensions),
     enabled: collider?.enabled !== false && type !== COLLIDER_TYPES.none,
   };
+}
+
+function sanitizeDimensions(dimensions) {
+  if (!dimensions || typeof dimensions !== "object" || Array.isArray(dimensions)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(dimensions)) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+  }
+  return out;
+}
+
+function isLegacyObjectOnlySave(source) {
+  if (source.version !== undefined) return false;
+  if (source.metadata?.format) return false;
+  if (!Array.isArray(source.objects) || source.objects.length === 0) return false;
+  return source.objects.some((object) => Array.isArray(object?.position) || Array.isArray(object?.rotation));
 }
 
 function sanitizeVec3Object(value, fallback) {

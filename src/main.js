@@ -18,7 +18,6 @@ import { PlayerController } from "./player/PlayerController.js";
 import { PlayerCameraController } from "./player/PlayerCameraController.js";
 
 import { DebugPanel } from "./debug/DebugPanel.js";
-import { WorldEditor } from "./editor/WorldEditor.js";
 import { createWorldDocument } from "./world/WorldDocument.js";
 import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
 import { WorldSerializer } from "./world/WorldSerializer.js";
@@ -30,6 +29,11 @@ const toolbarEl = document.getElementById("toolbar");
 const hintEl = document.getElementById("hint");
 const runtimeMode = new URLSearchParams(window.location.search).has("runtime")
   || new URLSearchParams(window.location.search).has("play");
+
+window.__WORLD_READY__ = false;
+window.__WORLD_MODE__ = runtimeMode ? "runtime" : "editor";
+document.body.dataset.worldReady = "false";
+document.body.dataset.worldMode = window.__WORLD_MODE__;
 
 // --- core --------------------------------------------------------------------
 
@@ -78,6 +82,7 @@ function handleWorldChanged(change = {}) {
 objectManager.onChange = handleWorldChanged;
 
 function applyLoadedWorld(document) {
+  resetWorldReady();
   world = worldLoader.load(document);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;
@@ -118,28 +123,30 @@ if (runtimeMode) {
   toolbarEl.style.display = "none";
   hintEl.style.display = "none";
 } else {
-  editor = new WorldEditor({
-    scene,
-    camera,
-    renderer,
-    terrain,
-    input,
-    colliderSystem: colliders,
-    objectManager,
-    worldLoader,
-    worldSerializer,
-    player,
-    cameraController,
-    getGrassStats: () => grass.stats,
-    treeSystem: trees,
-    getTreeStats: () => trees.stats,
-    onLoadWorld: applyLoadedWorld,
-    onWorldChanged: handleWorldChanged,
-    onOpen: () => {
-      if (document.pointerLockElement) document.exitPointerLock();
-    },
+  import("./editor/WorldEditor.js").then(({ WorldEditor }) => {
+    editor = new WorldEditor({
+      scene,
+      camera,
+      renderer,
+      terrain,
+      input,
+      colliderSystem: colliders,
+      objectManager,
+      worldLoader,
+      worldSerializer,
+      player,
+      cameraController,
+      getGrassStats: () => grass.stats,
+      treeSystem: trees,
+      getTreeStats: () => trees.stats,
+      onLoadWorld: applyLoadedWorld,
+      onWorldChanged: handleWorldChanged,
+      onOpen: () => {
+        if (document.pointerLockElement) document.exitPointerLock();
+      },
+    });
+    document.getElementById("open-editor").addEventListener("click", () => editor.open());
   });
-  document.getElementById("open-editor").addEventListener("click", () => editor.open());
 }
 
 // --- shadow rig follows the player so the shadow map stays useful ------------
@@ -161,10 +168,17 @@ cameraController.update(0.016);
 grass.prewarm(camera, 80);
 updateSun();
 
-requestAnimationFrame(() => {
-  loaderEl.classList.add("hidden");
-  setTimeout(() => loaderEl.remove(), 700);
-});
+function resetWorldReady() {
+  window.__WORLD_READY__ = false;
+  document.body.dataset.worldReady = "false";
+}
+
+function markWorldReady() {
+  if (window.__WORLD_READY__) return;
+  loaderEl?.remove();
+  window.__WORLD_READY__ = true;
+  document.body.dataset.worldReady = "true";
+}
 
 // --- main loop ---------------------------------------------------------------
 
@@ -183,6 +197,7 @@ function frame(now) {
     grass.update(camera, elapsed);
     trees.update(camera);
     renderer.render(scene, camera);
+    markWorldReady();
     crosshairEl.style.display = "none";
     return;
   }
@@ -200,6 +215,7 @@ function frame(now) {
   trees.update(camera);
 
   renderer.render(scene, camera);
+  markWorldReady();
 
   // First-person crosshair, only while the mouse is captured.
   const showCross = cameraController.mode === "first" && input.pointerLocked;

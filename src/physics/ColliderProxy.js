@@ -29,6 +29,7 @@ export function normalizeCollider(collider) {
   const type = Object.values(COLLIDER_TYPES).includes(collider?.type) ? collider.type : COLLIDER_TYPES.none;
   return {
     type,
+    dimensions: collider?.dimensions ?? {},
     excludeGrass: collider?.excludeGrass ?? collider?.grassExclusion ?? false,
     excludeTrees: collider?.excludeTrees ?? collider?.treeExclusion ?? collider?.excludeGrass ?? collider?.grassExclusion ?? false,
   };
