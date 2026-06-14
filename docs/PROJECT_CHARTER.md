@@ -395,9 +395,54 @@ floor), the demotion-only hysteresis, the no-hide invariant, and the animation
 freeze/resume. Reviewed (0 CRITICAL / 0 HIGH); the no-hide invariant was verified
 against every changed file.
 
-**Deferred to Stage 17B (same kernel, more adapters).** Particle emitters (cull by
+**Deferred (same kernel, more adapters).** Particle emitters (cull by
 EMITTER BOUNDS, not origin), placed lights (keep off-screen lights that affect
 visible terrain), procedural/voxel streaming agents (where `maxWakesPerFrame` becomes
 load-bearing), and an opt-in render-hide tier for non-shadow-casting decorative
 props. Grass/bush/tree already implement their own patch-level culling/LOD/streaming
 and are intentionally left as-is (not rewritten).
+
+## ADR-017B — City Generator Intake Audit (Stage 17B)
+
+**Decision.** An external drop, `threejs-runtime-city-generator/` (untracked, never
+integrated), was classified by a read-only audit (no execution/install) across four
+dimensions — license/provenance, security/quarantine, determinism/bounds, and
+architecture/data-emission. Verdict: **candidate-seed for Stage 17C — import NOTHING
+as-is.**
+
+**Safety/provenance: GREEN.** Self-authored (same author as this engine), no bundled
+assets, MIT-only deps (`three` 0.169 + Vite), no `eval`/`new Function`/`fetch`/
+WebSocket/Worker/dynamic-import, no network. Generation is fully seeded (mulberry32 +
+FNV-1a), deterministic (`computeLayoutSignature`), and hard-capped (maxBuildings 520,
+maxProps 360 enforced at the push site; density clamped). Only runtime authority is
+user-initiated `localStorage` of self-generated JSON. Gap: no LICENSE/SPDX field
+(`private:true`) — formalize before lifting any code.
+
+**Architecture: RED (the decisive dimension).** It is a **hidden custom runtime scene
+graph**: `CityGenerator` produces clean per-object descriptors, but `CityChunk`/
+`CitySystem` bake them into opaque `InstancedMesh` batches fed straight to the scene,
+bypassing `WorldObjectManager` (independently confirmed: zero host-placement refs in
+its `src/`). This violates the engine boundary **generator output → WorldDocument
+objects → normal runtime systems**. As baked, Stage 17A visibility and Stage 16
+voxel/bounds validation cannot introspect city objects (only chunk-level bounding
+spheres exist).
+
+**Why "seed" not "discard."** The violation is a *missing emitter bridge*, not an
+intrinsic flaw: `generateCityLayout()` already returns per-object descriptors
+(`{id,type,x,z,w,d,h,yaw}`, deterministic, capped) *before* the bake. Reusable core =
+`CityGenerator.js` + `CityConfig.js` + `utils/random.js` + the descriptor schema.
+Discard-and-replace = `CityChunk.js` + `CitySystem.js` (the baker + hidden
+scene-graph/visibility/LOD owner).
+
+**Gate to Stage 17C (all must pass before any city code enters a build path).**
+1) License formalized (license:MIT / ownership recorded). 2) A new
+`layoutToWorldObjects()` emitter consumes the descriptors (NOT the baked meshes) and
+routes through `WorldObjectManager.addWorldObject`; the generator holds zero
+runtime/scene authority. 3) Emitted objects carry full host metadata (assetRef/
+prefabRef, collider, exclusion.grass/trees, animation/interaction/particles/runtime)
+with a zone-type→asset map. 4) Determinism proven in-host (seed+style → byte-stable
+WorldDocument). 5) Count caps re-asserted host-side. 6) Stage 16 voxel/bounds
+validation passes on converted objects. 7) Stage 17A registers their world bounds and
+culls them. 8) `qa:skills` stays 32/0/0 + a SwiftShader browser proof. Until then the
+drop stays quarantined as reference/seed material only — no production bundle
+inclusion, no copied assets, no runtime authority.
