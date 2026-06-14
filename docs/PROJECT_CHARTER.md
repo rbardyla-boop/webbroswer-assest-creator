@@ -458,3 +458,16 @@ validation passes on converted objects. 7) Stage 17A registers their world bound
 culls them. 8) `qa:skills` stays 32/0/0 + a SwiftShader browser proof. Until then the
 drop stays quarantined as reference/seed material only — no production bundle
 inclusion, no copied assets, no runtime authority.
+
+**v0.2.1 reconciliation.** The audited working-tree copy is the fixed v0.2.1: two
+operator fixes are confirmed present — explicit per-surface shadow flags in
+`CityChunk._addMesh(...,{castShadow,receiveShadow})` and the per-frame
+draw-estimation allocation removed (`CitySystem.update` uses `chunk.visibleDrawCount`,
+no `meshes.filter`). Neither changes the verdict: the per-frame-allocation concern is
+resolved AND moot (CitySystem is in the discard-and-replace set), and the architecture
+finding (hidden scene graph → needs an emitter bridge) is unchanged. The shadow
+semantics ARE a useful input for the 17C emitter: emitted buildings/props cast
+shadows, roads/sidewalks/runways are receive-only, zone overlays neither — the
+`layoutToWorldObjects()` bridge should set per-object `castShadow`/`receiveShadow`
+accordingly. Runtime FPS confidence stays MEDIUM until a local (non-sandbox) GPU/
+browser smoke; build/static/determinism confidence is HIGH.
