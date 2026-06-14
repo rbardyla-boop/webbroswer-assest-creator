@@ -6,3 +6,6 @@ dist/
 npm-debug.log*
 tmp/
 .foundry/
+
+# Three.js skill QA artifacts
+qa/artifacts/

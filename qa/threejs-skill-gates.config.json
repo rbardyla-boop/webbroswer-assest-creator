@@ -1,0 +1,36 @@
+{
+  "sourceRoot": "src",
+  "requiredFiles": [
+    "src/main.js",
+    "src/core/input.js",
+    "src/core/renderer.js",
+    "src/core/scene.js",
+    "src/core/camera.js",
+    "src/core/lights.js",
+    "src/terrain/Terrain.js",
+    "src/terrain/terrainSampling.js",
+    "src/grass/GrassConfig.js",
+    "src/grass/GrassGeometry.js",
+    "src/grass/GrassMaterial.js",
+    "src/grass/GrassPlacement.js",
+    "src/grass/GrassPatch.js",
+    "src/grass/GrassSystem.js",
+    "src/player/Player.js",
+    "src/player/PlayerController.js",
+    "src/player/PlayerCameraController.js",
+    "src/debug/DebugPanel.js",
+    "src/editor/ReliefEditor.js",
+    "src/utils/math.js",
+    "src/utils/random.js"
+  ],
+  "docs": [
+    "THREEJS_SKILL_ADOPTION.md",
+    "docs/ASSET_IMPORT_GATE.md",
+    "docs/IMAGE_GENERATION_GATE.md",
+    "docs/AUDIO_GENERATION_GATE.md"
+  ],
+  "knownWarnings": [
+    "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",
+    "Browser smoke is optional unless Playwright is installed."
+  ]
+}
