@@ -1,4 +1,5 @@
 import { TERRAIN } from "../terrain/terrainSampling.js";
+import { DEFAULT_TERRAIN_MATERIAL } from "../terrain/Terrain.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
 import { createBushConfig } from "../bushes/BushConfig.js";
@@ -31,6 +32,8 @@ export function createWorldDocument(overrides = {}) {
       featureScale: TERRAIN.featureScale,
       detailScale: TERRAIN.detailScale,
       detailAmount: TERRAIN.detailAmount,
+      // Material v2 (macro noise + height/slope layering over the vertex colors).
+      material: { ...DEFAULT_TERRAIN_MATERIAL },
     },
     grass: {
       enabled: true,

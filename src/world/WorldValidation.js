@@ -7,6 +7,7 @@ import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { sanitizeLighting } from "../lighting/LightingValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
+import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -52,6 +53,7 @@ export function validateWorldDocument(input) {
   doc.terrain.featureScale = positiveNumber(doc.terrain.featureScale, 0.012);
   doc.terrain.detailScale = positiveNumber(doc.terrain.detailScale, 0.06);
   doc.terrain.detailAmount = numberOr(doc.terrain.detailAmount, 1.6);
+  doc.terrain.material = sanitizeTerrainMaterial(doc.terrain.material);
 
   doc.grass.enabled = doc.grass.enabled !== false;
   doc.grass.density = Math.max(0, numberOr(doc.grass.density, 7));

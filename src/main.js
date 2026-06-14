@@ -125,6 +125,22 @@ if (import.meta.env.DEV) {
     clumpStrength: bushes?.cfg?.clumpStrength ?? null,
     seed: bushes?.cfg?.seed ?? null,
   });
+  // Dev/test-only: read the live terrain material v2 (Stage 14C). Reports the
+  // upgrade uniforms + that fog/shadow stayed wired (the onBeforeCompile pass
+  // only edits diffuseColor, never the lighting/fog/shadow chunks).
+  window.__TERRAIN_DEBUG__ = () => {
+    const mat = terrain?.mesh?.material;
+    const u = terrain?._uniforms ?? {};
+    return {
+      hasUpgrade: typeof mat?.onBeforeCompile === "function",
+      receiveShadow: terrain?.mesh?.receiveShadow ?? false,
+      vertexColors: mat?.vertexColors ?? false,
+      fog: mat?.fog ?? false, // MeshStandardMaterial.fog stays on → scene fog applies
+      settings: terrain?.getMaterialSettings ? terrain.getMaterialSettings() : null,
+      macroIntensity: u.uTerrainMacroIntensity?.value ?? null,
+      slopeRock: u.uTerrainSlopeRock?.value ?? null,
+    };
+  };
 }
 
 function handleWorldChanged(change = {}) {

@@ -76,7 +76,7 @@ export class WorldRuntimeLoader {
 
   updateDocumentFromRuntime({ player = null, cameraController = null } = {}) {
     if (!this.document) return null;
-    this.document.terrain = terrainDocumentFromRuntime(this.document.terrain);
+    this.document.terrain = terrainDocumentFromRuntime(this.terrain, this.document.terrain);
     this.document.grass = grassDocumentFromRuntime(this.grass?.cfg, this.document.grass);
     this.document.trees = treeDocumentFromRuntime(this.trees?.cfg, this.document.trees);
     this.document.bushes = bushDocumentFromRuntime(this.bushes?.cfg, this.document.bushes);
@@ -170,13 +170,16 @@ function bushConfigFromDocument(bushes = {}) {
   });
 }
 
-function terrainDocumentFromRuntime(fallback = {}) {
+function terrainDocumentFromRuntime(terrain = null, fallback = {}) {
   return {
     ...fallback,
     heightAmplitude: TERRAIN.heightAmplitude,
     featureScale: TERRAIN.featureScale,
     detailScale: TERRAIN.detailScale,
     detailAmount: TERRAIN.detailAmount,
+    // Material v2 lives on the live Terrain instance (the editor mutates its
+    // uniforms); read it back so worldpack/mod exports preserve it.
+    material: terrain?.getMaterialSettings ? terrain.getMaterialSettings() : { ...(fallback.material ?? {}) },
   };
 }
 

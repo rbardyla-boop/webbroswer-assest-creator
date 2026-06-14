@@ -218,6 +218,15 @@ export class WorldEditor {
       this.bushVisible.value = b.visibleDistance;
       this.bushSeed.value = b.seed;
     }
+    // A reloaded world brings a fresh Terrain instance with its own material v2.
+    if (this.terrain?.getMaterialSettings && this.terrainMacro) {
+      const m = this.terrain.getMaterialSettings();
+      this.terrainMacro.value = m.macroIntensity;
+      this.terrainMacroScale.value = m.macroScale;
+      this.terrainSlopeRock.value = m.slopeRock;
+      this.terrainHeightTint.value = m.heightTint;
+      this.terrainDetail.value = m.detailIntensity;
+    }
     this._select(null);
     this._refreshPerf();
   }
@@ -442,6 +451,7 @@ export class WorldEditor {
     root.appendChild(this._section("Grass", this._buildGrassControls()));
     root.appendChild(this._section("Bushes", this._buildBushControls()));
     root.appendChild(this._section("Trees", this._buildTreeControls()));
+    root.appendChild(this._section("Terrain material", this._buildTerrainControls()));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });
@@ -571,6 +581,41 @@ export class WorldEditor {
       visibleDistance: visible,
       keepDistance: visible + 35,
       seed: Math.floor(parseFloat(this.bushSeed.value) || 1),
+    });
+    this.stats.lastActionMs = performance.now() - t0;
+    this._refreshPerf();
+  }
+
+  _buildTerrainControls() {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, { display: "grid", gap: "8px" });
+    const s = this.terrain?.getMaterialSettings?.() ?? {};
+
+    this.terrainMacro = this._numberInput(s.macroIntensity ?? 0.35, 0.02);
+    this.terrainMacroScale = this._numberInput(s.macroScale ?? 0.015, 0.002);
+    this.terrainSlopeRock = this._numberInput(s.slopeRock ?? 0.5, 0.02);
+    this.terrainHeightTint = this._numberInput(s.heightTint ?? 0.3, 0.02);
+    this.terrainDetail = this._numberInput(s.detailIntensity ?? 0.25, 0.02);
+
+    wrap.appendChild(this._labeledControl("Macro", this.terrainMacro));
+    wrap.appendChild(this._labeledControl("Macro scale", this.terrainMacroScale));
+    wrap.appendChild(this._labeledControl("Slope rock", this.terrainSlopeRock));
+    wrap.appendChild(this._labeledControl("Height tint", this.terrainHeightTint));
+    wrap.appendChild(this._labeledControl("Detail", this.terrainDetail));
+    wrap.appendChild(this._button("Apply Terrain", () => this._applyTerrainSettings()));
+    return wrap;
+  }
+
+  _applyTerrainSettings() {
+    if (!this.terrain?.syncMaterial) return;
+    const t0 = performance.now();
+    const c01 = (input, fallback) => Math.min(1, Math.max(0, parseFloat(input.value) || fallback));
+    this.terrain.syncMaterial({
+      macroIntensity: c01(this.terrainMacro, 0.35),
+      macroScale: Math.min(0.2, Math.max(0.0001, parseFloat(this.terrainMacroScale.value) || 0.015)),
+      slopeRock: c01(this.terrainSlopeRock, 0.5),
+      heightTint: c01(this.terrainHeightTint, 0.3),
+      detailIntensity: c01(this.terrainDetail, 0.25),
     });
     this.stats.lastActionMs = performance.now() - t0;
     this._refreshPerf();

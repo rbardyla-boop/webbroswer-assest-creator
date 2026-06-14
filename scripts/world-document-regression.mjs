@@ -50,6 +50,7 @@ import { BushSystem } from "../src/bushes/BushSystem.js";
 import { createBushConfig } from "../src/bushes/BushConfig.js";
 import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
 import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
+import { Terrain, sanitizeTerrainMaterial, DEFAULT_TERRAIN_MATERIAL } from "../src/terrain/Terrain.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1786,5 +1787,56 @@ assert.equal(bushSys.stats.drawCalls, bushSys.stats.visiblePatches); // one draw
 assert.ok(bushSys.stats.visibleBushes >= 0);
 bushSys.dispose();
 assert.equal(bushSys.patches.size, 0); // disposed cleanly
+
+// --- Stage 14C: terrain material v2 ------------------------------------------
+
+// Defaults are present and the validator clamps every field into range.
+const defTerrainDoc = validateWorldDocument(createWorldDocument());
+assert.equal(defTerrainDoc.warnings.length, 0);
+assert.deepEqual(defTerrainDoc.document.terrain.material, { ...DEFAULT_TERRAIN_MATERIAL });
+
+const wildTerrainDoc = validateWorldDocument(
+  createWorldDocument({ terrain: { material: { macroIntensity: 9, macroScale: 99, slopeRock: -3, heightTint: 0.4, detailIntensity: 2 } } })
+);
+assert.equal(wildTerrainDoc.warnings.length, 0);
+const wm = wildTerrainDoc.document.terrain.material;
+assert.equal(wm.macroIntensity, 1); // clamp01
+assert.equal(wm.macroScale, 0.2); // capped at MAX_MACRO_SCALE
+assert.equal(wm.slopeRock, 0); // clamp01
+assert.equal(wm.heightTint, 0.4); // in range, preserved
+assert.equal(wm.detailIntensity, 1); // clamp01
+
+// A garbage material object falls back to safe defaults (no throw).
+assert.deepEqual(sanitizeTerrainMaterial(null), { ...DEFAULT_TERRAIN_MATERIAL });
+assert.deepEqual(sanitizeTerrainMaterial({ macroScale: "nope" }), { ...DEFAULT_TERRAIN_MATERIAL });
+
+// Material round-trips through worldpack.
+const terrPack = await buildWorldPack(wildTerrainDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(terrPack.world.terrain.material.macroIntensity, 1);
+assert.equal(terrPack.world.terrain.material.macroScale, 0.2);
+
+// The live Terrain wires the upgrade without disturbing fog/shadow/vertex-color.
+const terr = new Terrain({ size: 40, segments: 8, material: { macroIntensity: 0.6, slopeRock: 0.4 } });
+const tmat = terr.mesh.material;
+assert.equal(typeof tmat.onBeforeCompile, "function", "onBeforeCompile injected");
+assert.equal(tmat.customProgramCacheKey(), "terrain-material-v2", "own program-cache identity");
+assert.equal(tmat.vertexColors, true, "vertex colors remain the base signal");
+assert.equal(tmat.fog, true, "material fog stays on so scene fog applies");
+assert.equal(terr.mesh.receiveShadow, true, "terrain still receives shadows");
+assert.ok(terr.mesh.geometry.attributes.color, "vertex colors still baked");
+// Constructor clamped the input and exposes it for read-back.
+assert.equal(terr.getMaterialSettings().macroIntensity, 0.6);
+assert.equal(terr.getMaterialSettings().slopeRock, 0.4);
+
+// syncMaterial mutates shared uniform values WITHOUT triggering a recompile
+// (material.version must not change — that would force a program rebuild).
+const versionBefore = tmat.version;
+terr.syncMaterial({ macroIntensity: 0.2, macroScale: 0.05, detailIntensity: 1.5 });
+assert.equal(tmat.version, versionBefore, "syncMaterial must not bump material.version (no recompile loop)");
+assert.equal(terr._uniforms.uTerrainMacroIntensity.value, 0.2, "uniform updated live");
+assert.equal(terr._uniforms.uTerrainMacroScale.value, 0.05, "uniform updated live");
+assert.equal(terr._uniforms.uTerrainDetailIntensity.value, 1, "detail clamped to [0,1] on sync");
+assert.equal(terr.getMaterialSettings().macroIntensity, 0.2, "settings read back after sync");
+terr.dispose();
 
 console.log("world document regression checks passed");

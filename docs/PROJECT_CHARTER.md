@@ -186,6 +186,60 @@ Stages 15-17; combat/Skybreak stays blocked.
 grass/trees/bushes (the systems are intentionally parallel for now, not refactored).
 Bush wind/animation; billboard/cross-quad shrubs.
 
+## ADR-014C — Terrain Material v2 (Stage 14C)
+
+**Decision.** Upgrade the terrain's visual material in place, keeping the existing
+mesh, the baked vertex colors as the base signal, and — critically — the existing
+`MeshStandardMaterial`. The upgrade is a `material.onBeforeCompile` pass, NOT a
+`ShaderMaterial` swap, so Three.js still auto-injects the fog, shadow, and PBR
+lighting chunks. The injection only edits `diffuseColor` *before* lighting runs,
+so 13A lighting edits, scene fog, and shadow receipt keep working untouched.
+
+**What it injects.** A world-position varying (`vTerrainWPos`) + world-space normal
+varying (`vTerrainNrm`); then in the fragment, after `<color_fragment>` (where
+vertex colors are already folded into `diffuseColor`): (1) low-frequency **macro
+color noise** (centered at 0 so average brightness is preserved), (2) extra **rock
+tint on steep slopes** (reinforces the baked rock band), (3) a gentle **height
+value shift**, and (4) a **near detail** break-up that **fades out with camera
+distance** so the far field can't shimmer (procedural noise has no mipmaps; full
+far-tile/mipmap work is a later terrain-streaming stage, deliberately out of 14C).
+
+**Why onBeforeCompile over a ShaderMaterial.** A ShaderMaterial swap would force us
+to re-implement fog, shadow mapping, and the PBR lighting model by hand and would
+drop 13A reactivity. Editing the standard material's `diffuseColor` keeps all of
+that for free. The cost is the documented onBeforeCompile risks, which are
+mitigated explicitly: injected source is byte-identical every compile and gets its
+own `customProgramCacheKey` (so the renderer can recompile freely on fog-toggle
+without a feedback loop and never collides with a vanilla standard material); the
+upgrade uniforms are **shared by reference** into `shader.uniforms`, so live editor
+edits mutate `.value` with **no recompile** (`syncMaterial` never touches
+`needsUpdate`/defines — proven by a `material.version` invariant in the Node
+regression). The world normal uses `mat3(modelMatrix)` (the terrain is static +
+unscaled) NOT `normalMatrix` (which is view-space and would make slope
+camera-dependent); the slope `normalize` is zero-guarded; macro frequency is capped
+so the far field stays alias-free.
+
+**Round-trip + untrusted data.** Settings live in a nested `terrain.material` block
+(`macroIntensity`, `macroScale`, `slopeRock`, `heightTint`, `detailIntensity`).
+`sanitizeTerrainMaterial` clamps every field (0..1 intensities; `macroScale` to
+`[1e-4, 0.2]`) and falls back to defaults on any non-finite/garbage/null input, so
+a hostile worldpack/mod can neither push an unclamped value to the GPU nor throw on
+load. The block round-trips through WorldValidation → worldpack → mod, read back
+from the live `Terrain` instance on export. Editor "Terrain material" controls tune
+it live; `window.__TERRAIN_DEBUG__` (DEV-only) drives `npm run test:terrain`, a
+SwiftShader proof that the injected GLSL actually compiles and renders with fog/
+shadow/vertex-colors intact and zero console errors (the GPU compile is the part
+Node can't exercise).
+
+**Review.** Dedicated adversarial shader review (the user flagged onBeforeCompile
+fog/light/shadow regression risk) + a security pass on the untrusted boundary: both
+0 CRITICAL / 0 HIGH. The one shader MEDIUM ("use normalMatrix") was a wrong premise
+(view vs world space) and is rejected with a guarding comment; the one security
+MEDIUM (inherited-property read) is unreachable from the JSON boundary and already
+neutralized by total clamping. **Stage 14 (Vegetation v2 + Terrain Material v2) is
+complete.** Reverse-Z / voxels / procedural builds remain Stages 15-17;
+combat/Skybreak stays blocked.
+
 ## ADR-QA — Three.js skill-gate adoption
 
 The `.claude/threejs_skills/` skill-adoption harness is wired into the project
