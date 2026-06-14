@@ -5,6 +5,7 @@ import { sanitizePrefabManifest } from "../prefabs/PrefabValidation.js";
 import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
+import { sanitizeLighting } from "../lighting/LightingValidation.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -42,6 +43,7 @@ export function validateWorldDocument(input) {
   warnings.push(...prefabResult.warnings);
   doc.player.spawn = sanitizeVec3Object(doc.player.spawn, { x: 0, y: 0, z: 0 });
   if (!CAMERA_MODES.has(doc.player.cameraMode)) doc.player.cameraMode = "third";
+  doc.lighting = sanitizeLighting(doc.lighting);
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));

@@ -89,6 +89,16 @@ const interactionRuntime = runtimeMode
   : null;
 // Dev/test-only hook (stripped from production builds): drive/inspect interactions.
 if (interactionRuntime && import.meta.env.DEV) window.__INTERACTION_RUNTIME__ = interactionRuntime;
+// Dev/test-only: read the live applied lighting (sun/hemisphere/fog).
+if (import.meta.env.DEV) {
+  window.__LIGHTING_DEBUG__ = () => ({
+    sunIntensity: lights.sun.intensity,
+    sunColor: `#${lights.sun.color.getHexString()}`,
+    castShadow: lights.sun.castShadow,
+    hemiIntensity: lights.hemi.intensity,
+    fog: scene.fog ? { color: `#${scene.fog.color.getHexString()}`, near: scene.fog.near, far: scene.fog.far } : null,
+  });
+}
 
 function handleWorldChanged(change = {}) {
   if (change.full) {
@@ -126,6 +136,7 @@ async function applyLoadedWorld(document) {
     terrain,
     objectManager,
     treeSystem: trees,
+    grassSystem: grass,
     getGrassStats: () => grass.stats,
     getTreeStats: () => trees.stats,
   });
@@ -227,10 +238,12 @@ async function boot() {
       assetLibrary,
       worldLoader,
       worldSerializer,
+      lights,
       player,
       cameraController,
       getGrassStats: () => grass.stats,
       treeSystem: trees,
+      grassSystem: grass,
       getTreeStats: () => trees.stats,
       prefabLibrary,
       modRegistry,
@@ -257,7 +270,9 @@ async function boot() {
 const SUN_OFFSET = new THREE.Vector3(60, 90, 40);
 
 function updateSun() {
-  lights.sun.position.copy(player.position).add(SUN_OFFSET);
+  // The offset is derived from the world's lighting (azimuth/elevation); falls
+  // back to the default rig before the first world is applied.
+  lights.sun.position.copy(player.position).add(lights.sunOffset ?? SUN_OFFSET);
   lights.sun.target.position.copy(player.position);
   lights.sun.target.updateMatrixWorld();
 }

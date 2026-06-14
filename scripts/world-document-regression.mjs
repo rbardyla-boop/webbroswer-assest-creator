@@ -39,6 +39,11 @@ import { sanitizeInteraction } from "../src/interaction/InteractionValidation.js
 import { InteractionRuntime } from "../src/interaction/InteractionRuntime.js";
 import { EventBus } from "../src/interaction/EventBus.js";
 import { sphereContains, boxContains, volumeContains } from "../src/interaction/triggerVolume.js";
+import { sanitizeLighting } from "../src/lighting/LightingValidation.js";
+import { computeSunOffset, defaultLighting } from "../src/lighting/LightingTypes.js";
+import { applyLighting } from "../src/lighting/LightingRig.js";
+import { GrassMaterial } from "../src/grass/GrassMaterial.js";
+import { createGrassConfig } from "../src/grass/GrassConfig.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1505,5 +1510,90 @@ assert.equal(rtPack.world.objects.find((o) => o.id === "rt-trigger").interaction
 
 const rtMod = await buildWorldMod(rtValidated.document, assetLibrary, modPrefabLib, { name: "Interaction Mod", exportedAt: "2026-06-14T00:00:00.000Z" });
 assert.equal(rtMod.contents.worldpacks[0].world.objects.find((o) => o.id === "rt-door").interaction.listenOpen[0], "open_gate");
+
+// --- Stage 13A: lighting rig (data-driven) ----------------------------------
+
+const lightDefaults = defaultLighting();
+assert.deepEqual(sanitizeLighting(lightDefaults), lightDefaults); // defaults stable
+assert.deepEqual(sanitizeLighting(null), lightDefaults);
+assert.deepEqual(sanitizeLighting("nope"), lightDefaults);
+
+// Clamps, color repair, azimuth wrap, fog near<far ordering.
+const dirtyLight = sanitizeLighting({
+  sun: { color: "ff0000", intensity: 999, azimuth: 400, elevation: -10, castShadow: false },
+  hemisphere: { skyColor: "#abc", groundColor: "bad-color", intensity: -3 },
+  fog: { color: "#123456", near: 500, far: 100, enabled: false },
+});
+assert.equal(dirtyLight.sun.color, "#ff0000"); // no-# hex accepted
+assert.equal(dirtyLight.sun.intensity, 8); // clamped to MAX
+assert.equal(dirtyLight.sun.azimuth, 40); // 400 wrapped
+assert.equal(dirtyLight.sun.elevation, 5); // clamped to MIN
+assert.equal(dirtyLight.hemisphere.skyColor, "#aabbcc"); // #abc expanded
+assert.equal(dirtyLight.hemisphere.groundColor, lightDefaults.hemisphere.groundColor); // bad → default
+assert.equal(dirtyLight.hemisphere.intensity, 0); // clamped to MIN
+assert.ok(dirtyLight.fog.far > dirtyLight.fog.near); // far forced above near
+assert.equal(dirtyLight.fog.enabled, false);
+
+// Sun offset: elevation 90 → straight up.
+const sunUp = computeSunOffset(0, 90, 100);
+assert.ok(Math.abs(sunUp.y - 100) < 1e-6 && Math.abs(sunUp.x) < 1e-6 && Math.abs(sunUp.z) < 1e-6);
+
+// applyLighting mutates a live THREE rig + scene fog/background.
+const litScene = new THREE.Scene();
+litScene.background = new THREE.Color(0x000000);
+litScene.fog = new THREE.Fog(0x000000, 1, 2);
+const rig = {
+  sun: new THREE.DirectionalLight(0xffffff, 1),
+  hemi: new THREE.HemisphereLight(0xffffff, 0x000000, 1),
+  sunDirection: new THREE.Vector3(),
+};
+applyLighting({ lights: rig, scene: litScene }, sanitizeLighting({
+  sun: { color: "#112233", intensity: 3.5, azimuth: 90, elevation: 45, castShadow: true },
+  hemisphere: { skyColor: "#445566", groundColor: "#778899", intensity: 0.5 },
+  fog: { color: "#abcdef", near: 40, far: 300, enabled: true },
+}));
+assert.equal("#" + rig.sun.color.getHexString(), "#112233");
+assert.equal(rig.sun.intensity, 3.5);
+assert.equal(rig.sun.castShadow, true);
+assert.ok(rig.sunOffset && rig.sunOffset.isVector3);
+assert.ok(Math.abs(rig.sunDirection.length() - 1) < 1e-6); // normalized
+assert.equal(rig.hemi.intensity, 0.5);
+assert.equal(litScene.fog.far, 300);
+assert.equal("#" + litScene.fog.color.getHexString(), "#abcdef");
+assert.equal("#" + litScene.background.getHexString(), "#abcdef");
+
+// Fog disabled removes scene fog entirely.
+applyLighting({ lights: rig, scene: litScene }, sanitizeLighting({ fog: { enabled: false } }));
+assert.equal(litScene.fog, null);
+
+// Round-trip: lighting survives validate → worldpack.
+const litDoc = validateWorldDocument(createWorldDocument({ lighting: { sun: { intensity: 4.2, color: "#ff8800" }, fog: { far: 333 } } }));
+assert.equal(litDoc.warnings.length, 0);
+assert.equal(litDoc.document.lighting.sun.intensity, 4.2);
+assert.equal(litDoc.document.lighting.sun.color, "#ff8800");
+assert.equal(litDoc.document.lighting.fog.far, 333);
+const litPack = await buildWorldPack(litDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(litPack.world.lighting.sun.intensity, 4.2);
+assert.equal(litPack.world.lighting.fog.far, 333);
+
+// Grass material: null fog at construction is safe, and syncLighting pushes live
+// fog/sun/ambient into the shader uniforms (editor lighting edits reach grass).
+const grassLights = { sunDirection: new THREE.Vector3(1, 0, 0) };
+const nullFogGrass = new GrassMaterial(createGrassConfig(), grassLights, null);
+assert.ok(nullFogGrass.material.uniforms.uFogFar.value > 1e5); // no-fog default, no crash
+nullFogGrass.syncLighting(
+  sanitizeLighting({ sun: { color: "#ff0000" }, hemisphere: { skyColor: "#00ff00", groundColor: "#0000ff" }, fog: { color: "#abcdef", near: 12, far: 88, enabled: true } }),
+  new THREE.Vector3(0, 1, 0)
+);
+const gu = nullFogGrass.material.uniforms;
+assert.equal(gu.uFogNear.value, 12);
+assert.equal(gu.uFogFar.value, 88);
+assert.equal("#" + gu.uFogColor.value.getHexString(), "#abcdef");
+assert.equal("#" + gu.uSunColor.value.getHexString(), "#ff0000");
+assert.ok(Math.abs(gu.uSunDir.value.y - 1) < 1e-6 && Math.abs(gu.uSunDir.value.x) < 1e-6);
+// Fog disabled pushes the grass fade out of range.
+nullFogGrass.syncLighting(sanitizeLighting({ fog: { enabled: false } }));
+assert.ok(gu.uFogFar.value > 1e5);
+nullFogGrass.dispose();
 
 console.log("world document regression checks passed");

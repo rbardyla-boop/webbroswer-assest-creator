@@ -16,6 +16,9 @@ import { AnimationPanel } from "./AnimationPanel.js";
 import { AnimationPreview } from "../animation/AnimationPreview.js";
 import { InteractionPanel } from "./InteractionPanel.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
+import { LightingPanel } from "./LightingPanel.js";
+import { sanitizeLighting } from "../lighting/LightingValidation.js";
+import { applyLighting } from "../lighting/LightingRig.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -39,9 +42,11 @@ export class WorldEditor {
     assetLibrary,
     worldLoader,
     worldSerializer,
+    lights,
     player,
     cameraController,
     treeSystem,
+    grassSystem,
     getGrassStats,
     getTreeStats,
     prefabLibrary,
@@ -61,10 +66,12 @@ export class WorldEditor {
     this.colliderSystem = colliderSystem;
     this.worldLoader = worldLoader;
     this.worldSerializer = worldSerializer ?? new WorldSerializer();
+    this.lights = lights ?? null;
     this.player = player;
     this.cameraController = cameraController;
     this.onLoadWorld = onLoadWorld;
     this.treeSystem = treeSystem;
+    this.grassSystem = grassSystem ?? null;
     this.assetLibrary = assetLibrary ?? new AssetLibrary();
     this.assetImporter = new AssetImporter(this.assetLibrary);
     this.getGrassStats = getGrassStats;
@@ -155,9 +162,10 @@ export class WorldEditor {
     return this.selection.primary;
   }
 
-  setWorldContext({ terrain, objectManager, treeSystem, getGrassStats, getTreeStats }) {
+  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, getGrassStats, getTreeStats }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
+    this.grassSystem = grassSystem ?? this.grassSystem;
     if (objectManager) {
       this.prefabInstancer.setManager(objectManager);
       this.selection.setManager(objectManager);
@@ -171,6 +179,8 @@ export class WorldEditor {
     this.history.clear();
     this._armPrefabPlacement(null);
     this.prefabPanel?.refresh();
+    // A reloaded world brings its own lighting — refresh the editor panel from it.
+    this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
     this.treeSystem = treeSystem ?? this.treeSystem;
     this.getGrassStats = getGrassStats ?? this.getGrassStats;
     this.getTreeStats = getTreeStats ?? this.getTreeStats;
@@ -374,6 +384,19 @@ export class WorldEditor {
       },
     });
     root.appendChild(this._section("Interaction", this.interactionPanel.root));
+
+    this.lightingPanel = new LightingPanel({
+      onChange: (raw) => {
+        const lighting = sanitizeLighting(raw);
+        if (this.worldLoader?.document) this.worldLoader.document.lighting = lighting;
+        applyLighting({ lights: this.lights, scene: this.scene }, lighting);
+        // Grass is manually fogged + shaded, so push the live values into its
+        // shader too (otherwise edits show everywhere but the grass).
+        this.grassSystem?.syncLighting?.(lighting, this.lights?.sunDirection);
+      },
+    });
+    this.lightingPanel.setLighting(this.worldLoader?.document?.lighting);
+    root.appendChild(this._section("Lighting", this.lightingPanel.root));
 
     root.appendChild(this._section("Trees", this._buildTreeControls()));
 

@@ -112,6 +112,10 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
+// Fog distances that push the grass fade past any view distance (fog disabled).
+const NO_FOG_NEAR = 1e6;
+const NO_FOG_FAR = 1e6 + 1;
+
 export class GrassMaterial {
   constructor(cfg, lights, fog) {
     this.cfg = cfg;
@@ -127,9 +131,9 @@ export class GrassMaterial {
         uWindFreq: { value: cfg.wind.frequency },
         uWindScale: { value: cfg.wind.scale },
         uWindGust: { value: cfg.wind.gustiness },
-        uFogNear: { value: fog.near },
-        uFogFar: { value: fog.far },
-        uFogColor: { value: fog.color.clone() },
+        uFogNear: { value: fog ? fog.near : NO_FOG_NEAR },
+        uFogFar: { value: fog ? fog.far : NO_FOG_FAR },
+        uFogColor: { value: fog ? fog.color.clone() : new THREE.Color(0x9fc4d8) },
         uSunDir: { value: lights.sunDirection.clone() },
         uSunColor: { value: new THREE.Color(0xfff1d8) },
         uAmbientSky: { value: new THREE.Color(0x9fc8ff).multiplyScalar(0.9) },
@@ -153,6 +157,26 @@ export class GrassMaterial {
     u.uWindFreq.value = this.cfg.wind.frequency;
     u.uWindScale.value = this.cfg.wind.scale;
     u.uWindGust.value = this.cfg.wind.gustiness;
+  }
+
+  // Push live lighting into the (manually-fogged) grass shader so editor lighting
+  // edits show on grass too. Fog disabled → push the fade out of range.
+  syncLighting(lighting, sunDirection = null) {
+    if (!lighting) return;
+    const u = this.material.uniforms;
+    const fog = lighting.fog;
+    if (fog?.enabled) {
+      u.uFogNear.value = fog.near;
+      u.uFogFar.value = fog.far;
+      u.uFogColor.value.set(fog.color);
+    } else if (fog) {
+      u.uFogNear.value = NO_FOG_NEAR;
+      u.uFogFar.value = NO_FOG_FAR;
+    }
+    if (lighting.sun?.color) u.uSunColor.value.set(lighting.sun.color);
+    if (lighting.hemisphere?.skyColor) u.uAmbientSky.value.set(lighting.hemisphere.skyColor);
+    if (lighting.hemisphere?.groundColor) u.uAmbientGround.value.set(lighting.hemisphere.groundColor);
+    if (sunDirection) u.uSunDir.value.copy(sunDirection);
   }
 
   dispose() {

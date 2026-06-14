@@ -8,6 +8,7 @@ import { TreeSystem } from "../trees/TreeSystem.js";
 import { ColliderSystem } from "../physics/ColliderSystem.js";
 import { WorldObjectManager } from "./WorldObjectManager.js";
 import { validateWorldDocument } from "./WorldValidation.js";
+import { applyLighting } from "../lighting/LightingRig.js";
 
 export class WorldRuntimeLoader {
   constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
@@ -33,6 +34,9 @@ export class WorldRuntimeLoader {
 
     this.dispose();
     applyTerrainSettings(document.terrain);
+    // Apply lighting BEFORE grass is built so fog/sky are correct when the grass
+    // material captures the scene fog.
+    applyLighting({ lights: this.lights, scene: this.scene }, document.lighting);
 
     this.terrain = new Terrain(document.terrain);
     this.scene.add(this.terrain.mesh);
@@ -48,7 +52,9 @@ export class WorldRuntimeLoader {
     });
     await this.manager.loadWorldObjects(document.objects);
 
-    this.grass = new GrassSystem(this.scene, this.lights, this.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
+    // Use the live scene fog (applyLighting may have replaced/removed it) so the
+    // grass material captures the world's actual fog, not a stale reference.
+    this.grass = new GrassSystem(this.scene, this.lights, this.scene.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
     this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees), this.colliderSystem);
 
     return {
@@ -68,6 +74,9 @@ export class WorldRuntimeLoader {
     this.document.grass = grassDocumentFromRuntime(this.grass?.cfg, this.document.grass);
     this.document.trees = treeDocumentFromRuntime(this.trees?.cfg, this.document.trees);
     this.document.objects = this.manager?.serializeWorldObjects() ?? [];
+    // lighting has no separate runtime state to read back — it lives on
+    // this.document and the editor mutates it in place on every edit, so it is
+    // already current here and is intentionally not rebuilt.
     if (this.assetLibrary) this.document.assets = this.assetLibrary.createManifest();
     if (player) {
       this.document.player.spawn = { x: player.position.x, y: player.position.y, z: player.position.z };

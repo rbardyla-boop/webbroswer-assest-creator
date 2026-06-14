@@ -18,6 +18,7 @@ export class GrassSystem {
 
     this.bladeLODGeos = createBladeLODGeometries(this.cfg);
     this.grassMaterial = new GrassMaterial(this.cfg, lights, fog);
+    this.lights = lights;
 
     this.patches = new Map(); // key "gx,gz" -> GrassPatch
     this._emptyCells = new Set(); // cells known to contain no blades
@@ -46,6 +47,11 @@ export class GrassSystem {
 
   _key(gx, gz) {
     return gx + "," + gz;
+  }
+
+  // Push live lighting into the grass shader (editor lighting edits show on grass).
+  syncLighting(lighting, sunDirection = null) {
+    this.grassMaterial.syncLighting(lighting, sunDirection ?? this.lights?.sunDirection ?? null);
   }
 
   // Ensure every patch within visibleDistance is built or queued, and dispose

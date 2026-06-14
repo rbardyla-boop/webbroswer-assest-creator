@@ -97,3 +97,31 @@ the editor and proves trigger→door / pickup / sign in a SwiftShader browser.
 event-driven; collision is not repositioned); multi-step sequences / conditions /
 timers beyond emit→listen; per-interaction undo (property edits, like collider/
 animation, are outside the Stage 11 undo scope).
+
+---
+
+## ADR-013A — Data-driven global lighting rig (Stage 13A, Lighting Lab)
+
+**Decision.** Make the world's global lighting rig data-driven and authorable via
+a new `src/lighting/` layer and a `lighting` block in WorldDocument v2:
+- **sun** — color, intensity, azimuth/elevation (degrees → world offset), shadow.
+- **hemisphere** — sky/ground color, intensity.
+- **fog** — color, near, far, enabled (also drives `scene.background`).
+
+The sun is authored as azimuth/elevation (not a raw position) so it reads
+naturally and stays stable across saves; `computeSunOffset` derives the
+world-space offset the player-following shadow rig uses (`lights.sunOffset`).
+`applyLighting` mutates the live THREE rig + scene fog/background; it runs at
+world load (before grass is built, so the grass material captures correct fog)
+and on every editor edit (live preview). `sanitizeLighting` repairs/clamps every
+field (color → `#rrggbb`, intensity/elevation/fog clamped, `far` forced above
+`near`), so untrusted worlds/mods are safe. The lighting block round-trips through
+WorldValidation → worldpack → mod automatically.
+
+The editor's `LightingPanel` writes edits into `worldLoader.document.lighting`
+(the live doc) and applies them live; save/export preserve it via
+`updateDocumentFromRuntime`. `window.__LIGHTING_DEBUG__` (DEV-only) reads the live
+rig for `npm run test:lighting`.
+
+**Deferred (not in v1).** Placed point/spot lights with a shadow budget; exposure
+/ tone mapping controls; per-light gizmos. The global rig is the high-impact core.

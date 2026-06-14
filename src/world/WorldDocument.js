@@ -1,6 +1,7 @@
 import { TERRAIN } from "../terrain/terrainSampling.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
+import { defaultLighting } from "../lighting/LightingTypes.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
 export const WORLD_DOCUMENT_FORMAT = "world-builder-v2";
@@ -52,6 +53,8 @@ export function createWorldDocument(overrides = {}) {
       spawn: { x: 0, y: 0, z: 0 },
       cameraMode: "third",
     },
+    // Global lighting rig (sun + hemisphere fill + distance fog).
+    lighting: defaultLighting(),
     objects: [],
     assets: {
       version: 1,
