@@ -6,6 +6,7 @@ import { createImageMesh, createMissingAssetMesh, createPlacedObject, createPrim
 import { ASSET_TYPES } from "../assets/AssetTypes.js";
 import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
+import { sanitizeParticles } from "../particles/ParticleValidation.js";
 
 export class WorldObjectManager {
   constructor(scene, { colliderSystem, onChange, assetLibrary, animationRuntime = null } = {}) {
@@ -42,6 +43,7 @@ export class WorldObjectManager {
     object.userData.assetRef = resolved.id ?? asset.id ?? null;
     this._attachAnimation(object, resolved, null);
     object.userData.interaction = null; // fresh placement has no interaction yet
+    object.userData.particles = null; // …or particle emitter
     this.root.add(object);
     this.objects.set(id, object);
     this._changed({ boxes: [this.getWorldBox(object)] });
@@ -76,6 +78,12 @@ export class WorldObjectManager {
     object.userData.interaction = sanitizeInteraction(input);
   }
 
+  // Stash a sanitized, data-only particle emitter on a placed object. The
+  // ParticleRuntime reads userData.particles after load.
+  _attachParticles(object, input) {
+    object.userData.particles = sanitizeParticles(input);
+  }
+
   duplicate(object) {
     if (!object) return null;
     const copy = this.addFromObject(object, object.position.clone().add(new THREE.Vector3(3, 0, 3)));
@@ -93,6 +101,7 @@ export class WorldObjectManager {
     // Carry the source's animation override + clips so the duplicate matches.
     this._attachAnimation(copy, object.userData.asset, object.userData.animation);
     this._attachInteraction(copy, object.userData.interaction);
+    this._attachParticles(copy, object.userData.particles);
     copy.position.y = object.position.y;
     this._changed({ boxes: [this.getWorldBox(copy)] });
     return copy;
@@ -199,6 +208,7 @@ export class WorldObjectManager {
       },
       animation: object.userData.animation ?? null,
       interaction: object.userData.interaction ?? null,
+      particles: object.userData.particles ?? null,
       runtime: {
         visible: object.visible,
         static: true,
@@ -286,6 +296,7 @@ export class WorldObjectManager {
     // authoring never auto-plays.
     this._attachAnimation(object, asset, item.animation);
     this._attachInteraction(object, item.interaction);
+    this._attachParticles(object, item.particles);
     return object;
   }
 

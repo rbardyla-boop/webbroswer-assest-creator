@@ -125,3 +125,32 @@ rig for `npm run test:lighting`.
 
 **Deferred (not in v1).** Placed point/spot lights with a shadow budget; exposure
 / tone mapping controls; per-light gizmos. The global rig is the high-impact core.
+
+---
+
+## ADR-013B — Data-only particle / smoke emitters (Stage 13B, Particles Lab)
+
+**Decision.** Objects may carry a data-only `particles` emitter block under
+`src/particles/`: a `kind` (spark/dust/smoke — sets blend mode + sensible preset)
+plus authorable params (rate, max, lifetime, size→sizeEnd, color→colorEnd, speed,
+spread, gravity, emitRadius, opacity). `ParticleRuntime` spawns/ages/recycles
+particles into a `THREE.Points` buffer with a point-sprite shader; only point
+size + alpha animate (compositor-friendly). It runs in the runtime AND as an
+editor preview (particles are ambient VFX, not gameplay, so previewing them in
+the editor is fine — unlike the interaction/animation runtimes which stay
+runtime-only).
+
+Deterministic (seeded RNG per object id) and resource-bounded: `sanitizeParticles`
+clamps every field (rate ≤ 500, max ≤ 2000, etc.), builds only allowlisted fields
+(no-code), and drops an unknown `kind` to null; the runtime caps concurrent
+emitters at 200 (`MAX_EMITTERS`) and `dt`/spawn-accumulator are clamped, so a
+hostile world can't exhaust memory. An O(1) free-list recycles dead slots.
+Particles round-trip through WorldValidation → worldpack → mod automatically.
+
+The editor's `ParticlePanel` writes to `object.userData.particles` and reloads the
+preview; `window.__PARTICLE_RUNTIME__` (DEV-only) drives the runtime for
+`npm run test:particles` (proves editor preview + runtime both spawn within cap).
+
+**Deferred (not in v1).** Soft/depth-fade particles; textured sprites; local
+volumetric smoke; per-emitter incremental preview reload (currently full rebuild
+on edit). This is the **second half of the Lighting + Particles lab** (with 13A).

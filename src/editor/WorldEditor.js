@@ -19,6 +19,9 @@ import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { LightingPanel } from "./LightingPanel.js";
 import { sanitizeLighting } from "../lighting/LightingValidation.js";
 import { applyLighting } from "../lighting/LightingRig.js";
+import { ParticlePanel } from "./ParticlePanel.js";
+import { sanitizeParticles } from "../particles/ParticleValidation.js";
+import { ParticleRuntime } from "../particles/ParticleRuntime.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -84,6 +87,9 @@ export class WorldEditor {
     this.lastExportReport = null;
     this.modRegistry = modRegistry ?? new ModRegistry();
     this.animationPreview = new AnimationPreview();
+    // Editor-side particle preview: runs all emitters live while the editor is
+    // open so VFX are authored with feedback (it is ambient, not gameplay).
+    this.particlePreview = new ParticleRuntime({ scene: this.scene });
 
     this.manager = objectManager;
     this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
@@ -181,6 +187,8 @@ export class WorldEditor {
     this.prefabPanel?.refresh();
     // A reloaded world brings its own lighting — refresh the editor panel from it.
     this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
+    // Rebuild the particle preview for the new world's emitters (if open).
+    if (this.isOpen) this.particlePreview?.load(this.manager);
     this.treeSystem = treeSystem ?? this.treeSystem;
     this.getGrassStats = getGrassStats ?? this.getGrassStats;
     this.getTreeStats = getTreeStats ?? this.getTreeStats;
@@ -201,6 +209,7 @@ export class WorldEditor {
     this.root.style.display = "flex";
     this.input?.setEnabled?.(false);
     if (document.pointerLockElement) document.exitPointerLock();
+    this.particlePreview.load(this.manager); // preview the world's emitters
     this.onOpen?.();
   }
 
@@ -209,6 +218,7 @@ export class WorldEditor {
     this.isOpen = false;
     this.root.style.display = "none";
     this.animationPreview.stop();
+    this.particlePreview.clear(); // stop + remove preview particles
     this._clearSelection();
     this.input?.setEnabled?.(true);
     this.onClose?.();
@@ -217,8 +227,9 @@ export class WorldEditor {
   update(dt = 0) {
     if (!this.isOpen) return;
     this.transform.enabled = true;
-    // Advance the editor-only animation preview (a single mixer, if active).
+    // Advance the editor-only animation + particle previews.
     this.animationPreview.update(dt);
+    this.particlePreview.update(dt);
     this._refreshPerf();
   }
 
@@ -397,6 +408,17 @@ export class WorldEditor {
     });
     this.lightingPanel.setLighting(this.worldLoader?.document?.lighting);
     root.appendChild(this._section("Lighting", this.lightingPanel.root));
+
+    this.particlePanel = new ParticlePanel({
+      onChange: (raw) => {
+        const object = this.selection.primary;
+        if (!object) return;
+        object.userData.particles = sanitizeParticles(raw);
+        // Rebuild the preview so the edit shows immediately.
+        this.particlePreview.load(this.manager);
+      },
+    });
+    root.appendChild(this._section("Particles", this.particlePanel.root));
 
     root.appendChild(this._section("Trees", this._buildTreeControls()));
 
@@ -1132,12 +1154,14 @@ export class WorldEditor {
       this.colliderInspector?.setObject(null);
       this.animationPanel?.setObject(null);
       this.interactionPanel?.setObject(null);
+      this.particlePanel?.setObject(null);
       this._refreshInteractionHelper();
       return;
     }
     this.colliderInspector?.setObject(primary);
     this.animationPanel?.setObject(primary);
     this.interactionPanel?.setObject(primary);
+    this.particlePanel?.setObject(primary);
     this._refreshInteractionHelper();
     if (count > 1) {
       this.selectionLabel.textContent = `${count} objects selected — group transform active.`;

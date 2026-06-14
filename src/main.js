@@ -29,6 +29,7 @@ import { ModRegistry } from "./mods/ModRegistry.js";
 import { AnimationRuntime } from "./animation/AnimationRuntime.js";
 import { InteractionRuntime } from "./interaction/InteractionRuntime.js";
 import { InteractionOverlay } from "./interaction/InteractionOverlay.js";
+import { ParticleRuntime } from "./particles/ParticleRuntime.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -89,6 +90,10 @@ const interactionRuntime = runtimeMode
   : null;
 // Dev/test-only hook (stripped from production builds): drive/inspect interactions.
 if (interactionRuntime && import.meta.env.DEV) window.__INTERACTION_RUNTIME__ = interactionRuntime;
+// Runtime-only: data-driven particle/smoke emitters. Loaded from the world's
+// objects after the world is built.
+const particleRuntime = runtimeMode ? new ParticleRuntime({ scene }) : null;
+if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Dev/test-only: read the live applied lighting (sun/hemisphere/fog).
 if (import.meta.env.DEV) {
   window.__LIGHTING_DEBUG__ = () => ({
@@ -120,9 +125,10 @@ async function applyLoadedWorld(document) {
   trees = world.trees;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
-  // Re-index interactions for the new object graph (runtime mode only; no-op in
-  // the editor). Keeps the runtime from referencing torn-down objects on reload.
+  // Re-index interactions + particle emitters for the new object graph (runtime
+  // mode only; no-op in the editor) so neither references torn-down objects.
   interactionRuntime?.load(objectManager);
+  particleRuntime?.load(objectManager);
 
   const spawn = world.document.player.spawn;
   player.position.set(spawn.x, spawn.y, spawn.z);
@@ -210,8 +216,9 @@ async function boot() {
   trees = world.trees;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
-  // Index this world's interactive objects (runtime mode only).
+  // Index this world's interactive objects + particle emitters (runtime only).
   interactionRuntime?.load(objectManager);
+  particleRuntime?.load(objectManager);
 
   // Start on open, fairly flat ground with a vista across the field.
   const spawn = world.document.player.spawn ?? findGoodSpawn();
@@ -329,6 +336,7 @@ function frame(now) {
   trees.update(camera);
   animationRuntime?.update(dt);
   interactionRuntime?.update(dt);
+  particleRuntime?.update(dt);
 
   renderer.render(scene, camera);
   markWorldReady();

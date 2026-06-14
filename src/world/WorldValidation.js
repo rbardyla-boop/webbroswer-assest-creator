@@ -6,6 +6,7 @@ import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { sanitizeLighting } from "../lighting/LightingValidation.js";
+import { sanitizeParticles } from "../particles/ParticleValidation.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -139,6 +140,8 @@ function sanitizeObjects(objects, warnings) {
       // Optional data-only interaction (trigger/door/sign/pickup/spawn; null when
       // absent/invalid). Declarative — never executed.
       interaction: sanitizeInteraction(item?.interaction),
+      // Optional data-only particle emitter (spark/dust/smoke; null when absent).
+      particles: sanitizeParticles(item?.particles),
       runtime: {
         visible: item?.runtime?.visible !== false,
         static: item?.runtime?.static !== false,

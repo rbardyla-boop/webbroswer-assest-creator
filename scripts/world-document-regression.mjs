@@ -44,6 +44,8 @@ import { computeSunOffset, defaultLighting } from "../src/lighting/LightingTypes
 import { applyLighting } from "../src/lighting/LightingRig.js";
 import { GrassMaterial } from "../src/grass/GrassMaterial.js";
 import { createGrassConfig } from "../src/grass/GrassConfig.js";
+import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
+import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1595,5 +1597,85 @@ assert.ok(Math.abs(gu.uSunDir.value.y - 1) < 1e-6 && Math.abs(gu.uSunDir.value.x
 nullFogGrass.syncLighting(sanitizeLighting({ fog: { enabled: false } }));
 assert.ok(gu.uFogFar.value > 1e5);
 nullFogGrass.dispose();
+
+// --- Stage 13B: particle emitters (data-only) -------------------------------
+
+// Sanitize: kind allowlist, clamps, color repair, no-code (unknown keys dropped).
+assert.equal(sanitizeParticles(null), null);
+assert.equal(sanitizeParticles([1, 2]), null);
+const hostileParticles = sanitizeParticles({ kind: "smoke", rate: 9999, max: 99999, color: "0f0", script: "x()", lifetime: -3 });
+assert.equal("script" in hostileParticles, false);
+assert.equal(hostileParticles.rate, 500); // MAX_RATE
+assert.equal(hostileParticles.max, 2000); // MAX_PARTICLES
+assert.equal(hostileParticles.color, "#00ff00"); // "0f0" → "#00ff00"
+assert.equal(hostileParticles.lifetime, 0.05); // clamped to MIN
+assert.equal(sanitizeParticles({ kind: "wizard" }), null); // invalid kind → no emitter
+assert.deepEqual(
+  Object.keys(sanitizeParticles({ kind: "spark" })).sort(),
+  ["color", "colorEnd", "emitRadius", "gravity", "kind", "lifetime", "max", "opacity", "rate", "size", "sizeEnd", "speed"].sort().concat("spread").sort()
+);
+
+function particleDescriptor(id, position, particles) {
+  return {
+    id,
+    name: id,
+    type: "primitive",
+    assetRef: "primitive-cube",
+    primitive: "cube",
+    transform: { position, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+    exclusion: { grass: false, trees: false },
+    particles,
+  };
+}
+
+// Runtime: emitter spawns over time, stays within max, and recycles.
+const partManager = new WorldObjectManager(new THREE.Scene());
+await partManager.loadWorldObjects([
+  particleDescriptor("emit-1", { x: 0, y: 0, z: 0 }, { kind: "smoke", rate: 50, max: 120, lifetime: 1 }),
+]);
+const partRuntime = new ParticleRuntime({ scene: new THREE.Scene() });
+partRuntime.load(partManager);
+assert.equal(partRuntime.count, 1);
+assert.equal(partRuntime.debugSnapshot().emitters[0].alive, 0); // nothing spawned yet
+for (let i = 0; i < 30; i++) partRuntime.update(0.05); // 1.5s
+const partSnap = partRuntime.debugSnapshot();
+assert.ok(partSnap.totalAlive > 0, "particles should be alive after spawning");
+assert.ok(partSnap.emitters[0].alive <= 120, "alive stays within max");
+assert.ok(partSnap.emitters[0].alive >= 10, "steady-state ≈ rate*lifetime");
+partRuntime.clear();
+assert.equal(partRuntime.count, 0);
+
+// A high-rate emitter never exceeds its max (pool cap + recycling).
+const capManager = new WorldObjectManager(new THREE.Scene());
+await capManager.loadWorldObjects([particleDescriptor("emit-cap", { x: 0, y: 0, z: 0 }, { kind: "spark", rate: 500, max: 30, lifetime: 10 })]);
+const capRuntime = new ParticleRuntime({ scene: new THREE.Scene() });
+capRuntime.load(capManager);
+for (let i = 0; i < 20; i++) capRuntime.update(0.1);
+assert.equal(capRuntime.debugSnapshot().emitters[0].alive, 30); // capped at max
+
+// Emitter-count ceiling bounds buffer/GPU memory from a hostile/corrupt world.
+const floodManager = new WorldObjectManager(new THREE.Scene());
+await floodManager.loadWorldObjects(
+  Array.from({ length: 250 }, (_, i) => particleDescriptor(`flood-${i}`, { x: i, y: 0, z: 0 }, { kind: "dust", max: 10 }))
+);
+const floodRuntime = new ParticleRuntime({ scene: new THREE.Scene() });
+floodRuntime.load(floodManager);
+assert.equal(floodRuntime.count, 200); // capped at MAX_EMITTERS
+floodRuntime.clear();
+
+// Round-trip: particles survive serialize → validate → worldpack.
+const rtPartManager = new WorldObjectManager(new THREE.Scene());
+await rtPartManager.loadWorldObjects([
+  particleDescriptor("p-smoke", { x: 1, y: 2, z: 3 }, { kind: "smoke", rate: 8, max: 90, color: "#ff0000", lifetime: 2 }),
+]);
+const rtPartObjects = rtPartManager.serializeWorldObjects();
+assert.equal(rtPartObjects[0].particles.kind, "smoke");
+assert.equal(rtPartObjects[0].particles.color, "#ff0000");
+assert.equal(rtPartObjects[0].particles.rate, 8);
+const rtPartValidated = validateWorldDocument(createWorldDocument({ objects: rtPartObjects }));
+assert.equal(rtPartValidated.warnings.length, 0);
+assert.equal(rtPartValidated.document.objects[0].particles.kind, "smoke");
+const rtPartPack = await buildWorldPack(rtPartValidated.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(rtPartPack.world.objects[0].particles.color, "#ff0000");
 
 console.log("world document regression checks passed");

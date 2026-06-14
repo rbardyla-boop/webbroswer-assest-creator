@@ -16,7 +16,8 @@
     "test:anim": "node scripts/browser-animation-proof.mjs",
     "test:undo": "node scripts/browser-undo-proof.mjs",
     "test:interaction": "node scripts/browser-interaction-proof.mjs",
-    "test:lighting": "node scripts/browser-lighting-proof.mjs"
+    "test:lighting": "node scripts/browser-lighting-proof.mjs",
+    "test:particles": "node scripts/browser-particles-proof.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"
