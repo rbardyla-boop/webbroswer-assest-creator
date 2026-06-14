@@ -5,6 +5,7 @@ import { normalizeCollider } from "../physics/ColliderProxy.js";
 import { createImageMesh, createMissingAssetMesh, createPlacedObject, createPrimitiveMesh } from "./PlacedObject.js";
 import { ASSET_TYPES } from "../assets/AssetTypes.js";
 import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
+import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 
 export class WorldObjectManager {
   constructor(scene, { colliderSystem, onChange, assetLibrary, animationRuntime = null } = {}) {
@@ -40,6 +41,7 @@ export class WorldObjectManager {
     });
     object.userData.assetRef = resolved.id ?? asset.id ?? null;
     this._attachAnimation(object, resolved, null);
+    object.userData.interaction = null; // fresh placement has no interaction yet
     this.root.add(object);
     this.objects.set(id, object);
     this._changed({ boxes: [this.getWorldBox(object)] });
@@ -67,6 +69,13 @@ export class WorldObjectManager {
     }
   }
 
+  // Stash sanitized, data-only interaction metadata on a placed object (trigger /
+  // door / sign / pickup / spawn). The InteractionRuntime reads userData.interaction
+  // after load; the editor never runs it.
+  _attachInteraction(object, input) {
+    object.userData.interaction = sanitizeInteraction(input);
+  }
+
   duplicate(object) {
     if (!object) return null;
     const copy = this.addFromObject(object, object.position.clone().add(new THREE.Vector3(3, 0, 3)));
@@ -83,6 +92,7 @@ export class WorldObjectManager {
     copy.userData.prefabRef = object.userData.prefabRef ?? null;
     // Carry the source's animation override + clips so the duplicate matches.
     this._attachAnimation(copy, object.userData.asset, object.userData.animation);
+    this._attachInteraction(copy, object.userData.interaction);
     copy.position.y = object.position.y;
     this._changed({ boxes: [this.getWorldBox(copy)] });
     return copy;
@@ -188,6 +198,7 @@ export class WorldObjectManager {
         bounds: null,
       },
       animation: object.userData.animation ?? null,
+      interaction: object.userData.interaction ?? null,
       runtime: {
         visible: object.visible,
         static: true,
@@ -274,6 +285,7 @@ export class WorldObjectManager {
     // runtime mode) start playback. In the editor no runtime is present, so
     // authoring never auto-plays.
     this._attachAnimation(object, asset, item.animation);
+    this._attachInteraction(object, item.interaction);
     return object;
   }
 

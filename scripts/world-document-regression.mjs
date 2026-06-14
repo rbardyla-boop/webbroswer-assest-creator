@@ -35,6 +35,10 @@ import { buildAnimatedFixtureScene, FIXTURE_CLIP_NAMES } from "../src/animation/
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CommandStack } from "../src/editor/CommandStack.js";
 import { AddObjectsCommand, RemoveObjectsCommand, TransformObjectsCommand } from "../src/editor/commands/WorldObjectCommands.js";
+import { sanitizeInteraction } from "../src/interaction/InteractionValidation.js";
+import { InteractionRuntime } from "../src/interaction/InteractionRuntime.js";
+import { EventBus } from "../src/interaction/EventBus.js";
+import { sphereContains, boxContains, volumeContains } from "../src/interaction/triggerVolume.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1328,5 +1332,178 @@ clStack.undo(); // gone detached → parked in redo
 clStack.clear();
 assert.equal(clDisposed, 1); // only the parked object disposed
 assert.equal(clManager.objects.has(live.userData.objectId), true); // live object untouched
+
+// --- Stage 12: interaction / trigger objects (data-only) --------------------
+
+// No-code guarantee: executable-looking keys are never read or stored.
+const hostileTrigger = sanitizeInteraction({ role: "trigger", emitOnEnter: ["go"], script: "alert(1)", onEnter: "evil()", radius: 5 });
+assert.equal("script" in hostileTrigger, false);
+assert.equal("onEnter" in hostileTrigger, false);
+assert.deepEqual(Object.keys(hostileTrigger).sort(), ["channel", "emitOnEnter", "emitOnExit", "once", "radius", "role", "shape"].sort());
+
+// Unknown role / non-object → null.
+assert.equal(sanitizeInteraction({ role: "wizard" }), null);
+assert.equal(sanitizeInteraction(null), null);
+assert.equal(sanitizeInteraction([1, 2, 3]), null);
+
+// Event tokens: bad chars stripped, blanks/dups dropped, list capped at 16.
+const tokTrigger = sanitizeInteraction({ role: "trigger", emitOnEnter: ["a b!c", "dup", "dup", "   ", "ok.name-1"] });
+assert.deepEqual(tokTrigger.emitOnEnter, ["abc", "dup", "ok.name-1"]);
+assert.equal(sanitizeInteraction({ role: "trigger", emitOnEnter: Array.from({ length: 50 }, (_, i) => `e${i}`) }).emitOnEnter.length, 16);
+
+// Numeric clamps + sign text cap + token name sanitize.
+assert.equal(sanitizeInteraction({ role: "trigger", radius: 9999 }).radius, 250);
+assert.equal(sanitizeInteraction({ role: "trigger", radius: -5 }).radius, 0.1);
+assert.equal(sanitizeInteraction({ role: "door", duration: 999 }).duration, 30);
+assert.equal(sanitizeInteraction({ role: "sign", text: "x".repeat(400) }).text.length, 280);
+assert.equal(sanitizeInteraction({ role: "spawn", name: "check point!" }).name, "checkpoint");
+
+// Per-role door shape (move/rotate vec3 + flags).
+const doorMeta = sanitizeInteraction({ role: "door", listenOpen: ["o"], listenClose: ["c"], move: { x: 1, y: 2, z: 3 }, rotate: { y: 1.5 }, duration: 0.4, startOpen: true });
+assert.equal(doorMeta.startOpen, true);
+assert.deepEqual(doorMeta.move, { x: 1, y: 2, z: 3 });
+assert.deepEqual(doorMeta.rotate, { x: 0, y: 1.5, z: 0 });
+
+// Sign text strips control/bidi chars (defense in depth; overlay uses textContent).
+assert.equal(sanitizeInteraction({ role: "sign", text: "ok" + String.fromCharCode(0x202e) + String.fromCharCode(0x07) + "x" }).text, "okx");
+
+// Object-count ceiling bounds a hostile/corrupt world document.
+const flood = validateWorldDocument(createWorldDocument({
+  objects: Array.from({ length: 20005 }, (_, i) => ({
+    id: `flood-${i}`,
+    type: "primitive",
+    primitive: "cube",
+    transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+  })),
+}));
+assert.equal(flood.document.objects.length, 20000);
+assert.ok(flood.warnings.some((w) => /only the first 20000/.test(w)));
+
+// Volume containment.
+assert.equal(sphereContains({ x: 0, y: 0, z: 0 }, 5, { x: 3, y: 0, z: 0 }), true);
+assert.equal(sphereContains({ x: 0, y: 0, z: 0 }, 5, { x: 6, y: 0, z: 0 }), false);
+assert.equal(boxContains({ x: 0, y: 0, z: 0 }, 2, { x: 1.9, y: -1.9, z: 2 }), true);
+assert.equal(boxContains({ x: 0, y: 0, z: 0 }, 2, { x: 2.1, y: 0, z: 0 }), false);
+assert.equal(volumeContains("box", { x: 0, y: 0, z: 0 }, 1, { x: 0.5, y: 0.5, z: 0.5 }), true);
+assert.equal(volumeContains("sphere", { x: 0, y: 0, z: 0 }, 1, { x: 0.9, y: 0, z: 0 }), true);
+
+// EventBus: delivery, channel isolation, unsubscribe.
+const bus = new EventBus();
+let busHits = 0;
+const off = bus.subscribe("default", "open", () => { busHits++; });
+bus.subscribe("other", "open", () => { busHits += 100; });
+assert.equal(bus.publish("default", "open"), 1);
+assert.equal(busHits, 1);
+bus.publish("default", "nope");
+assert.equal(busHits, 1);
+off();
+assert.equal(bus.publish("default", "open"), 0);
+
+// Runtime integration: trigger→event→door, pickup, sign, teleport, once.
+function interactiveDescriptor(id, position, interaction) {
+  return {
+    id,
+    name: id,
+    type: "primitive",
+    assetRef: "primitive-cube",
+    primitive: "cube",
+    transform: { position, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+    exclusion: { grass: false, trees: false },
+    interaction,
+  };
+}
+
+const irMessages = [];
+const irEvents = [];
+const fakePlayer = { position: new THREE.Vector3(200, 0, 200), velocityY: 3, syncMesh() {} };
+const interactionRuntime = new InteractionRuntime({
+  player: fakePlayer,
+  onMessage: (m) => irMessages.push(m),
+  onEvent: (e) => irEvents.push(`${e.channel}/${e.name}`),
+});
+const irManager = new WorldObjectManager(new THREE.Scene());
+await irManager.loadWorldObjects([
+  interactiveDescriptor("door-1", { x: 0, y: 0, z: 0 }, { role: "door", channel: "default", listenOpen: ["open"], move: { x: 0, y: 3, z: 0 }, duration: 1, startOpen: false }),
+  interactiveDescriptor("trig-1", { x: 10, y: 0, z: 0 }, { role: "trigger", channel: "default", radius: 3, emitOnEnter: ["open"] }),
+  interactiveDescriptor("pick-1", { x: 20, y: 0, z: 0 }, { role: "pickup", radius: 2, emitOnCollect: ["got_coin"] }),
+  interactiveDescriptor("sign-1", { x: 30, y: 0, z: 0 }, { role: "sign", text: "Hello traveler", showRadius: 4 }),
+  interactiveDescriptor("spawn-1", { x: 50, y: 5, z: 50 }, { role: "spawn", name: "checkpoint" }),
+  interactiveDescriptor("trig-2", { x: 40, y: 0, z: 0 }, { role: "trigger", radius: 2, teleportTo: "checkpoint", once: true }),
+]);
+interactionRuntime.load(irManager);
+assert.equal(interactionRuntime.count, 6);
+assert.deepEqual(interactionRuntime.debugSnapshot().spawns, ["checkpoint"]);
+
+// Far away → nothing fires.
+interactionRuntime.update(0.1);
+assert.equal(irEvents.length, 0);
+
+// Enter the trigger → emits "open"; the door begins opening the same frame.
+fakePlayer.position.set(10, 0, 0);
+interactionRuntime.update(0.5);
+assert.ok(irEvents.includes("default/open"));
+let door1 = interactionRuntime.debugSnapshot().doors.find((d) => d.id === "door-1");
+assert.ok(door1.t > 0 && door1.t < 1); // ~half-open after 0.5s of a 1s door
+interactionRuntime.update(0.6);
+door1 = interactionRuntime.debugSnapshot().doors.find((d) => d.id === "door-1");
+assert.equal(door1.open, true); // fully open and clamped at 1
+
+// Pickup collect: hidden + event fired, exactly once.
+fakePlayer.position.set(20, 0, 0);
+interactionRuntime.update(0.1);
+const coinEvents = irEvents.filter((e) => e === "default/got_coin").length;
+assert.equal(coinEvents, 1);
+const pick = interactionRuntime.debugSnapshot().pickups.find((p) => p.id === "pick-1");
+assert.equal(pick.collected, true);
+assert.equal(pick.visible, false);
+interactionRuntime.update(0.1); // still inside → must not re-collect
+assert.equal(irEvents.filter((e) => e === "default/got_coin").length, 1);
+
+// Sign proximity shows literal text, then clears on leave.
+fakePlayer.position.set(30, 0, 0);
+interactionRuntime.update(0.1);
+assert.equal(irMessages[irMessages.length - 1], "Hello traveler");
+fakePlayer.position.set(0, 0, 0);
+interactionRuntime.update(0.1);
+assert.equal(irMessages[irMessages.length - 1], null);
+
+// Teleport trigger (once) moves the player to the named spawn.
+fakePlayer.position.set(40, 0, 0);
+interactionRuntime.update(0.1);
+assert.ok(Math.abs(fakePlayer.position.x - 50) < 1e-6 && Math.abs(fakePlayer.position.y - 5) < 1e-6 && Math.abs(fakePlayer.position.z - 50) < 1e-6);
+assert.equal(fakePlayer.velocityY, 0);
+
+// once=true → re-entering does not teleport again.
+fakePlayer.position.set(0, 0, 0);
+interactionRuntime.update(0.1);
+fakePlayer.position.set(40, 0, 0);
+interactionRuntime.update(0.1);
+assert.ok(Math.abs(fakePlayer.position.x - 40) < 1e-6); // stayed put — trigger is spent
+
+// Round-trip: interaction survives serialize → validate → export/import → worldpack → mod.
+const rtManager = new WorldObjectManager(new THREE.Scene());
+await rtManager.loadWorldObjects([
+  interactiveDescriptor("rt-trigger", { x: 0, y: 0, z: 0 }, { role: "trigger", channel: "gate", emitOnEnter: ["open_gate"], radius: 5, once: true }),
+  interactiveDescriptor("rt-door", { x: 5, y: 0, z: 0 }, { role: "door", channel: "gate", listenOpen: ["open_gate"], move: { x: 0, y: 4, z: 0 }, duration: 0.8 }),
+]);
+const rtObjects = rtManager.serializeWorldObjects();
+assert.equal(rtObjects[0].interaction.role, "trigger");
+assert.deepEqual(rtObjects[0].interaction.emitOnEnter, ["open_gate"]);
+assert.equal(rtObjects[1].interaction.role, "door");
+assert.deepEqual(rtObjects[1].interaction.listenOpen, ["open_gate"]);
+
+const rtValidated = validateWorldDocument(createWorldDocument({ objects: rtObjects }));
+assert.equal(rtValidated.warnings.length, 0);
+assert.equal(rtValidated.document.objects[0].interaction.channel, "gate");
+assert.equal(rtValidated.document.objects[1].interaction.listenOpen[0], "open_gate");
+
+const rtImported = validateWorldDocument(JSON.parse(JSON.stringify({ ...rtValidated.document, objects: rtManager.serializeWorldObjects() })));
+assert.equal(rtImported.document.objects[0].interaction.role, "trigger");
+
+const rtPack = await buildWorldPack(rtValidated.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(rtPack.world.objects.find((o) => o.id === "rt-trigger").interaction.role, "trigger");
+
+const rtMod = await buildWorldMod(rtValidated.document, assetLibrary, modPrefabLib, { name: "Interaction Mod", exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(rtMod.contents.worldpacks[0].world.objects.find((o) => o.id === "rt-door").interaction.listenOpen[0], "open_gate");
 
 console.log("world document regression checks passed");

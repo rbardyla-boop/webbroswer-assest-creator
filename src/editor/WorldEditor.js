@@ -14,6 +14,8 @@ import { importModFile } from "../mods/ModImporter.js";
 import { downloadModPackage, downloadModPackageZip } from "../mods/ModExporter.js";
 import { AnimationPanel } from "./AnimationPanel.js";
 import { AnimationPreview } from "../animation/AnimationPreview.js";
+import { InteractionPanel } from "./InteractionPanel.js";
+import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -362,6 +364,17 @@ export class WorldEditor {
     });
     root.appendChild(this._section("Animation", this.animationPanel.root));
 
+    this.interactionPanel = new InteractionPanel({
+      onChange: (raw) => {
+        const object = this.selection.primary;
+        if (!object) return;
+        // Data-only: sanitize before storing so nothing executable is ever kept.
+        object.userData.interaction = sanitizeInteraction(raw);
+        this._refreshInteractionHelper();
+      },
+    });
+    root.appendChild(this._section("Interaction", this.interactionPanel.root));
+
     root.appendChild(this._section("Trees", this._buildTreeControls()));
 
     this.selectionLabel = document.createElement("div");
@@ -684,6 +697,44 @@ export class WorldEditor {
     this.selection.set(valid); // rebuilds BoxHelpers at current positions
     this._applySelection();
     this._refreshPerf();
+  }
+
+  // Show a wireframe volume for the primary selected object when it is a trigger
+  // or pickup, so radii are authored with feedback (editor-only; never in runtime).
+  // Reused (reposition-only) while the role/shape/radius are unchanged, so a drag
+  // doesn't rebuild geometry every tick.
+  _refreshInteractionHelper() {
+    const object = this.selection.count === 1 ? this.selection.primary : null;
+    const it = object?.userData?.interaction;
+    const wants = !!it && (it.role === "trigger" || it.role === "pickup");
+    const key = wants ? `${object.userData.objectId}:${it.role}:${it.shape ?? "sphere"}:${it.radius}` : null;
+
+    if (wants && this._interactionHelper && this._interactionHelperKey === key) {
+      this._interactionHelper.position.copy(object.getWorldPosition(this._interactionHelper.position));
+      return;
+    }
+    if (this._interactionHelper) {
+      this.scene.remove(this._interactionHelper);
+      this._interactionHelper.geometry.dispose();
+      this._interactionHelper.material.dispose();
+      this._interactionHelper = null;
+      this._interactionHelperKey = null;
+    }
+    if (!wants) return;
+
+    const radius = Math.max(0.1, Number(it.radius) || 4);
+    const geometry = it.shape === "box"
+      ? new THREE.BoxGeometry(radius * 2, radius * 2, radius * 2)
+      : new THREE.SphereGeometry(radius, 18, 12);
+    const helper = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ color: 0xffc36e, wireframe: true, transparent: true, opacity: 0.45, depthTest: false })
+    );
+    helper.position.copy(object.getWorldPosition(new THREE.Vector3()));
+    helper.renderOrder = 999;
+    this._interactionHelper = helper;
+    this._interactionHelperKey = key;
+    this.scene.add(helper);
   }
 
   _refreshHistoryControls() {
@@ -1057,10 +1108,14 @@ export class WorldEditor {
       this.selectionLabel.textContent = "No object selected.";
       this.colliderInspector?.setObject(null);
       this.animationPanel?.setObject(null);
+      this.interactionPanel?.setObject(null);
+      this._refreshInteractionHelper();
       return;
     }
     this.colliderInspector?.setObject(primary);
     this.animationPanel?.setObject(primary);
+    this.interactionPanel?.setObject(primary);
+    this._refreshInteractionHelper();
     if (count > 1) {
       this.selectionLabel.textContent = `${count} objects selected — group transform active.`;
     } else {

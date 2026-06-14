@@ -27,6 +27,8 @@ import { getSampleWorld } from "./world/samples/index.js";
 import { createAssetLibraryFromWorldPack } from "./export/PlayableBuildExport.js";
 import { ModRegistry } from "./mods/ModRegistry.js";
 import { AnimationRuntime } from "./animation/AnimationRuntime.js";
+import { InteractionRuntime } from "./interaction/InteractionRuntime.js";
+import { InteractionOverlay } from "./interaction/InteractionOverlay.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -63,8 +65,9 @@ let worldLoader = null;
 // Runtime-only: drives THREE.AnimationMixer playback for rigged assets. Absent in
 // the editor so authoring never auto-plays gameplay animation.
 const animationRuntime = runtimeMode ? new AnimationRuntime() : null;
-// Debug-safe observability hook (no UI): lets tests/devtools inspect live mixers.
-if (animationRuntime) window.__ANIM_RUNTIME__ = animationRuntime;
+// Debug-safe observability hook (dev/test builds only — stripped from production
+// playable exports so it is never exposed to end users): inspect live mixers.
+if (animationRuntime && import.meta.env.DEV) window.__ANIM_RUNTIME__ = animationRuntime;
 let world = null;
 let terrain = null;
 let grass = null;
@@ -76,6 +79,16 @@ scene.add(player.mesh);
 
 const cameraController = new PlayerCameraController(camera, player, input, { toggleKey: "KeyV" });
 const playerController = new PlayerController(player, input, cameraController, colliders);
+
+// Runtime-only: data-driven interaction engine (triggers/doors/signs/pickups/
+// spawns) + its sign overlay. Absent in the editor so authoring never fires
+// gameplay. Loaded from the world's objects after the world is built.
+const interactionOverlay = runtimeMode ? new InteractionOverlay() : null;
+const interactionRuntime = runtimeMode
+  ? new InteractionRuntime({ player, onMessage: (message) => interactionOverlay?.setMessage(message) })
+  : null;
+// Dev/test-only hook (stripped from production builds): drive/inspect interactions.
+if (interactionRuntime && import.meta.env.DEV) window.__INTERACTION_RUNTIME__ = interactionRuntime;
 
 function handleWorldChanged(change = {}) {
   if (change.full) {
@@ -97,6 +110,9 @@ async function applyLoadedWorld(document) {
   trees = world.trees;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
+  // Re-index interactions for the new object graph (runtime mode only; no-op in
+  // the editor). Keeps the runtime from referencing torn-down objects on reload.
+  interactionRuntime?.load(objectManager);
 
   const spawn = world.document.player.spawn;
   player.position.set(spawn.x, spawn.y, spawn.z);
@@ -183,6 +199,8 @@ async function boot() {
   trees = world.trees;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
+  // Index this world's interactive objects (runtime mode only).
+  interactionRuntime?.load(objectManager);
 
   // Start on open, fairly flat ground with a vista across the field.
   const spawn = world.document.player.spawn ?? findGoodSpawn();
@@ -223,9 +241,9 @@ async function boot() {
       },
     });
     document.getElementById("open-editor").addEventListener("click", () => editor.open());
-    // Debug-safe observability hook (editor builds only; never in runtime/play
-    // exports). Lets tests/devtools drive and inspect the editor + undo history.
-    window.__WORLD_EDITOR__ = editor;
+    // Dev/test-only hook (stripped from production builds): drive and inspect the
+    // editor + undo history.
+    if (import.meta.env.DEV) window.__WORLD_EDITOR__ = editor;
   }
 
   cameraController.update(0.016);
@@ -295,6 +313,7 @@ function frame(now) {
   grass.update(camera, elapsed);
   trees.update(camera);
   animationRuntime?.update(dt);
+  interactionRuntime?.update(dt);
 
   renderer.render(scene, camera);
   markWorldReady();

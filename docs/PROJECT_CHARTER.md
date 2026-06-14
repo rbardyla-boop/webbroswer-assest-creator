@@ -51,3 +51,49 @@ and devtools can drive and inspect the editor + history. Proven by
 changes); persistence/serialization of history across reloads; "infinite"
 compressed history. The stack and command interface are extensible to add these
 later without reshaping the editor.
+
+---
+
+## ADR-012 — Data-only interaction / trigger objects (Stage 12)
+
+**Decision.** Add declarative, data-only interactions to placed objects via a new
+`src/interaction/` layer, mirroring the Stage 10 animation pattern (metadata on
+object → validation → runtime → editor panel → round-trip). An object carries an
+`interaction` block with a `role`: **trigger**, **door**, **sign**, **pickup**,
+or **spawn**. Triggers emit named events on a channel; doors/responders listen
+for named events; signs show text on proximity; pickups collect on proximity and
+emit; spawns are named teleport targets (a trigger may `teleportTo` one). The
+connective tissue is an `EventBus` (channel + name pub/sub).
+
+**No-code guarantee (the core constraint).** Events are plain strings matched by
+equality. Behaviors are the `InteractionRuntime`'s OWN fixed methods, keyed by
+`role` and bound to events at load time by matching the declarative name lists.
+No part of world/mod data is ever interpreted or executed:
+- `sanitizeInteraction` builds ONLY the allowlisted fields per role; unknown keys
+  (`script`, `code`, `onEnter`, `fn`, …) are never read, copied, or stored.
+- Tokens (channel/event/spawn names) are length-capped and restricted to
+  `[A-Za-z0-9_.-]`; event lists are de-duplicated and capped (16); sign text is
+  capped (280) and rendered with `textContent` (never `innerHTML`).
+This extends the same "controlled, manifest-based, no-eval" doctrine as the mod
+system — interactions are safe to ride inside worldpacks and mod packages.
+
+**Runtime-only, deterministic.** `InteractionRuntime` runs in runtime mode only
+(the editor never runs it, so authoring never fires gameplay). It is THREE-math
+only / DOM-free (the sign overlay is a separate injected `onMessage` consumer);
+given the player position and dt it tests volumes, routes events, animates doors,
+and teleports — deterministic and Node-testable. Indexed once after world load by
+scanning `objectManager.objects` (no per-object registration needed).
+
+**Round-trip.** `interaction` is threaded through `WorldObjectManager` serialize +
+`_attachInteraction`, and `WorldValidation` sanitizes it on every load, so it
+rides worldpacks and mod packages automatically (the worldpack world IS the
+validated WorldDocument).
+
+**Observability.** `window.__INTERACTION_RUNTIME__` is exposed in RUNTIME mode
+only (mirrors `__ANIM_RUNTIME__`); `npm run test:interaction` authors a world in
+the editor and proves trigger→door / pickup / sign in a SwiftShader browser.
+
+**Deferred (not in v1).** Collider sync for moving doors (doors are visual +
+event-driven; collision is not repositioned); multi-step sequences / conditions /
+timers beyond emit→listen; per-interaction undo (property edits, like collider/
+animation, are outside the Stage 11 undo scope).

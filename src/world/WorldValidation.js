@@ -4,7 +4,11 @@ import { createWorldDocument, WORLD_DOCUMENT_FORMAT, WORLD_DOCUMENT_VERSION } fr
 import { sanitizePrefabManifest } from "../prefabs/PrefabValidation.js";
 import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
+import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 
+// Hard ceiling on placed objects from one (possibly untrusted) world document.
+// Far above any legitimate world; bounds memory from a hostile/corrupt save.
+const MAX_PLACED_OBJECTS = 20000;
 const PRIMITIVES = new Set(["cube", "sphere", "cylinder", "plane", "ramp"]);
 const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom", "gltf"]);
 const CAMERA_MODES = new Set(["first", "third"]);
@@ -99,7 +103,11 @@ function legacyObjectToV2(item = {}) {
 
 function sanitizeObjects(objects, warnings) {
   const safe = [];
-  for (const item of objects ?? []) {
+  const list = objects ?? [];
+  if (list.length > MAX_PLACED_OBJECTS) {
+    warnings.push(`World had ${list.length} objects; only the first ${MAX_PLACED_OBJECTS} were loaded.`);
+  }
+  for (const item of list.length > MAX_PLACED_OBJECTS ? list.slice(0, MAX_PLACED_OBJECTS) : list) {
     const transform = sanitizeTransform(item?.transform);
     if (!transform) {
       warnings.push(`Skipped object ${item?.id ?? "(unknown)"} because its transform was invalid.`);
@@ -126,6 +134,9 @@ function sanitizeObjects(objects, warnings) {
       },
       // Optional placed-object animation override (null when absent/invalid).
       animation: sanitizePlacedAnimation(item?.animation),
+      // Optional data-only interaction (trigger/door/sign/pickup/spawn; null when
+      // absent/invalid). Declarative — never executed.
+      interaction: sanitizeInteraction(item?.interaction),
       runtime: {
         visible: item?.runtime?.visible !== false,
         static: item?.runtime?.static !== false,
