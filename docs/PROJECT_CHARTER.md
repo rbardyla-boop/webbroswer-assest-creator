@@ -347,3 +347,57 @@ was fixed by using a distinct `_reverseDepthRequested` prop.
 **Deferred.** Far-tile/mipmap terrain work, a runtime depth-precision visualization,
 and any per-material reverse-Z handling remain out of scope. Next: Stage 16 (Voxel
 Debug Lab), Stage 17 (Procedural Build System v1). Combat/Skybreak stays blocked.
+
+## ADR-017A — Visibility + Streaming Kernel (Stage 17A)
+
+**Decision.** Add a reusable engine service under `src/visibility/` that classifies
+registered agents into tiers — **visible / warm / sleeping / unloaded** — each frame
+using a guard-banded camera frustum + distance, with time hysteresis, so the engine
+can skip per-frame work for far/off-screen objects before procedural/voxel systems
+push object counts. This is "guard-banded frustum culling + streaming + LOD
+hysteresis," NOT "delete everything outside the camera."
+
+**The load-bearing invariant: the kernel NEVER hides a mesh.** It never sets
+`object3D.visible = false`, never removes from the scene, and never disposes based on
+visibility. Three.js already frustum-culls draw calls, so an in-frustum object is
+always rendered the same frame; the kernel only gates expensive **per-frame
+UPDATES**. That is precisely what keeps it **shadow-safe** (off-screen shadow casters
+still render into shadow maps), **light-safe**, and **pop-free** (nothing has to
+"appear" on a fast turn — it was never removed). Promotion to awake is immediate;
+hysteresis (`minKeepSeconds`) is demotion-only, so a quick turn-back never thrashes,
+and a `nearRadius` floor keeps close objects warm regardless of facing so a fast 180°
+never reveals a cold nearby object.
+
+**Bands + config.** `visibility` block (round-tripped through validation/worldpack):
+`guardBand` (1.2 → +20% frustum margin for warm), `unloadBand` (1.6, forced ≥
+guardBand), `nearRadius` (28, anti-pop floor), `minKeepSeconds` (1.0, hysteresis),
+`maxWakesPerFrame` (reserved for future build-cost adapters — not enforced yet,
+since the only current adapter wakes in O(1)). The guard-band "expansion" is done by
+inflating the test sphere radius by `dist*(band-1)` — exactly equivalent to pushing
+the frustum planes outward (verified against r169 `Frustum.intersectsSphere`) and
+needs no extra matrices. `GuardBandFrustum` derives the view matrix from
+`camera.matrixWorld.invert()` directly (the renderer's cached `matrixWorldInverse` is
+stale when the kernel runs before render, and absent headless).
+
+**First adapter: animation.** `AnimationRuntime.update(dt, isAwake?)` skips asleep
+mixers — their time freezes and resumes seamlessly on wake (a looping clip continues
+without stutter; the mesh is never hidden, so no pop, no shadow loss). The kernel
+gates ONLY animation; **interaction, collision, and physics run unconditionally** —
+off-camera gameplay is never disabled. Runtime-only (the editor shows everything;
+`visibilityKernel` is null in editor mode). `__VISIBILITY_DEBUG__` (DEV-only) + a HUD
+overlay report tier counts.
+
+**Evidence.** `npm run test:visibility` (SwiftShader) authors a world with a NEAR and
+a FAR animated rig and proves end-to-end that the far rig's mixer sleeps (time frozen
+at 0) while the near rig animates, with NO mesh hidden and zero console errors. Node
+regression covers config caps + round-trip, tier classification (incl. the nearRadius
+floor), the demotion-only hysteresis, the no-hide invariant, and the animation
+freeze/resume. Reviewed (0 CRITICAL / 0 HIGH); the no-hide invariant was verified
+against every changed file.
+
+**Deferred to Stage 17B (same kernel, more adapters).** Particle emitters (cull by
+EMITTER BOUNDS, not origin), placed lights (keep off-screen lights that affect
+visible terrain), procedural/voxel streaming agents (where `maxWakesPerFrame` becomes
+load-bearing), and an opt-in render-hide tier for non-shadow-casting decorative
+props. Grass/bush/tree already implement their own patch-level culling/LOD/streaming
+and are intentionally left as-is (not rewritten).

@@ -4,6 +4,7 @@ import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
 import { createBushConfig } from "../bushes/BushConfig.js";
 import { defaultLighting } from "../lighting/LightingTypes.js";
+import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
 export const WORLD_DOCUMENT_FORMAT = "world-builder-v2";
@@ -79,6 +80,8 @@ export function createWorldDocument(overrides = {}) {
     },
     // Global lighting rig (sun + hemisphere fill + distance fog).
     lighting: defaultLighting(),
+    // Guard-banded visibility/streaming policy (Stage 17A).
+    visibility: createVisibilityConfig(),
     objects: [],
     assets: {
       version: 1,

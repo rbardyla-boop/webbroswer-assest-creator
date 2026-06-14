@@ -60,9 +60,16 @@ export class AnimationRuntime {
     }
   }
 
-  update(dt) {
+  /**
+   * Advance all live mixers. An optional `isAwake(object3D)` predicate (from the
+   * visibility kernel) skips mixers whose object is asleep — the mixer time simply
+   * freezes and resumes seamlessly on wake. The mesh is never hidden, so this only
+   * saves CPU; it never causes pop or breaks shadows.
+   */
+  update(dt, isAwake = null) {
     if (!(dt > 0)) return;
-    for (const { mixer } of this.entries.values()) {
+    for (const [object3D, { mixer }] of this.entries) {
+      if (isAwake && !isAwake(object3D)) continue; // asleep: freeze, don't advance
       try {
         mixer.update(dt);
       } catch (error) {

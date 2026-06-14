@@ -71,6 +71,7 @@ export class DebugPanel {
       `<span style="color:#8fa899">camera     </span>${data.cameraMode}\n` +
       `<span style="color:#8fa899">draw calls </span>${data.drawCalls}\n` +
       depthLine(data.depth) +
+      visibilityLines(data.visibility) +
       `<span style="color:#8fa899">patches    </span>${s.visiblePatches} vis / ${s.activePatches} active\n` +
       `<span style="color:#8fa899">blades~    </span>${k(s.visibleBlades)}\n` +
       `<span style="color:#8fa899">LOD 0/1/2  </span>${lod[0]}/${lod[1]}/${lod[2]}  (${pct(lod[0])}/${pct(lod[1])}/${pct(lod[2])}%)\n` +
@@ -84,6 +85,16 @@ export class DebugPanel {
   dispose() {
     this.el.remove();
   }
+}
+
+function visibilityLines(v) {
+  if (!v || !v.total) return "";
+  const off = v.enabled === false ? " (off)" : "";
+  return (
+    `<span style="color:#7fdca0;letter-spacing:.12em">VISIBILITY${off}</span>\n` +
+    `<span style="color:#8fa899">vis/warm   </span>${v.visible}/${v.warm}\n` +
+    `<span style="color:#8fa899">sleep/unld </span>${v.sleeping}/${v.unloaded}  of ${v.total}\n`
+  );
 }
 
 function depthLine(depth) {

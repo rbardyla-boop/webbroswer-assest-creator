@@ -4,6 +4,7 @@
 import * as THREE from "three";
 
 import { createRenderer, getReverseDepthStatus } from "./core/renderer.js";
+import { VisibilityKernel } from "./visibility/VisibilityKernel.js";
 import { createScene } from "./core/scene.js";
 import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
@@ -97,6 +98,12 @@ if (interactionRuntime && import.meta.env.DEV) window.__INTERACTION_RUNTIME__ = 
 // objects after the world is built.
 const particleRuntime = runtimeMode ? new ParticleRuntime({ scene }) : null;
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
+// Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
+// registered agents (currently animated objects) so far/off-screen ones sleep
+// their per-frame updates — without ever hiding a mesh, so shadows stay intact
+// and nothing pops on a fast turn. Absent in the editor (authoring shows all).
+const visibilityKernel = runtimeMode ? new VisibilityKernel() : null;
+if (visibilityKernel && import.meta.env.DEV) window.__VISIBILITY_DEBUG__ = () => visibilityKernel.debugSnapshot();
 // Dev/test-only: read the live applied lighting (sun/hemisphere/fog).
 if (import.meta.env.DEV) {
   window.__LIGHTING_DEBUG__ = () => ({
@@ -160,6 +167,27 @@ function handleWorldChanged(change = {}) {
     bushes?.queueRebuildForBox(box);
   }
 }
+// Stable predicate (no per-frame allocation) the animation runtime consults.
+function isAgentAwake(object3D) {
+  return visibilityKernel ? visibilityKernel.isAwake(object3D) : true;
+}
+
+// Register the world's animated objects with the visibility kernel so their per-
+// frame mixer updates can sleep when far/off-screen. Runtime-only; the kernel
+// never hides a mesh, so this is shadow- and pop-safe.
+function syncVisibilityAgents(document) {
+  if (!visibilityKernel) return;
+  visibilityKernel.setConfig(document?.visibility);
+  visibilityKernel.clear();
+  for (const object3D of animationRuntime?.entries.keys() ?? []) {
+    visibilityKernel.register({
+      id: object3D.userData?.objectId ?? object3D.uuid,
+      object3D,
+      kind: "animation",
+    });
+  }
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -174,6 +202,7 @@ async function applyLoadedWorld(document) {
   // mode only; no-op in the editor) so neither references torn-down objects.
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
+  syncVisibilityAgents(world.document);
 
   const spawn = world.document.player.spawn;
   player.position.set(spawn.x, spawn.y, spawn.z);
@@ -267,6 +296,7 @@ async function boot() {
   // Index this world's interactive objects + particle emitters (runtime only).
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
+  syncVisibilityAgents(world.document);
 
   // Start on open, fairly flat ground with a vista across the field.
   const spawn = world.document.player.spawn ?? findGoodSpawn();
@@ -386,7 +416,9 @@ function frame(now) {
   grass.update(camera, elapsed);
   trees.update(camera);
   bushes?.update(camera);
-  animationRuntime?.update(dt);
+  // Classify visibility tiers first, then let animation sleep asleep mixers.
+  visibilityKernel?.update(camera, dt);
+  animationRuntime?.update(dt, visibilityKernel ? isAgentAwake : null);
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
 
@@ -406,6 +438,7 @@ function frame(now) {
     grounded: player.grounded,
     drawCalls: renderer.info.render.calls,
     depth: reverseDepthStatus,
+    visibility: visibilityKernel?.stats,
   });
 }
 

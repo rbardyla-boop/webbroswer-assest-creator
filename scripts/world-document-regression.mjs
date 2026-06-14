@@ -56,6 +56,8 @@ import { voxelizeObjects } from "../src/voxels/Voxelizer.js";
 import { raycastVoxels } from "../src/voxels/VoxelRaycast.js";
 import { VoxelGrid } from "../src/voxels/VoxelGrid.js";
 import { VOXEL_LIMITS, createVoxelConfig, clampInt } from "../src/voxels/VoxelTypes.js";
+import { VisibilityKernel } from "../src/visibility/VisibilityKernel.js";
+import { createVisibilityConfig, VISIBILITY_DEFAULTS } from "../src/visibility/VisibilityConfig.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2002,5 +2004,88 @@ assert.equal(mZero.reason, "zero-direction");
 
 // Determinism: identical ray → identical result object.
 assert.deepEqual(raycastVoxels(rg, { x: -10, y: 2.5, z: 2.5 }, { x: 1, y: 0, z: 0 }), hX);
+
+// --- Stage 17A: Visibility + Streaming Kernel --------------------------------
+
+// Config caps: bands clamp, unloadBand >= guardBand, garbage → defaults.
+assert.deepEqual(createVisibilityConfig(), { ...VISIBILITY_DEFAULTS });
+const visWild = createVisibilityConfig({ guardBand: 99, unloadBand: 1.05, nearRadius: -5, minKeepSeconds: 999, maxWakesPerFrame: 0 });
+assert.equal(visWild.guardBand, 4, "guardBand clamped to max");
+assert.equal(visWild.unloadBand, 4, "unloadBand forced >= guardBand");
+assert.equal(visWild.nearRadius, 0, "nearRadius clamped to >= 0");
+assert.equal(visWild.minKeepSeconds, 30, "minKeepSeconds clamped");
+assert.equal(visWild.maxWakesPerFrame, 1, "maxWakesPerFrame clamped to >= 1");
+assert.equal(createVisibilityConfig({ enabled: false }).enabled, false);
+assert.equal(createVisibilityConfig(null).enabled, true);
+// Visibility round-trips through the document + worldpack.
+const visDoc = validateWorldDocument(createWorldDocument({ visibility: { guardBand: 1.5, nearRadius: 40 } }));
+assert.equal(visDoc.document.visibility.guardBand, 1.5);
+assert.equal(visDoc.document.visibility.nearRadius, 40);
+const visPack = await buildWorldPack(visDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(visPack.world.visibility.guardBand, 1.5);
+
+// Tier classification with a real headless camera.
+const visCam = new THREE.PerspectiveCamera(60, 1.6, 0.1, 1000);
+visCam.lookAt(0, 0, -1);
+visCam.updateMatrixWorld(true);
+const boxAt = (x, y, z, id) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial());
+  m.position.set(x, y, z);
+  m.userData.objectId = id;
+  m.updateMatrixWorld(true);
+  return m;
+};
+const vFront = boxAt(0, 0, -50, "front"); // in frustum
+const vFar = boxAt(0, 0, 300, "far"); // behind + far
+const vNear = boxAt(0, 0, 12, "near"); // behind but within nearRadius (28)
+const vSide = boxAt(200, 0, -50, "side"); // far to the side, just outside frustum
+const vk = new VisibilityKernel();
+for (const o of [vFront, vFar, vNear, vSide]) vk.register({ id: o.userData.objectId, object3D: o, kind: "animation" });
+vk.update(visCam, 0.016);
+assert.equal(vk.tierOf(vFront), "visible");
+assert.equal(vk.tierOf(vFar), "unloaded");
+assert.equal(vk.tierOf(vNear), "warm", "near object behind camera stays warm (anti-pop floor)");
+assert.equal(vk.tierOf(vSide), "sleeping");
+assert.equal(vk.isAwake(vFront), true);
+assert.equal(vk.isAwake(vFar), false, "far off-screen agent sleeps");
+assert.equal(vk.stats.visible + vk.stats.warm + vk.stats.sleeping + vk.stats.unloaded, 4);
+
+// CRITICAL no-hide invariant: the kernel never sets object3D.visible = false.
+assert.ok([vFront, vFar, vNear, vSide].every((o) => o.visible === true), "kernel must never hide a mesh (shadow/pop safe)");
+
+// Promotion is immediate (no pop); demotion has hysteresis.
+visCam.lookAt(0, 0, 1); // turn to face the far object
+visCam.updateMatrixWorld(true);
+vk.update(visCam, 0.016);
+assert.equal(vk.tierOf(vFar), "visible", "fast turn reveals the far object immediately");
+visCam.lookAt(0, 0, -1); // turn away again
+visCam.updateMatrixWorld(true);
+vk.update(visCam, 0.2); // 0.2s < minKeepSeconds (1.0)
+assert.equal(vk.tierOf(vFar), "warm", "recently-visible agent held warm (hysteresis, no thrash)");
+vk.update(visCam, 1.0); // now past minKeepSeconds
+assert.equal(vk.tierOf(vFar), "unloaded", "settles back to unloaded after the keep window");
+
+// Disabled kernel → everything awake (no culling), still reported.
+const vkOff = new VisibilityKernel({ enabled: false });
+vkOff.register({ id: "x", object3D: vFar, kind: "animation" });
+vkOff.update(visCam, 0.016);
+assert.equal(vkOff.isAwake(vFar), true);
+assert.equal(vkOff.stats.visible, 1);
+
+// Animation adapter: an asleep mixer freezes; an awake one advances.
+const animObj = new THREE.Object3D();
+animObj.userData.objectId = "anim1";
+const track = new THREE.VectorKeyframeTrack(".position", [0, 2], [0, 0, 0, 0, 2, 0]);
+const animClip = new THREE.AnimationClip("move", 2, [track]);
+const ar = new AnimationRuntime();
+ar.register(animObj, { animations: [animClip], animation: { autoplay: true, loop: true } });
+ar.update(0.5); // no predicate → advances
+const tAfterWake = ar.debugSnapshot().objects[0].time;
+assert.ok(tAfterWake > 0.4 && tAfterWake < 0.6, `awake mixer advanced, t=${tAfterWake}`);
+ar.update(0.5, () => false); // asleep → frozen
+assert.equal(ar.debugSnapshot().objects[0].time, tAfterWake, "asleep mixer time is frozen");
+ar.update(0.5, () => true); // awake again → resumes
+assert.ok(ar.debugSnapshot().objects[0].time > tAfterWake, "mixer resumes after waking");
+ar.clear();
 
 console.log("world document regression checks passed");
