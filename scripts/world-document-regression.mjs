@@ -31,6 +31,8 @@ import { createModPackage } from "../src/mods/ModManifest.js";
 import { extractAnimationMetadata } from "../src/animation/AnimationMetadata.js";
 import { sanitizeAssetAnimation, sanitizePlacedAnimation, resolveClipName } from "../src/animation/AnimationValidation.js";
 import { AnimationRuntime } from "../src/animation/AnimationRuntime.js";
+import { buildAnimatedFixtureScene, FIXTURE_CLIP_NAMES } from "../src/animation/fixtures/animatedFixture.js";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1161,5 +1163,48 @@ const riggedResolved = {
 const placedRig = await placeManager.addFromAsset(riggedResolved, new THREE.Vector3(2, 0, 2));
 assert.equal(placedRig.userData.assetAnimation.clips.length, 1); // clip metadata for the editor panel
 assert.equal(placedRig.userData.animationClips.length, 1); // parsed clips for preview
+
+// --- Stage 10B: fixture-backed animation proof ------------------------------
+
+// Deterministic fixture: extraction sees both clips + the skinned mesh/skeleton.
+const fixture = buildAnimatedFixtureScene();
+const fixtureMeta = extractAnimationMetadata(fixture.root, fixture.clips);
+assert.deepEqual(fixtureMeta.clips.map((c) => c.name).sort(), [...FIXTURE_CLIP_NAMES].sort());
+assert.equal(fixtureMeta.hasSkinnedMesh, true);
+assert.equal(fixtureMeta.hasSkeleton, true);
+assert.equal(fixtureMeta.defaultClip, "Slide");
+assert.ok(fixtureMeta.clips.every((c) => c.duration > 0));
+
+// Two SkeletonUtils clones must NOT share mutable skeleton state.
+const cloneA = cloneSkeleton(fixture.root);
+const cloneB = cloneSkeleton(fixture.root);
+let skinnedA = null;
+let skinnedB = null;
+cloneA.traverse((o) => { if (o.isSkinnedMesh) skinnedA = o; });
+cloneB.traverse((o) => { if (o.isSkinnedMesh) skinnedB = o; });
+assert.ok(skinnedA && skinnedB);
+assert.notEqual(skinnedA.skeleton, skinnedB.skeleton); // independent skeletons
+assert.notEqual(skinnedA.skeleton.bones[1], skinnedB.skeleton.bones[1]); // distinct bone instances
+skinnedA.skeleton.bones[1].position.x = 5; // mutate clone A's bone
+assert.notEqual(skinnedB.skeleton.bones[1].position.x, 5); // clone B is unaffected
+
+// Observability hook reports active mixer count, object ids and clip names.
+const dbgRuntime = new AnimationRuntime();
+const dbgRoot = new THREE.Group();
+dbgRoot.userData.objectId = "obj-dbg";
+dbgRuntime.register(
+  dbgRoot,
+  { animations: [new THREE.AnimationClip("Idle", 1, [])], animation: { defaultClip: "Idle", autoplay: true, loop: true, playbackSpeed: 1 } },
+  { clip: "Idle" }
+);
+const snap = dbgRuntime.debugSnapshot();
+assert.equal(snap.count, 1);
+assert.equal(snap.objects[0].id, "obj-dbg");
+assert.equal(snap.objects[0].clip, "Idle");
+assert.equal(snap.objects[0].running, true);
+assert.deepEqual(dbgRuntime.activeObjectIds(), ["obj-dbg"]);
+assert.deepEqual(dbgRuntime.activeClipNames(), ["Idle"]);
+dbgRuntime.clear();
+assert.equal(dbgRuntime.debugSnapshot().count, 0);
 
 console.log("world document regression checks passed");

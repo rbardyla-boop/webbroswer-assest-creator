@@ -52,7 +52,7 @@ export class AnimationRuntime {
         action.play();
         action.time = Math.min(offset, clip.duration || 0);
       }
-      this.entries.set(object3D, { mixer, action });
+      this.entries.set(object3D, { mixer, action, clipName: clip.name, objectId: object3D.userData?.objectId ?? null });
       return { mixer, action };
     } catch (error) {
       console.warn("Could not start animation for placed object", error);
@@ -86,6 +86,31 @@ export class AnimationRuntime {
 
   clear() {
     for (const object3D of [...this.entries.keys()]) this.remove(object3D);
+  }
+
+  // --- observability (debug-safe; no UI) --------------------------------------
+
+  activeObjectIds() {
+    return [...this.entries.values()].map((e) => e.objectId);
+  }
+
+  activeClipNames() {
+    return [...this.entries.values()].map((e) => e.clipName);
+  }
+
+  // Snapshot of live mixers for test/debug observation (active count, object ids,
+  // clip names, running state, and playback head time).
+  debugSnapshot() {
+    const objects = [];
+    for (const entry of this.entries.values()) {
+      objects.push({
+        id: entry.objectId,
+        clip: entry.clipName,
+        running: entry.action?.isRunning() ?? false,
+        time: Number((entry.action?.time ?? 0).toFixed(4)),
+      });
+    }
+    return { count: this.entries.size, objects };
   }
 }
 

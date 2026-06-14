@@ -12,7 +12,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:world": "node scripts/world-document-regression.mjs",
-    "test:browser": "node scripts/browser-readiness-smoke.mjs"
+    "test:browser": "node scripts/browser-readiness-smoke.mjs",
+    "test:anim": "node scripts/browser-animation-proof.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"

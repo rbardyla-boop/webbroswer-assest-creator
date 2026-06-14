@@ -63,6 +63,8 @@ let worldLoader = null;
 // Runtime-only: drives THREE.AnimationMixer playback for rigged assets. Absent in
 // the editor so authoring never auto-plays gameplay animation.
 const animationRuntime = runtimeMode ? new AnimationRuntime() : null;
+// Debug-safe observability hook (no UI): lets tests/devtools inspect live mixers.
+if (animationRuntime) window.__ANIM_RUNTIME__ = animationRuntime;
 let world = null;
 let terrain = null;
 let grass = null;
