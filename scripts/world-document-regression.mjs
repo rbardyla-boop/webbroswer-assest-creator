@@ -12,6 +12,8 @@ import { PrefabInstancer } from "../src/prefabs/PrefabInstancer.js";
 import { worldObjectsFromPrefab } from "../src/prefabs/PrefabSerializer.js";
 import { validatePrefabDocument } from "../src/prefabs/PrefabValidation.js";
 import { createBuiltinPrefabs, isBuiltinPrefab } from "../src/prefabs/BuiltinKits.js";
+import { buildVerticalSliceV1 } from "../src/world/samples/verticalSliceV1.js";
+import { getSampleWorld, VERTICAL_SLICE_ID } from "../src/world/samples/index.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -571,6 +573,63 @@ const kitWorld = validateWorldDocument(
 );
 assert.equal(kitWorld.warnings.length, 0);
 assert.ok(kitWorld.document.objects.every((o) => typeof o.prefabRef === "string"));
+
+// --- Stage 7: vertical slice sample world -----------------------------------
+
+const sliceDoc = buildVerticalSliceV1();
+const sliceValidated = validateWorldDocument(sliceDoc);
+assert.equal(sliceValidated.warnings.length, 0); // sample loads clean
+assert.ok(sliceValidated.document.objects.length >= 10);
+assert.ok(
+  Number.isFinite(sliceDoc.player.spawn.x) &&
+    Number.isFinite(sliceDoc.player.spawn.y) &&
+    Number.isFinite(sliceDoc.player.spawn.z)
+);
+
+// Every required structural element is present (by prefabRef).
+const sliceRefs = new Set(sliceDoc.objects.map((o) => o.prefabRef));
+for (const id of [
+  "builtin-straight-road",
+  "builtin-ramp",
+  "builtin-wall",
+  "builtin-platform",
+  "builtin-signboard",
+  "builtin-hut",
+  "builtin-tree-cluster",
+]) {
+  assert.ok(sliceRefs.has(id), `vertical slice is missing ${id}`);
+}
+
+// Road is walkable + suppresses grass/trees; wall is a solid box.
+const sliceRoad = sliceDoc.objects.find((o) => o.prefabRef === "builtin-straight-road");
+assert.equal(sliceRoad.collider.type, "plane");
+assert.equal(sliceRoad.exclusion.grass, true);
+assert.equal(sliceRoad.exclusion.trees, true);
+assert.equal(sliceDoc.objects.find((o) => o.prefabRef === "builtin-wall").collider.type, "box");
+
+// Registry lookups (used by editor action + runtime ?world=).
+assert.ok(getSampleWorld(VERTICAL_SLICE_ID));
+assert.equal(getSampleWorld("does-not-exist"), null);
+
+// Load the slice as normal world objects (no missing assets — primitives only),
+// then round-trip: prefabRef / collider / exclusion preserved.
+const sliceScene = new THREE.Scene();
+const sliceManager = new WorldObjectManager(sliceScene, { assetLibrary });
+await sliceManager.loadWorldObjects(sliceValidated.document.objects);
+assert.equal(sliceManager.objects.size, sliceValidated.document.objects.length);
+const sliceRound = sliceManager.serializeWorldObjects();
+assert.equal(sliceRound.length, sliceValidated.document.objects.length);
+assert.ok(sliceRound.some((o) => o.prefabRef === "builtin-ramp"));
+const roundRoad = sliceRound.find((o) => o.prefabRef === "builtin-straight-road");
+assert.equal(roundRoad.collider.type, "plane");
+assert.equal(roundRoad.exclusion.grass, true);
+
+// Export → import preserves the whole slice with no warnings.
+const sliceJson = JSON.stringify({ ...sliceValidated.document, objects: sliceRound });
+const sliceImported = validateWorldDocument(JSON.parse(sliceJson));
+assert.equal(sliceImported.warnings.length, 0);
+assert.equal(sliceImported.document.objects.length, sliceRound.length);
+assert.ok(sliceImported.document.objects.every((o) => typeof o.prefabRef === "string"));
 
 // Garbage prefab input is skipped, never thrown.
 assert.equal(validatePrefabDocument(null).prefab, null);

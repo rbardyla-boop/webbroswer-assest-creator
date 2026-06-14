@@ -23,14 +23,16 @@ import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
 import { WorldSerializer } from "./world/WorldSerializer.js";
 import { AssetLibrary } from "./assets/AssetLibrary.js";
 import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
+import { getSampleWorld } from "./world/samples/index.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
 const crosshairEl = document.getElementById("crosshair");
 const toolbarEl = document.getElementById("toolbar");
 const hintEl = document.getElementById("hint");
-const runtimeMode = new URLSearchParams(window.location.search).has("runtime")
-  || new URLSearchParams(window.location.search).has("play");
+const urlParams = new URLSearchParams(window.location.search);
+const runtimeMode = urlParams.has("runtime") || urlParams.has("play");
+const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
 
 window.__WORLD_READY__ = false;
 window.__WORLD_MODE__ = runtimeMode ? "runtime" : "editor";
@@ -117,8 +119,13 @@ let editor = null;
 async function boot() {
   assetLibrary = await new AssetLibrary().init();
   worldLoader = new WorldRuntimeLoader({ scene, lights, fog: scene.fog, colliderSystem: colliders, assetLibrary });
-  const savedWorld = worldSerializer.load();
-  world = await worldLoader.load(savedWorld?.document ?? createWorldDocument());
+  // Priority: explicit ?world= sample → saved world → empty default.
+  let initialDoc = worldParam ? getSampleWorld(worldParam) : null;
+  if (!initialDoc) {
+    const savedWorld = worldSerializer.load();
+    initialDoc = savedWorld?.document ?? createWorldDocument();
+  }
+  world = await worldLoader.load(initialDoc);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;
   grass = world.grass;

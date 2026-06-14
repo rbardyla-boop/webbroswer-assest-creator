@@ -104,7 +104,10 @@ function kitDefinitions() {
       id: "builtin-platform",
       name: "Platform",
       tags: [BUILTIN_TAG, "platform"],
-      parts: [boxPart("deck", 6, 0.6, 6, SOLID)],
+      // Height < ~0.48 so the box is freely steppable: the collider system only
+      // blocks the capsule horizontally when its lower half overlaps the box, so
+      // a taller deck would act like a wall instead of a stand-on platform.
+      parts: [boxPart("deck", 6, 0.45, 6, SOLID)],
     },
     {
       id: "builtin-wall",

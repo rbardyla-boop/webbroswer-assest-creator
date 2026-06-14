@@ -177,7 +177,10 @@ function sanitizeTransform(transform = {}) {
 
 function colliderToV2(collider = {}, warnings = null, objectId = null) {
   const type = COLLIDERS.has(collider?.type) ? collider.type : COLLIDER_TYPES.none;
-  if (collider?.type && type === COLLIDER_TYPES.none) {
+  // Only warn when a non-"none" type was supplied but resolved to none (i.e. it
+  // was genuinely invalid). An explicit "none" collider is legitimate (e.g. a
+  // decorative prefab part) and must not produce a spurious warning.
+  if (collider?.type && collider.type !== COLLIDER_TYPES.none && type === COLLIDER_TYPES.none) {
     warnings?.push(`Object ${objectId ?? "(unknown)"} had invalid collider type "${collider.type}"; using none.`);
   }
   return {

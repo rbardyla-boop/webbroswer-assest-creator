@@ -12,6 +12,7 @@ import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
 import { PrefabInstancer } from "../prefabs/PrefabInstancer.js";
 import { PrefabPanel } from "./PrefabPanel.js";
 import { SelectionGroup } from "./SelectionGroup.js";
+import { getSampleWorld, VERTICAL_SLICE_ID } from "../world/samples/index.js";
 
 export class WorldEditor {
   constructor({
@@ -239,6 +240,7 @@ export class WorldEditor {
     actions.appendChild(this._button("Load World", () => this._load()));
     actions.appendChild(this._button("Export World JSON", () => this._exportWorld()));
     actions.appendChild(this._button("Import World JSON", () => this.worldFileInput.click()));
+    actions.appendChild(this._button("Load Sample World", () => this._loadSample()));
     actions.appendChild(this._button("Close", () => this.close()));
     root.appendChild(actions);
 
@@ -658,6 +660,18 @@ export class WorldEditor {
     } catch (error) {
       console.warn("Could not merge prefab manifest from world", error);
     }
+  }
+
+  async _loadSample() {
+    const doc = getSampleWorld(VERTICAL_SLICE_ID);
+    if (!doc) {
+      this.selectionLabel.textContent = "Sample world unavailable.";
+      return;
+    }
+    this._clearSelection();
+    await this._mergePrefabManifest(doc);
+    await this.onLoadWorld?.(doc);
+    this.selectionLabel.textContent = `Loaded sample world (${doc.objects.length} objects).`;
   }
 
   _exportWorld() {
