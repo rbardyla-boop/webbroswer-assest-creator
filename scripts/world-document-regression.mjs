@@ -51,6 +51,7 @@ import { createBushConfig } from "../src/bushes/BushConfig.js";
 import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
 import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
 import { Terrain, sanitizeTerrainMaterial, DEFAULT_TERRAIN_MATERIAL } from "../src/terrain/Terrain.js";
+import { summarizeReverseDepth, getReverseDepthStatus } from "../src/core/renderer.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1838,5 +1839,54 @@ assert.equal(terr._uniforms.uTerrainMacroScale.value, 0.05, "uniform updated liv
 assert.equal(terr._uniforms.uTerrainDetailIntensity.value, 1, "detail clamped to [0,1] on sync");
 assert.equal(terr.getMaterialSettings().macroIntensity, 0.2, "settings read back after sync");
 terr.dispose();
+
+// --- Stage 15: reverse-Z depth status logic ----------------------------------
+
+// Pure status: active only when reverse-Z is BOTH requested and supported.
+assert.deepEqual(summarizeReverseDepth({ requested: true, extensionAvailable: true }), {
+  requested: true,
+  extensionAvailable: true,
+  active: true,
+  mode: "reverse-z",
+});
+// Requested but the GPU lacks EXT_clip_control → clean fallback to normal depth.
+assert.deepEqual(summarizeReverseDepth({ requested: true, extensionAvailable: false }), {
+  requested: true,
+  extensionAvailable: false,
+  active: false,
+  mode: "normal-z",
+});
+// Never requested → normal depth, reported as not-requested.
+assert.deepEqual(summarizeReverseDepth({ requested: false, extensionAvailable: true }), {
+  requested: false,
+  extensionAvailable: true,
+  active: false,
+  mode: "normal-z",
+});
+// Defensive: missing/garbage args never throw and default to normal-z.
+assert.equal(summarizeReverseDepth().mode, "normal-z");
+assert.equal(summarizeReverseDepth({ requested: "yes", extensionAvailable: 1 }).active, false);
+
+// Renderer reader trusts three's resolved capability for `active`, and explains
+// WHY via the extension cross-read. (Mock renderer — no GL context needed.)
+const mockSupported = {
+  _reverseDepthRequested: true,
+  capabilities: { reverseDepthBuffer: true },
+  extensions: { has: (n) => n === "EXT_clip_control" },
+};
+assert.deepEqual(getReverseDepthStatus(mockSupported), {
+  requested: true,
+  extensionAvailable: true,
+  active: true,
+  mode: "reverse-z",
+});
+const mockUnsupported = {
+  _reverseDepthRequested: true,
+  capabilities: { reverseDepthBuffer: false },
+  extensions: { has: () => false },
+};
+assert.equal(getReverseDepthStatus(mockUnsupported).active, false);
+assert.equal(getReverseDepthStatus(mockUnsupported).mode, "normal-z");
+assert.equal(getReverseDepthStatus(mockUnsupported).requested, true); // requested, just unsupported
 
 console.log("world document regression checks passed");

@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 
-import { createRenderer } from "./core/renderer.js";
+import { createRenderer, getReverseDepthStatus } from "./core/renderer.js";
 import { createScene } from "./core/scene.js";
 import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
@@ -50,6 +50,8 @@ document.body.dataset.worldMode = window.__WORLD_MODE__;
 // --- core --------------------------------------------------------------------
 
 const renderer = createRenderer(container);
+// Reverse-Z status resolves at construction and never changes — read it once.
+const reverseDepthStatus = getReverseDepthStatus(renderer);
 const scene = createScene({ fogNear: 70, fogFar: 225 });
 const camera = createCamera();
 const lights = createLights(scene);
@@ -125,6 +127,8 @@ if (import.meta.env.DEV) {
     clumpStrength: bushes?.cfg?.clumpStrength ?? null,
     seed: bushes?.cfg?.seed ?? null,
   });
+  // Dev/test-only: read the live renderer's reverse-Z depth status (Stage 15).
+  window.__RENDER_DEBUG__ = () => getReverseDepthStatus(renderer);
   // Dev/test-only: read the live terrain material v2 (Stage 14C). Reports the
   // upgrade uniforms + that fog/shadow stayed wired (the onBeforeCompile pass
   // only edits diffuseColor, never the lighting/fog/shadow chunks).
@@ -401,6 +405,7 @@ function frame(now) {
     cameraMode: cameraController.modeLabel,
     grounded: player.grounded,
     drawCalls: renderer.info.render.calls,
+    depth: reverseDepthStatus,
   });
 }
 

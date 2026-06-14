@@ -247,3 +247,56 @@ The `.claude/threejs_skills/` skill-adoption harness is wired into the project
 skill-pack's required evidence to the live engine (32/0/0). Stage completion now
 requires `qa:skills` + build + browser evidence. The engine is the source of
 truth — gate patterns adapt to it, never the reverse. See `THREEJS_SKILL_ADOPTION.md`.
+
+## ADR-015 — Reverse-Z depth gate (Stage 15)
+
+**Decision.** Request a reversed-Z depth buffer for the main renderer (default on),
+to spread floating-point depth precision evenly across the view distance instead of
+crowding it near the camera — making far outdoor geometry safe from z-fighting
+before voxel/procedural systems push scale. Renderer-capability/precision stage
+only: no terrain/voxel/world-scale change.
+
+**Version-correct API (the load-bearing detail).** The project pins Three.js
+**r0.169**, where the option is the WebGLRenderer **constructor parameter
+`reverseDepthBuffer`** (singular "reverse") — NOT the `reversedDepthBuffer` property
+that landed in a later release (it does not exist in r169). `createRenderer` passes
+`reverseDepthBuffer` at construction (the only moment it can take effect). Three
+gates it internally on `extensions.has('EXT_clip_control')`, so on a GPU/driver
+without the extension the renderer transparently uses normal depth and
+`capabilities.reverseDepthBuffer` reports `false` — that IS the fallback, owned by
+Three, never assumed. Three also handles the reverse-Z depth clear (0 not 1), depth
+func (GREATER), the `USE_REVERSEDEPTHBUF` shader define, and shadow handling.
+
+**Why custom ShaderMaterials need nothing special.** Verified against the r169
+source: reverse-Z is implemented purely by uploading a reversed `projectionMatrix`
+uniform — there is NO `reversedepthbuf` GLSL chunk. The grass `GrassMaterial`
+(`gl_Position = projectionMatrix * mv`) and the `ParticleRuntime` point shader both
+multiply by the auto-injected `projectionMatrix`, so they receive correct reversed
+depth automatically. (A ShaderMaterial that reconstructed clip-space *bypassing*
+`projectionMatrix` would silently miss reverse-Z — neither of ours does.)
+`logarithmicDepthBuffer` is left off (the two are mutually exclusive); shadow maps,
+depth-tested particles, and CPU-side raycast/selection are all untouched.
+
+**Status reporting + fallback.** `getReverseDepthStatus(renderer)` reports
+`{ requested, extensionAvailable, active, mode }`, with `active` taken from Three's
+resolved `capabilities.reverseDepthBuffer` (the authority). The debug HUD shows the
+mode (green = reverse-z active, amber = requested-but-unsupported, grey = off);
+`window.__RENDER_DEBUG__` (DEV-only) drives the proof. `summarizeReverseDepth` is a
+pure helper, Node-unit-tested for the three-state logic.
+
+**Evidence.** `npm run test:reversez` (SwiftShader) renders a near-over-far quad
+scene through BOTH a `reverseDepthBuffer:true` renderer and a forced-off renderer:
+the front quad occludes the back with zero z-fight in both paths, and the gate
+invariant `capabilities.reverseDepthBuffer === EXT_clip_control present` holds.
+SwiftShader exposes `EXT_clip_control`, so the proof exercises the **active**
+reverse-Z path (not merely the fallback). The runtime boots in `reverse-z` mode with
+terrain/grass/bushes rendering and zero console errors, and the **entire prior proof
+suite (terrain/bush/vegetation/lighting/particles/interaction/undo/animation) stays
+green under the now-active reverse-Z renderer** — direct evidence of no shadow,
+particle, raycast, or editor/runtime regression. Reviewed (renderer correctness):
+0 CRITICAL / 0 HIGH; the one MEDIUM (a `renderer.userData` naming-collision risk)
+was fixed by using a distinct `_reverseDepthRequested` prop.
+
+**Deferred.** Far-tile/mipmap terrain work, a runtime depth-precision visualization,
+and any per-material reverse-Z handling remain out of scope. Next: Stage 16 (Voxel
+Debug Lab), Stage 17 (Procedural Build System v1). Combat/Skybreak stays blocked.

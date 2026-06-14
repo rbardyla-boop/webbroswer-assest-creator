@@ -21,6 +21,7 @@
     "test:vegetation": "node scripts/browser-vegetation-proof.mjs",
     "test:bush": "node scripts/browser-bush-proof.mjs",
     "test:terrain": "node scripts/browser-terrain-proof.mjs",
+    "test:reversez": "node scripts/browser-reverse-z-proof.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",
     "qa": "npm run qa:skills && npm run build && npm run qa:browser"

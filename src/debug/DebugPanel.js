@@ -70,6 +70,7 @@ export class DebugPanel {
       `<span style="color:#8fa899">fps        </span><b style="color:${fpsColor}">${this.fps.toFixed(0)}</b>\n` +
       `<span style="color:#8fa899">camera     </span>${data.cameraMode}\n` +
       `<span style="color:#8fa899">draw calls </span>${data.drawCalls}\n` +
+      depthLine(data.depth) +
       `<span style="color:#8fa899">patches    </span>${s.visiblePatches} vis / ${s.activePatches} active\n` +
       `<span style="color:#8fa899">blades~    </span>${k(s.visibleBlades)}\n` +
       `<span style="color:#8fa899">LOD 0/1/2  </span>${lod[0]}/${lod[1]}/${lod[2]}  (${pct(lod[0])}/${pct(lod[1])}/${pct(lod[2])}%)\n` +
@@ -83,6 +84,15 @@ export class DebugPanel {
   dispose() {
     this.el.remove();
   }
+}
+
+function depthLine(depth) {
+  if (!depth) return "";
+  // reverse-z (green) when active; normal-z amber when reverse-Z was requested
+  // but unsupported, grey when never requested.
+  const color = depth.active ? "#7fdca0" : depth.requested ? "#e6c463" : "#8fa899";
+  const note = depth.active ? "" : depth.requested ? " (no EXT_clip_control)" : " (off)";
+  return `<span style="color:#8fa899">depth      </span><b style="color:${color}">${depth.mode}</b>${note}\n`;
 }
 
 function bushLines(bushes, k) {
