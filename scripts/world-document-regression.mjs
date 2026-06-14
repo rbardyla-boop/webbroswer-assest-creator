@@ -14,6 +14,14 @@ import { validatePrefabDocument } from "../src/prefabs/PrefabValidation.js";
 import { createBuiltinPrefabs, isBuiltinPrefab } from "../src/prefabs/BuiltinKits.js";
 import { buildVerticalSliceV1 } from "../src/world/samples/verticalSliceV1.js";
 import { getSampleWorld, VERTICAL_SLICE_ID } from "../src/world/samples/index.js";
+import {
+  buildWorldPack,
+  buildPlayableBuildPackage,
+  createAssetLibraryFromWorldPack,
+} from "../src/export/PlayableBuildExport.js";
+import { collectUsedAssetRefs, collectBuildAssets } from "../src/export/BuildAssetCollector.js";
+import { validateBuild } from "../src/export/BuildValidation.js";
+import { createZip, crc32 } from "../src/export/BuildZip.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -658,5 +666,150 @@ const gltfPrefab = validatePrefabDocument({
 assert.ok(gltfPrefab.prefab);
 assert.equal(gltfPrefab.prefab.objects[0].type, "gltf");
 assert.equal(gltfPrefab.prefab.kind, "asset");
+
+// --- Stage 8: playable build export -----------------------------------------
+
+// A world that mixes a primitive, an asset-backed relief (blob present), and an
+// object whose assetRef has no blob (missing). Spawn placed clear of geometry.
+const exportDoc = createWorldDocument({
+  metadata: { name: "Export World" },
+  player: { spawn: { x: -20, y: 0, z: -20 }, cameraMode: "third" },
+  objects: [
+    {
+      id: "obj-prim-export",
+      name: "Cube",
+      type: "primitive",
+      assetRef: "primitive-cube",
+      primitive: "cube",
+      transform: { position: { x: 0, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+    },
+    {
+      id: "obj-relief-export",
+      name: "Relief",
+      type: "relief",
+      assetRef: reliefAsset.id,
+      transform: { position: { x: 6, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+    },
+    {
+      id: "obj-missing-export",
+      name: "Ghost",
+      type: "image",
+      assetRef: "ghost-asset-xyz",
+      transform: { position: { x: 12, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+      collider: { type: "plane", enabled: true },
+      exclusion: { grass: false, trees: false },
+    },
+  ],
+});
+const exportSanitized = validateWorldDocument(exportDoc).document;
+
+// Only non-primitive refs are collected (primitives regenerate at runtime).
+const usedRefs = collectUsedAssetRefs(exportSanitized).sort();
+assert.deepEqual(usedRefs, [reliefAsset.id, "ghost-asset-xyz"].sort());
+
+// Collection embeds the relief blob, reports the missing one, excludes unused.
+const collected = await collectBuildAssets(exportSanitized, assetLibrary);
+assert.equal(collected.embedded.length, 1);
+assert.equal(collected.embedded[0].id, reliefAsset.id);
+assert.ok(collected.embedded[0].dataBase64.length > 0);
+assert.equal(collected.missing.length, 1);
+assert.equal(collected.missing[0].id, "ghost-asset-xyz");
+assert.ok(collected.unusedCount >= 1); // the duplicate relief is never referenced
+
+// Validation: runtime-safe (no errors), missing asset surfaced as a warning.
+const buildValidation = validateBuild(exportSanitized, collected);
+assert.equal(buildValidation.ok, true);
+assert.ok(buildValidation.warnings.some((w) => /ghost-asset-xyz/.test(w)));
+assert.ok(buildValidation.report.criteria.some((c) => c.id === "assets-resolve" && c.status === "WARN"));
+assert.ok(buildValidation.report.criteria.some((c) => c.id === "player-spawn-clear" && c.status === "PASS"));
+
+// Worldpack shape + manifest counts + deterministic timestamp passthrough.
+const worldpack = await buildWorldPack(exportDoc, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(worldpack.format, "world-builder-worldpack");
+assert.equal(worldpack.version, 1);
+assert.equal(worldpack.world.version, 2);
+assert.equal(worldpack.manifest.objectCount, 3);
+assert.equal(worldpack.manifest.assetCount, 1);
+assert.equal(worldpack.manifest.missingAssetCount, 1);
+assert.equal(worldpack.manifest.prefabCount, 0);
+assert.equal(worldpack.manifest.exportedAt, "2026-06-14T00:00:00.000Z");
+assert.ok(worldpack.manifest.requiredCapabilities.includes("webgl2"));
+assert.equal(worldpack.assets.length, 1);
+
+// Runtime loader compatibility: rebuild an AssetLibrary purely from the pack and
+// reconstruct the world. The relief resolves to real geometry; the missing
+// asset degrades to a placeholder (allowed by validation), never crashing.
+const consumed = await createAssetLibraryFromWorldPack(worldpack);
+assert.equal(consumed.document.version, 2);
+const consumedRelief = await consumed.assetLibrary.resolve(reliefAsset.id);
+assert.ok(consumedRelief && consumedRelief.geometry);
+const consumeManager = new WorldObjectManager(new THREE.Scene(), { assetLibrary: consumed.assetLibrary });
+await consumeManager.loadWorldObjects(consumed.document.objects);
+assert.equal(consumeManager.objects.size, 3);
+const consumedObjects = [...consumeManager.objects.values()];
+assert.equal(consumedObjects.find((o) => o.userData.assetRef === reliefAsset.id).userData.asset.type, "relief");
+assert.equal(consumedObjects.find((o) => o.userData.assetRef === "ghost-asset-xyz").userData.asset.type, "missing");
+
+// Playable build package: conceptual folder structure + embedded asset file.
+const pkgFiles = buildPlayableBuildPackage(worldpack);
+const pkgPaths = pkgFiles.map((f) => f.path);
+for (const required of [
+  "index.html",
+  "world.worldpack.json",
+  "world/world.json",
+  "world/manifest.json",
+  "docs/README.txt",
+  "docs/validation-report.json",
+]) {
+  assert.ok(pkgPaths.includes(required), `playable build package missing ${required}`);
+}
+assert.ok(pkgPaths.some((p) => p.startsWith("assets/"))); // the embedded relief blob
+
+// Store-only zip writer: valid signatures, correct entry count, CRC32 vector.
+const zipBytes = createZip(pkgFiles);
+assert.ok(zipBytes instanceof Uint8Array && zipBytes.length > 0);
+assert.equal(new DataView(zipBytes.buffer).getUint32(0, true), 0x04034b50); // local file header
+const eocdView = new DataView(zipBytes.buffer, zipBytes.length - 22);
+assert.equal(eocdView.getUint32(0, true), 0x06054b50); // end of central directory
+assert.equal(eocdView.getUint16(10, true), pkgFiles.length); // total entries
+assert.equal(crc32(new TextEncoder().encode("hello")), 0x3610a686); // known CRC-32 vector
+
+// Vertical slice exports as a clean playable build: primitives only, no missing
+// assets, validation passes, world stays WorldDocument v2.
+const sliceWorldpack = await buildWorldPack(sliceDoc, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(sliceWorldpack.manifest.assetCount, 0);
+assert.equal(sliceWorldpack.manifest.missingAssetCount, 0);
+assert.equal(sliceWorldpack.report.ok, true);
+assert.equal(sliceWorldpack.manifest.objectCount, sliceDoc.objects.length);
+assert.equal(sliceWorldpack.world.version, 2);
+assert.ok(buildPlayableBuildPackage(sliceWorldpack).every((f) => f.path && (f.text !== undefined || f.bytes)));
+
+// Hardening: an untrusted worldpack (malicious worldName / asset id) must not
+// produce a launcher that breaks out of its inline <script>, nor zip paths that
+// traverse out of the package on extraction.
+const hostilePackage = buildPlayableBuildPackage({
+  manifest: {
+    format: "world-builder-worldpack",
+    worldName: "</script><script>alert(1)</script>",
+    objectCount: 0,
+    assetCount: 1,
+    missingAssetCount: 0,
+    prefabCount: 0,
+    exportedAt: "2026-06-14T00:00:00.000Z",
+    requiredCapabilities: ["webgl2"],
+    assetReferences: [],
+  },
+  world: { version: 2 },
+  assets: [{ id: "../../evil", type: "image", name: "e", mimeType: "image/png", sizeBytes: 3, dataBase64: "AQID" }],
+  report: { ok: true, errors: [], warnings: [], criteria: [] },
+});
+const hostileLauncher = hostilePackage.find((f) => f.path === "index.html").text;
+assert.ok(!/<\/script><script>alert/i.test(hostileLauncher), "launcher must neutralize </script> from worldName");
+const hostileAsset = hostilePackage.find((f) => f.path.startsWith("assets/"));
+assert.ok(!hostileAsset.path.includes(".."), "zip asset paths must not contain path traversal");
 
 console.log("world document regression checks passed");

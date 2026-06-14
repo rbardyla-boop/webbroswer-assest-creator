@@ -24,6 +24,7 @@ import { WorldSerializer } from "./world/WorldSerializer.js";
 import { AssetLibrary } from "./assets/AssetLibrary.js";
 import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
 import { getSampleWorld } from "./world/samples/index.js";
+import { createAssetLibraryFromWorldPack } from "./export/PlayableBuildExport.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -33,6 +34,7 @@ const hintEl = document.getElementById("hint");
 const urlParams = new URLSearchParams(window.location.search);
 const runtimeMode = urlParams.has("runtime") || urlParams.has("play");
 const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
+const worldpackParam = urlParams.get("worldpack"); // url of an exported .worldpack.json
 
 window.__WORLD_READY__ = false;
 window.__WORLD_MODE__ = runtimeMode ? "runtime" : "editor";
@@ -118,13 +120,39 @@ let editor = null;
 
 async function boot() {
   assetLibrary = await new AssetLibrary().init();
-  worldLoader = new WorldRuntimeLoader({ scene, lights, fog: scene.fog, colliderSystem: colliders, assetLibrary });
-  // Priority: explicit ?world= sample → saved world → empty default.
-  let initialDoc = worldParam ? getSampleWorld(worldParam) : null;
+
+  // Priority: ?worldpack= export → ?world= sample → saved world → empty default.
+  // A worldpack carries its own embedded assets, so it brings its own runtime
+  // asset library (no IndexedDB needed) for the loader to resolve against.
+  let initialDoc = null;
+  let runtimeAssetLibrary = assetLibrary;
+  if (worldpackParam) {
+    try {
+      const response = await fetch(worldpackParam);
+      if (!response.ok) throw new Error(`worldpack fetch failed: HTTP ${response.status}`);
+      const pack = await response.json();
+      const loaded = await createAssetLibraryFromWorldPack(pack);
+      if (loaded.document) {
+        initialDoc = loaded.document;
+        runtimeAssetLibrary = loaded.assetLibrary;
+      }
+    } catch (error) {
+      console.error("Failed to load worldpack; falling back to the default world.", error);
+    }
+  }
+  if (!initialDoc) initialDoc = worldParam ? getSampleWorld(worldParam) : null;
   if (!initialDoc) {
     const savedWorld = worldSerializer.load();
     initialDoc = savedWorld?.document ?? createWorldDocument();
   }
+
+  worldLoader = new WorldRuntimeLoader({
+    scene,
+    lights,
+    fog: scene.fog,
+    colliderSystem: colliders,
+    assetLibrary: runtimeAssetLibrary,
+  });
   world = await worldLoader.load(initialDoc);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;

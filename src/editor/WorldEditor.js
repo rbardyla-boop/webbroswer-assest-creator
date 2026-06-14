@@ -6,6 +6,8 @@ import { ReliefAssetTool } from "./ReliefAssetTool.js";
 import { getCollider } from "../physics/ColliderProxy.js";
 import { WorldSerializer } from "../world/WorldSerializer.js";
 import { exportWorldDocument, importWorldDocumentFile } from "../world/WorldExport.js";
+import { downloadWorldPack, downloadPlayableBuildZip } from "../export/PlayableBuildExport.js";
+import { summarizeExport } from "../export/BuildReport.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
@@ -60,6 +62,7 @@ export class WorldEditor {
     this.prefabLibrary = prefabLibrary ?? new PrefabLibrary();
     this.prefabInstancer = new PrefabInstancer(objectManager);
     this.armedPrefab = null;
+    this.lastExportReport = null;
 
     this.manager = objectManager;
     this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
@@ -259,6 +262,13 @@ export class WorldEditor {
       onDeletePrefab: (id) => this._deletePrefab(id),
     });
     root.appendChild(this._section("Prefabs", this.prefabPanel.root));
+
+    const buildActions = document.createElement("div");
+    Object.assign(buildActions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
+    buildActions.appendChild(this._button("Export Playable Build", () => this._exportPlayableBuild()));
+    buildActions.appendChild(this._button("Export WorldPack", () => this._exportWorldPack()));
+    buildActions.appendChild(this._button("Show Last Export Report", () => this._showLastExportReport()));
+    root.appendChild(this._section("Playable Build", buildActions));
 
     this.colliderInspector = new ColliderInspector({
       onChange: (collider) => {
@@ -694,6 +704,67 @@ export class WorldEditor {
       console.error("Failed to import world", error);
       this.selectionLabel.textContent = `Could not import ${file.name}.`;
     }
+  }
+
+  // --- playable build export --------------------------------------------------
+
+  // Current world document for export: same path as Save/Export World, including
+  // the user prefab manifest. Built-in kits regenerate locally so they are not
+  // embedded (see PrefabLibrary.createManifest).
+  _documentForExport() {
+    const worldDoc = this.worldLoader.updateDocumentFromRuntime({
+      player: this.player,
+      cameraController: this.cameraController,
+    });
+    worldDoc.prefabs = this.prefabLibrary.createManifest();
+    return worldDoc;
+  }
+
+  async _exportWorldPack() {
+    try {
+      const worldpack = await downloadWorldPack(this._documentForExport(), this.assetLibrary, {
+        exportedAt: new Date().toISOString(),
+      });
+      this.lastExportReport = worldpack;
+      this._setExportStatus(worldpack, "worldpack");
+    } catch (error) {
+      console.error("WorldPack export failed", error);
+      this.selectionLabel.textContent = "WorldPack export failed.";
+    }
+  }
+
+  async _exportPlayableBuild() {
+    try {
+      const worldpack = await downloadPlayableBuildZip(this._documentForExport(), this.assetLibrary, {
+        exportedAt: new Date().toISOString(),
+      });
+      this.lastExportReport = worldpack;
+      this._setExportStatus(worldpack, "playable build .zip");
+    } catch (error) {
+      console.error("Playable build export failed", error);
+      this.selectionLabel.textContent = "Playable build export failed.";
+    }
+  }
+
+  _setExportStatus(worldpack, label) {
+    const m = worldpack.manifest;
+    const verdict = worldpack.report.ok ? "PASS" : "FAIL";
+    const missing = m.missingAssetCount ? `, ${m.missingAssetCount} missing` : "";
+    this.selectionLabel.textContent =
+      `Exported ${label}: ${m.objectCount} object(s), ${m.assetCount} asset(s)${missing}, validation ${verdict}.`;
+    console.log(summarizeExport(m, worldpack.report));
+  }
+
+  _showLastExportReport() {
+    if (!this.lastExportReport) {
+      this.selectionLabel.textContent = "No export yet — use Export WorldPack or Export Playable Build first.";
+      return;
+    }
+    const { manifest, report } = this.lastExportReport;
+    const summary = summarizeExport(manifest, report);
+    console.log("Last export report", report);
+    if (typeof alert === "function") alert(summary);
+    this.selectionLabel.textContent = summary.split("\n")[0] + " — full report in console.";
   }
 
   _refreshSelectionLabel() {

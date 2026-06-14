@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Reusable high-performance Three.js grass system with a capsule character, FP/TP cameras, and an in-browser image-to-3D relief editor.",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
