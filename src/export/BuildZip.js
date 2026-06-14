@@ -88,7 +88,62 @@ export function createZip(files) {
 }
 
 function normalizePath(path) {
-  return String(path ?? "").replace(/\\/g, "/").replace(/^\/+/, "");
+  // Strip backslashes, leading slashes, and any ".." segment so a crafted zip
+  // entry name cannot be read (or later written) as a traversal path.
+  return String(path ?? "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/(^|\/)\.\.(?=\/|$)/g, "$1_");
+}
+
+const textDecoder = new TextDecoder();
+
+/**
+ * Read a store-only (method 0) zip into { path, bytes } entries via the central
+ * directory. Compressed entries are skipped (this writer only stores). Paths are
+ * returned normalized; callers must still sanitize before writing to disk.
+ * @param {Uint8Array} bytes
+ * @returns {{ path: string, bytes: Uint8Array }[]}
+ */
+export function readZip(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 22) return [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const eocd = findEocd(bytes, view);
+  if (eocd < 0) return [];
+  const count = view.getUint16(eocd + 10, true);
+  let pointer = view.getUint32(eocd + 16, true); // central directory offset
+  const entries = [];
+
+  for (let i = 0; i < count; i++) {
+    if (pointer + 46 > bytes.length || view.getUint32(pointer, true) !== CENTRAL_SIG) break;
+    const method = view.getUint16(pointer + 10, true);
+    const compSize = view.getUint32(pointer + 20, true);
+    const nameLen = view.getUint16(pointer + 28, true);
+    const extraLen = view.getUint16(pointer + 30, true);
+    const commentLen = view.getUint16(pointer + 32, true);
+    const localOffset = view.getUint32(pointer + 42, true);
+    const name = textDecoder.decode(bytes.subarray(pointer + 46, pointer + 46 + nameLen));
+    pointer += 46 + nameLen + extraLen + commentLen;
+
+    if (method !== 0) continue; // only store is supported
+    if (localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== LOCAL_SIG) continue;
+    const localNameLen = view.getUint16(localOffset + 26, true);
+    const localExtraLen = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+    if (dataStart + compSize > bytes.length) continue;
+    entries.push({ path: normalizePath(name), bytes: bytes.slice(dataStart, dataStart + compSize) });
+  }
+  return entries;
+}
+
+function findEocd(bytes, view) {
+  // Scan backward for the EOCD signature (no zip comment in our writer, but be
+  // tolerant of one up to the 16-bit comment-length max).
+  const min = Math.max(0, bytes.length - 22 - 0xffff);
+  for (let i = bytes.length - 22; i >= min; i--) {
+    if (view.getUint32(i, true) === EOCD_SIG) return i;
+  }
+  return -1;
 }
 
 function concatBytes(parts) {

@@ -25,6 +25,7 @@ import { AssetLibrary } from "./assets/AssetLibrary.js";
 import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
 import { getSampleWorld } from "./world/samples/index.js";
 import { createAssetLibraryFromWorldPack } from "./export/PlayableBuildExport.js";
+import { ModRegistry } from "./mods/ModRegistry.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -35,6 +36,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const runtimeMode = urlParams.has("runtime") || urlParams.has("play");
 const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
 const worldpackParam = urlParams.get("worldpack"); // url of an exported .worldpack.json
+const modParam = urlParams.get("mod"); // id of an installed mod package to play
 
 window.__WORLD_READY__ = false;
 window.__WORLD_MODE__ = runtimeMode ? "runtime" : "editor";
@@ -121,14 +123,28 @@ let editor = null;
 async function boot() {
   assetLibrary = await new AssetLibrary().init();
 
-  // Priority: ?worldpack= export → ?world= sample → saved world → empty default.
-  // A worldpack carries its own embedded assets, so it brings its own runtime
-  // asset library (no IndexedDB needed) for the loader to resolve against.
+  // Priority: ?mod= installed mod → ?worldpack= export → ?world= sample →
+  // saved world → empty default. A worldpack carries its own embedded assets, so
+  // it brings its own runtime asset library (no IndexedDB needed); a mod's assets
+  // were imported into the local library on install, so it uses the global one.
   let initialDoc = null;
   let runtimeAssetLibrary = assetLibrary;
-  if (worldpackParam) {
+  if (modParam) {
     try {
-      const response = await fetch(worldpackParam);
+      const registry = await new ModRegistry().init();
+      const modWorld = registry.getModWorld(modParam);
+      if (modWorld?.document) initialDoc = modWorld.document;
+      else console.warn(`Mod "${modParam}" is not installed or has no loadable world.`);
+    } catch (error) {
+      console.error("Failed to load mod world; falling back.", error);
+    }
+  }
+  if (!initialDoc && worldpackParam) {
+    try {
+      // Only fetch a same-origin worldpack — never an attacker-supplied remote URL.
+      const packUrl = new URL(worldpackParam, window.location.href);
+      if (packUrl.origin !== window.location.origin) throw new Error("worldpack must be same-origin");
+      const response = await fetch(packUrl);
       if (!response.ok) throw new Error(`worldpack fetch failed: HTTP ${response.status}`);
       const pack = await response.json();
       const loaded = await createAssetLibraryFromWorldPack(pack);
@@ -173,6 +189,7 @@ async function boot() {
     const prefabLibrary = await new PrefabLibrary().init();
     // Bring any prefabs embedded in the initially-loaded world into the library.
     await prefabLibrary.importManifest(world.document.prefabs);
+    const modRegistry = await new ModRegistry().init();
     const { WorldEditor } = await import("./editor/WorldEditor.js");
     editor = new WorldEditor({
       scene,
@@ -191,6 +208,7 @@ async function boot() {
       treeSystem: trees,
       getTreeStats: () => trees.stats,
       prefabLibrary,
+      modRegistry,
       onLoadWorld: applyLoadedWorld,
       onWorldChanged: handleWorldChanged,
       onOpen: () => {

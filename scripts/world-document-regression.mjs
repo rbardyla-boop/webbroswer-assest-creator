@@ -21,7 +21,13 @@ import {
 } from "../src/export/PlayableBuildExport.js";
 import { collectUsedAssetRefs, collectBuildAssets } from "../src/export/BuildAssetCollector.js";
 import { validateBuild } from "../src/export/BuildValidation.js";
-import { createZip, crc32 } from "../src/export/BuildZip.js";
+import { createZip, crc32, readZip } from "../src/export/BuildZip.js";
+import { buildWorldMod, buildModFiles } from "../src/mods/ModExporter.js";
+import { assembleModPackage } from "../src/mods/ModPackage.js";
+import { validateModPackage } from "../src/mods/ModValidation.js";
+import { parseModPackage } from "../src/mods/ModImporter.js";
+import { ModRegistry } from "../src/mods/ModRegistry.js";
+import { createModPackage } from "../src/mods/ModManifest.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -76,6 +82,20 @@ class MemoryAssetStore {
   async deleteAsset(id) {
     this.metadata.delete(id);
     this.blobs.delete(id);
+  }
+}
+
+class MemoryModStore {
+  constructor() {
+    this.entries = [];
+  }
+
+  async load() {
+    return this.entries.map((entry) => structuredClone(entry));
+  }
+
+  async save(entries) {
+    this.entries = (entries ?? []).map((entry) => structuredClone(entry));
   }
 }
 
@@ -811,5 +831,157 @@ const hostileLauncher = hostilePackage.find((f) => f.path === "index.html").text
 assert.ok(!/<\/script><script>alert/i.test(hostileLauncher), "launcher must neutralize </script> from worldName");
 const hostileAsset = hostilePackage.find((f) => f.path.startsWith("assets/"));
 assert.ok(!hostileAsset.path.includes(".."), "zip asset paths must not contain path traversal");
+
+// --- Stage 9: mod packages (data-only) --------------------------------------
+
+const modPrefabLib = await new PrefabLibrary({ store: new MemoryPrefabStore() }).init();
+
+// Export the vertical slice as a mod package: one self-contained worldpack +
+// built-in kit references (metadata only), no external assets.
+const sliceMod = await buildWorldMod(sliceDoc, assetLibrary, modPrefabLib, {
+  name: "Slice Mod",
+  author: "tester",
+  exportedAt: "2026-06-14T00:00:00.000Z",
+});
+assert.equal(sliceMod.format, "grass-world-mod-v1");
+assert.equal(sliceMod.version, 1);
+assert.ok(sliceMod.id.startsWith("mod-"));
+assert.equal(sliceMod.signature, null); // no signing in v1
+assert.equal(sliceMod.contents.worldpacks.length, 1);
+assert.equal(sliceMod.contents.worldpacks[0].world.version, 2);
+assert.ok(sliceMod.contents.kits.length >= 1); // built-in kits referenced
+assert.equal(sliceMod.contents.assets.length, 0); // slice is primitives-only
+assert.equal(validateModPackage(sliceMod).ok, true);
+
+// Reject invalid format.
+assert.equal(validateModPackage({ format: "not-a-mod", version: 1, id: "x", name: "x" }).ok, false);
+
+// Reject executable/prohibited fields (nested and top-level).
+const scriptInWorld = createModPackage({ name: "Hostile" });
+scriptInWorld.contents.worlds.push({ version: 2, objects: [], script: "alert(1)" });
+const scriptResult = validateModPackage(scriptInWorld);
+assert.equal(scriptResult.ok, false);
+assert.ok(scriptResult.errors.some((e) => /prohibited|executable/i.test(e)));
+assert.equal(validateModPackage({ ...createModPackage({ name: "H2" }), code: "evil()" }).ok, false);
+
+// Reject path traversal in an asset id.
+const traversalMod = createModPackage({ name: "Traversal" });
+traversalMod.contents.assets.push({ id: "../../etc/passwd", type: "image", mimeType: "image/png", dataBase64: "AQID" });
+const traversalResult = validateModPackage(traversalMod);
+assert.equal(traversalResult.ok, false);
+assert.ok(traversalResult.errors.some((e) => /traversal|path/i.test(e)));
+
+// Import a valid mod from JSON and from a zip (both round-trip to the same id).
+const fromJson = parseModPackage(JSON.stringify(sliceMod));
+assert.ok(fromJson.modpack);
+assert.equal(fromJson.validation.ok, true);
+assert.equal(fromJson.modpack.id, sliceMod.id);
+
+const modFiles = buildModFiles(sliceMod);
+assert.ok(modFiles.some((f) => f.path === "mod.modpack.json"));
+assert.ok(modFiles.every((f) => !f.path.includes(".."))); // safe zip paths
+const modZipBytes = createZip(modFiles);
+assert.ok(readZip(modZipBytes).some((e) => e.path === "mod.modpack.json"));
+const fromZip = parseModPackage(modZipBytes);
+assert.ok(fromZip.modpack);
+assert.equal(fromZip.modpack.id, sliceMod.id);
+
+// Install into a registry → registry round-trip → runtime loader consumes the
+// imported mod world (vertical slice rebuilds with all objects).
+const modRegistry = await new ModRegistry({ store: new MemoryModStore() }).init();
+const installPrefabLib = await new PrefabLibrary({ store: new MemoryPrefabStore() }).init();
+const installed = await modRegistry.install(sliceMod, { assetLibrary, prefabLibrary: installPrefabLib });
+assert.equal(installed.entry.id, sliceMod.id);
+assert.equal(installed.entry.counts.worlds, 1);
+assert.equal(installed.entry.enabled, true);
+
+const reloadedRegistry = await new ModRegistry({ store: modRegistry.store }).init();
+assert.ok(reloadedRegistry.get(sliceMod.id));
+assert.equal(reloadedRegistry.list().length, 1);
+
+const modWorld = reloadedRegistry.getModWorld(sliceMod.id);
+assert.ok(modWorld.document);
+const modScene = new THREE.Scene();
+const modManager = new WorldObjectManager(modScene, { assetLibrary });
+await modManager.loadWorldObjects(validateWorldDocument(modWorld.document).document.objects);
+assert.equal(modManager.objects.size, sliceDoc.objects.length);
+
+// enable/disable + uninstall (keeps contributed content; reports it).
+assert.equal((await reloadedRegistry.setEnabled(sliceMod.id, false)).enabled, false);
+const uninstalled = await reloadedRegistry.uninstall(sliceMod.id);
+assert.equal(uninstalled.id, sliceMod.id);
+assert.equal(reloadedRegistry.get(sliceMod.id), null);
+
+// Duplicate-id conflict: install must NOT overwrite an existing local asset.
+const dupMod = assembleModPackage({
+  name: "Dup Asset Mod",
+  assets: [{ id: reliefAsset.id, type: "relief", name: "Should Not Win", mimeType: "application/json", sizeBytes: 4, dataBase64: "AQID" }],
+});
+assert.equal(validateModPackage(dupMod).ok, true);
+const beforeName = assetLibrary.get(reliefAsset.id).name;
+const dupRegistry = await new ModRegistry({ store: new MemoryModStore() }).init();
+const dupInstall = await dupRegistry.install(dupMod, { assetLibrary, prefabLibrary: installPrefabLib });
+assert.ok(dupInstall.warnings.some((w) => w.includes(reliefAsset.id) && /already exists/.test(w)));
+assert.equal(assetLibrary.get(reliefAsset.id).name, beforeName); // untouched
+
+// Missing imported asset → placeholder at load, never a crash or hard reject.
+const missingMod = assembleModPackage({
+  name: "Missing Asset Mod",
+  worlds: [
+    createWorldDocument({
+      objects: [
+        {
+          id: "obj-ghost-mod",
+          name: "Ghost",
+          type: "image",
+          assetRef: "ghost-mod-asset",
+          transform: { position: { x: 0, y: 1, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+          collider: { type: "plane", enabled: true },
+          exclusion: { grass: false, trees: false },
+        },
+      ],
+    }),
+  ],
+});
+assert.equal(validateModPackage(missingMod).ok, true);
+const missingRegistry = await new ModRegistry({ store: new MemoryModStore() }).init();
+await missingRegistry.install(missingMod, { assetLibrary, prefabLibrary: installPrefabLib });
+const ghostWorld = missingRegistry.getModWorld(missingMod.id);
+const ghostManager = new WorldObjectManager(new THREE.Scene(), { assetLibrary });
+await ghostManager.loadWorldObjects(validateWorldDocument(ghostWorld.document).document.objects);
+assert.equal(ghostManager.objects.size, 1);
+assert.equal([...ghostManager.objects.values()][0].userData.asset.type, "missing");
+
+// Security hardening (from adversarial review):
+// Prohibited key at array index 0 followed by many fillers is still caught
+// (scan examines index 0 first; it cannot be starved by trailing entries).
+const evilFirst = createModPackage({ name: "EvilFirst" });
+evilFirst.contents.assets = [{ id: "evil", script: "payload" }, ...Array.from({ length: 4000 }, (_, i) => ({ id: `f${i}` }))];
+const evilResult = validateModPackage(evilFirst);
+assert.equal(evilResult.ok, false);
+assert.ok(evilResult.errors.some((e) => /prohibited|executable/i.test(e)));
+
+// Excessive content record count is rejected before deep work.
+const huge = createModPackage({ name: "Huge" });
+huge.contents.assets = Array.from({ length: 5001 }, (_, i) => ({ id: `a${i}` }));
+assert.equal(validateModPackage(huge).ok, false);
+assert.ok(validateModPackage(huge).errors.some((e) => /content records/i.test(e)));
+
+// Executable / markup MIME types are rejected.
+const htmlMime = createModPackage({ name: "HtmlMime" });
+htmlMime.contents.assets = [{ id: "x", type: "image", mimeType: "text/html", dataBase64: "AQID" }];
+assert.equal(validateModPackage(htmlMime).ok, false);
+
+// A JSON-parsed __proto__ key is rejected and never pollutes Object.prototype.
+const protoParsed = parseModPackage(
+  '{"format":"grass-world-mod-v1","version":1,"id":"p","name":"Proto","contents":{"worlds":[{"version":2,"objects":[],"__proto__":{"polluted":true}}]}}'
+);
+assert.equal(protoParsed.validation.ok, false);
+assert.equal(protoParsed.modpack, null);
+assert.equal({}.polluted, undefined); // no prototype pollution occurred
+
+// Zip entry names are stripped of traversal segments on read.
+const slipZip = createZip([{ path: "a/../evil.txt", text: "x" }]);
+assert.ok(readZip(slipZip).every((e) => !e.path.includes("..")));
 
 console.log("world document regression checks passed");

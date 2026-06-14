@@ -8,6 +8,10 @@ import { WorldSerializer } from "../world/WorldSerializer.js";
 import { exportWorldDocument, importWorldDocumentFile } from "../world/WorldExport.js";
 import { downloadWorldPack, downloadPlayableBuildZip } from "../export/PlayableBuildExport.js";
 import { summarizeExport } from "../export/BuildReport.js";
+import { ModRegistry } from "../mods/ModRegistry.js";
+import { ModPanel } from "./ModPanel.js";
+import { importModFile } from "../mods/ModImporter.js";
+import { downloadModPackage, downloadModPackageZip } from "../mods/ModExporter.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
@@ -34,6 +38,7 @@ export class WorldEditor {
     getGrassStats,
     getTreeStats,
     prefabLibrary,
+    modRegistry,
     onLoadWorld,
     onWorldChanged,
     onOpen,
@@ -63,6 +68,7 @@ export class WorldEditor {
     this.prefabInstancer = new PrefabInstancer(objectManager);
     this.armedPrefab = null;
     this.lastExportReport = null;
+    this.modRegistry = modRegistry ?? new ModRegistry();
 
     this.manager = objectManager;
     this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
@@ -228,6 +234,12 @@ export class WorldEditor {
     this.worldFileInput.style.display = "none";
     root.appendChild(this.worldFileInput);
 
+    this.modFileInput = document.createElement("input");
+    this.modFileInput.type = "file";
+    this.modFileInput.accept = ".modpack.json,.modpack.zip,.json,.zip,application/json,application/zip";
+    this.modFileInput.style.display = "none";
+    root.appendChild(this.modFileInput);
+
     const modes = document.createElement("div");
     Object.assign(modes.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     modes.appendChild(this._button("Move", () => this.transform.setMode("translate")));
@@ -269,6 +281,18 @@ export class WorldEditor {
     buildActions.appendChild(this._button("Export WorldPack", () => this._exportWorldPack()));
     buildActions.appendChild(this._button("Show Last Export Report", () => this._showLastExportReport()));
     root.appendChild(this._section("Playable Build", buildActions));
+
+    this.modPanel = new ModPanel({
+      registry: this.modRegistry,
+      onImport: () => this.modFileInput.click(),
+      onExportJson: () => this._exportWorldAsMod(false),
+      onExportZip: () => this._exportWorldAsMod(true),
+      onLoadWorld: (id) => this._loadModWorld(id),
+      onShowDetails: (id) => this._showModDetails(id),
+      onDelete: (id) => this._deleteMod(id),
+      onToggleEnabled: (id, enabled) => this._toggleMod(id, enabled),
+    });
+    root.appendChild(this._section("Mods", this.modPanel.root));
 
     this.colliderInspector = new ColliderInspector({
       onChange: (collider) => {
@@ -467,6 +491,12 @@ export class WorldEditor {
     this.worldFileInput.addEventListener("change", async (event) => {
       const file = event.target.files?.[0];
       if (file) await this._importWorld(file);
+      event.target.value = "";
+    });
+
+    this.modFileInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await this._handleModFile(file);
       event.target.value = "";
     });
   }
@@ -765,6 +795,96 @@ export class WorldEditor {
     console.log("Last export report", report);
     if (typeof alert === "function") alert(summary);
     this.selectionLabel.textContent = summary.split("\n")[0] + " — full report in console.";
+  }
+
+  // --- mods -------------------------------------------------------------------
+
+  async _handleModFile(file) {
+    try {
+      const { modpack, validation, fileName } = await importModFile(file);
+      if (!validation.ok || !modpack) {
+        this.modPanel.setStatus(`Rejected ${fileName}:\n${validation.errors.join("\n")}`);
+        return;
+      }
+      const { entry, warnings } = await this.modRegistry.install(modpack, {
+        assetLibrary: this.assetLibrary,
+        prefabLibrary: this.prefabLibrary,
+      });
+      this.modPanel.refresh();
+      this.prefabPanel?.refresh();
+      this._renderAssetList();
+      const warnLine = warnings.length ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : "";
+      this.modPanel.setStatus(`Installed "${entry.name}"${warnLine}. ${entry.counts.worlds} world(s) available.`);
+    } catch (error) {
+      console.error("Mod import failed", error);
+      this.modPanel.setStatus(`Mod import failed: ${error.message}`);
+    }
+  }
+
+  async _exportWorldAsMod(asZip) {
+    const name = prompt("Mod name", this._documentForExport().metadata?.name || "My World Mod");
+    if (name === null) return;
+    const author = prompt("Author (optional)", "") ?? "";
+    const meta = { name: name || "My World Mod", author, exportedAt: new Date().toISOString() };
+    try {
+      const download = asZip ? downloadModPackageZip : downloadModPackage;
+      const modpack = await download(this._documentForExport(), this.assetLibrary, this.prefabLibrary, meta);
+      const verdict = modpack.report?.ok ? "valid" : "INVALID";
+      this.modPanel.setStatus(`Exported mod "${modpack.name}" (${asZip ? ".zip" : ".json"}) — ${verdict}, ${modpack.warnings.length} warning(s).`);
+    } catch (error) {
+      console.error("Mod export failed", error);
+      this.modPanel.setStatus(`Mod export failed: ${error.message}`);
+    }
+  }
+
+  async _loadModWorld(id) {
+    const world = this.modRegistry.getModWorld(id);
+    if (!world?.document) {
+      this.modPanel.setStatus("That mod has no loadable world.");
+      return;
+    }
+    this._clearSelection();
+    await this._mergePrefabManifest(world.document);
+    await this.onLoadWorld?.(world.document);
+    this.modPanel.setStatus(`Loaded mod world "${world.name}" (${world.document.objects?.length ?? 0} objects).`);
+  }
+
+  _showModDetails(id) {
+    const entry = this.modRegistry.get(id);
+    if (!entry) return;
+    const c = entry.counts ?? {};
+    const lines = [
+      `${entry.name}  (v${entry.version})`,
+      `Author: ${entry.author || "(unknown)"}`,
+      entry.description ? `\n${entry.description}\n` : "",
+      `Worlds ${c.worlds} · Assets ${c.assets} · Prefabs ${c.prefabs} · Kits ${c.kits}`,
+      `Contributed: ${entry.contributed.assetIds.length} asset(s), ${entry.contributed.prefabIds.length} prefab(s)`,
+      `Installed ${entry.installedAt}`,
+      ...(entry.warnings?.length ? ["", "Warnings:", ...entry.warnings.map((w) => `• ${w}`)] : []),
+    ];
+    const text = lines.filter((l) => l !== "").join("\n");
+    console.log("Mod details", entry);
+    if (typeof alert === "function") alert(text);
+    this.modPanel.setStatus(`${entry.name}: ${c.worlds} world(s), ${entry.warnings?.length ?? 0} warning(s) — details in console.`);
+  }
+
+  async _deleteMod(id) {
+    const entry = this.modRegistry.get(id);
+    if (!entry) return;
+    const refs = this.modRegistry.referencesInWorld(id, { objects: this.manager.serializeWorldObjects() });
+    const inUse = refs.assetIds.length + refs.prefabIds.length;
+    const warn = inUse
+      ? `\n\nWARNING: the current world references ${inUse} item(s) from this mod; they will show as placeholders if you remove the mod's assets.`
+      : "";
+    if (!confirm(`Uninstall mod "${entry.name}"? Imported assets/prefabs are kept in your libraries.${warn}`)) return;
+    await this.modRegistry.uninstall(id);
+    this.modPanel.refresh();
+    this.modPanel.setStatus(`Uninstalled "${entry.name}". Its assets/prefabs were kept locally.`);
+  }
+
+  async _toggleMod(id, enabled) {
+    await this.modRegistry.setEnabled(id, enabled);
+    this.modPanel.refresh();
   }
 
   _refreshSelectionLabel() {
