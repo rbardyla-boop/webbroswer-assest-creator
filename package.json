@@ -19,6 +19,7 @@
     "test:lighting": "node scripts/browser-lighting-proof.mjs",
     "test:particles": "node scripts/browser-particles-proof.mjs",
     "test:vegetation": "node scripts/browser-vegetation-proof.mjs",
+    "test:bush": "node scripts/browser-bush-proof.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",
     "qa": "npm run qa:skills && npm run build && npm run qa:browser"

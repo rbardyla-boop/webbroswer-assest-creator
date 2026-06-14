@@ -45,6 +45,9 @@ import { applyLighting } from "../src/lighting/LightingRig.js";
 import { GrassMaterial } from "../src/grass/GrassMaterial.js";
 import { createGrassConfig } from "../src/grass/GrassConfig.js";
 import { generatePatchInstances } from "../src/grass/GrassPlacement.js";
+import { generateBushPatchData } from "../src/bushes/BushPlacement.js";
+import { BushSystem } from "../src/bushes/BushSystem.js";
+import { createBushConfig } from "../src/bushes/BushConfig.js";
 import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
 import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
 
@@ -1721,5 +1724,67 @@ vegMat.syncVegetation();
 assert.equal(vegMat.material.uniforms.uDistanceTint.value, 0.1);
 assert.equal(vegMat.material.uniforms.uFresnelIntensity.value, 0.2);
 vegMat.dispose();
+
+// --- Stage 14B: bush layer ---------------------------------------------------
+
+// Bush config round-trip: validates (clamped) and survives worldpack.
+const bushDoc = validateWorldDocument(createWorldDocument({ bushes: { density: 0.09, clumpStrength: 0.7, seed: 4242, slopeLimit: 5, visibleDistance: 140 } }));
+assert.equal(bushDoc.warnings.length, 0);
+assert.equal(bushDoc.document.bushes.density, 0.09);
+assert.equal(bushDoc.document.bushes.clumpStrength, 0.7);
+assert.equal(bushDoc.document.bushes.seed, 4242);
+assert.equal(bushDoc.document.bushes.slopeLimit, 1); // clamp01 (5 → 1)
+assert.equal(bushDoc.document.bushes.keepDistance, 165); // max(visible, default)
+const bushPack = await buildWorldPack(bushDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(bushPack.world.bushes.density, 0.09);
+assert.equal(bushPack.world.bushes.seed, 4242);
+
+// Placement: deterministic for a fixed seed/config; clumping thins the field.
+const bcfg = createBushConfig({ slopeLimit: 1, clumpStrength: 0 });
+let bgx = 0;
+let bgz = 0;
+let bpd = generateBushPatchData(0, 0, bcfg);
+for (let g = 1; bpd.count === 0 && g < 24; g++) {
+  bpd = generateBushPatchData(g, g, bcfg);
+  bgx = g;
+  bgz = g;
+}
+assert.ok(bpd.count > 0, "found a populated bush patch");
+const bpd2 = generateBushPatchData(bgx, bgz, bcfg);
+assert.equal(bpd.count, bpd2.count); // deterministic count
+assert.ok(bpd.matrices[0].elements.every((v, i) => Math.abs(v - bpd2.matrices[0].elements[i]) < 1e-9)); // deterministic matrices
+
+const bcfgClump = createBushConfig({ slopeLimit: 1, clumpStrength: 0.9 });
+let bBaseTotal = 0;
+let bClumpTotal = 0;
+for (let g = 0; g < 12; g++) {
+  bBaseTotal += generateBushPatchData(g, g + 1, bcfg).count;
+  bClumpTotal += generateBushPatchData(g, g + 1, bcfgClump).count;
+}
+assert.ok(bBaseTotal > 0, "found populated bush patches");
+assert.ok(bClumpTotal < bBaseTotal, "bush clumping thins the aggregate field");
+
+// Candidate count is capped, so a hostile density can't spin a huge loop.
+const floodBush = generateBushPatchData(0, 0, createBushConfig({ density: 1e6, patchSize: 100, slopeLimit: 1, clumpStrength: 0 }));
+assert.ok(floodBush.count <= 4096, `bush candidate count capped, got ${floodBush.count}`);
+// And the validator caps density/patchSize from an untrusted document.
+const floodDoc = validateWorldDocument(createWorldDocument({ bushes: { density: 1e9, patchSize: 9999 } }));
+assert.ok(floodDoc.document.bushes.density <= 5 && floodDoc.document.bushes.patchSize <= 200);
+
+// Streaming: builds patches, one instanced draw per visible patch, clean dispose.
+const bushScene = new THREE.Scene();
+const bushSys = new BushSystem(bushScene, createBushConfig({ density: 0.1, clumpStrength: 0, slopeLimit: 1 }), null);
+const bcam = new THREE.PerspectiveCamera(70, 1.5, 0.1, 500);
+bcam.position.set(0, 25, 0);
+bcam.lookAt(0, 0, 0);
+bcam.updateMatrixWorld(true);
+bcam.matrixWorldInverse.copy(bcam.matrixWorld).invert();
+bushSys.prewarm(bcam, 60);
+bushSys.update(bcam);
+assert.ok(bushSys.stats.activePatches > 0, "bush patches built");
+assert.equal(bushSys.stats.drawCalls, bushSys.stats.visiblePatches); // one draw call per visible patch
+assert.ok(bushSys.stats.visibleBushes >= 0);
+bushSys.dispose();
+assert.equal(bushSys.patches.size, 0); // disposed cleanly
 
 console.log("world document regression checks passed");

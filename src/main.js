@@ -73,6 +73,7 @@ let world = null;
 let terrain = null;
 let grass = null;
 let trees = null;
+let bushes = null;
 let objectManager = null;
 
 const player = new Player();
@@ -114,17 +115,29 @@ if (import.meta.env.DEV) {
       fresnelIntensity: u.uFresnelIntensity?.value ?? null,
     };
   };
+  // Dev/test-only: read the live bush system (Stage 14B).
+  window.__BUSH_DEBUG__ = () => ({
+    visibleBushes: bushes?.stats?.visibleBushes ?? 0,
+    activePatches: bushes?.stats?.activePatches ?? 0,
+    visiblePatches: bushes?.stats?.visiblePatches ?? 0,
+    drawCalls: bushes?.stats?.drawCalls ?? 0,
+    density: bushes?.cfg?.density ?? null,
+    clumpStrength: bushes?.cfg?.clumpStrength ?? null,
+    seed: bushes?.cfg?.seed ?? null,
+  });
 }
 
 function handleWorldChanged(change = {}) {
   if (change.full) {
     grass.rebuildActivePatches();
     trees.rebuildActivePatches();
+    bushes?.rebuildActivePatches();
     return;
   }
   for (const box of change.boxes ?? []) {
     grass.queueRebuildForBox(box);
     trees.queueRebuildForBox(box);
+    bushes?.queueRebuildForBox(box);
   }
 }
 async function applyLoadedWorld(document) {
@@ -134,6 +147,7 @@ async function applyLoadedWorld(document) {
   terrain = world.terrain;
   grass = world.grass;
   trees = world.trees;
+  bushes = world.bushes;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
   // Re-index interactions + particle emitters for the new object graph (runtime
@@ -148,12 +162,14 @@ async function applyLoadedWorld(document) {
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
+  bushes?.prewarm(camera, 200);
   updateSun();
   editor?.setWorldContext({
     terrain,
     objectManager,
     treeSystem: trees,
     grassSystem: grass,
+    bushSystem: bushes,
     getGrassStats: () => grass.stats,
     getTreeStats: () => trees.stats,
   });
@@ -225,6 +241,7 @@ async function boot() {
   terrain = world.terrain;
   grass = world.grass;
   trees = world.trees;
+  bushes = world.bushes;
   objectManager = world.objectManager;
   objectManager.onChange = handleWorldChanged;
   // Index this world's interactive objects + particle emitters (runtime only).
@@ -262,6 +279,7 @@ async function boot() {
       getGrassStats: () => grass.stats,
       treeSystem: trees,
       grassSystem: grass,
+      bushSystem: bushes,
       getTreeStats: () => trees.stats,
       prefabLibrary,
       modRegistry,
@@ -279,6 +297,7 @@ async function boot() {
 
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
+  bushes?.prewarm(camera, 200);
   updateSun();
   requestAnimationFrame(frame);
 }
@@ -328,6 +347,7 @@ function frame(now) {
     editor.update(dt);
     grass.update(camera, elapsed);
     trees.update(camera);
+    bushes?.update(camera);
     renderer.render(scene, camera);
     markWorldReady();
     crosshairEl.style.display = "none";
@@ -345,6 +365,7 @@ function frame(now) {
   updateSun();
   grass.update(camera, elapsed);
   trees.update(camera);
+  bushes?.update(camera);
   animationRuntime?.update(dt);
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
@@ -359,6 +380,7 @@ function frame(now) {
   debug.update(dt, {
     grass: grass.stats,
     trees: trees.stats,
+    bushes: bushes?.stats,
     player: player.position,
     cameraMode: cameraController.modeLabel,
     grounded: player.grounded,

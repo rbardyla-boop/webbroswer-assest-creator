@@ -154,3 +154,42 @@ preview; `window.__PARTICLE_RUNTIME__` (DEV-only) drives the runtime for
 **Deferred (not in v1).** Soft/depth-fade particles; textured sprites; local
 volumetric smoke; per-emitter incremental preview reload (currently full rebuild
 on edit). This is the **second half of the Lighting + Particles lab** (with 13A).
+
+---
+
+## ADR-014 — Vegetation v2 (Stage 14A grass + 14B bush layer)
+
+**Decision.** Criterion-2 visual track, committed as narrow sub-stages.
+
+**14A — grass v2:** deterministic procedural clumping (placement thins candidates
+outside a position-based `fbm2D` field, gated by a seeded rng draw) + a distance
+(reuses the fog factor) and grazing-angle Fresnel bias toward the tip color
+(shader). New grass config fields round-trip; `GrassSystem.updateSettings` splits
+placement keys (rebuild) from shader keys (`syncVegetation`). Fresnel power is a
+fixed shader constant. Editor "Grass" controls; `__GRASS_DEBUG__`; `test:vegetation`.
+
+**14B — bush layer:** a new `src/bushes/` instanced system mirroring the trees
+system (BushConfig/Geometry/Material/Placement/Patch/System). One InstancedMesh
+per patch per LOD → **one instanced draw call per visible patch** (half the tree
+cost). Deterministic seeded placement with clump + slope + height-band +
+exclusion filters; distance LOD + frustum/distance culling + lazy build budget +
+far-patch disposal. `bushCandidateCount` is capped (MAX_BUSH_CANDIDATES=4096) and
+validation caps density/patchSize, so a hostile world can't spin a giant loop.
+Round-trips through WorldDocument/worldpack/mod. Editor "Bushes" controls; debug
+HUD bush line; `__BUSH_DEBUG__`; `npm run test:bush`.
+
+Both stages: additive (no grass/tree rewrite); `npm run qa` (qa:skills 32/0/0) +
+the SwiftShader proof suite green. Reverse-Z / voxels / procedural builds stay in
+Stages 15-17; combat/Skybreak stays blocked.
+
+**Deferred from 14B.** A generalized `VegetationLayer` abstraction over
+grass/trees/bushes (the systems are intentionally parallel for now, not refactored).
+Bush wind/animation; billboard/cross-quad shrubs.
+
+## ADR-QA — Three.js skill-gate adoption
+
+The `.claude/threejs_skills/` skill-adoption harness is wired into the project
+(`qa:skills`/`qa:browser`/`qa`). `qa:skills` is a static source gate that maps the
+skill-pack's required evidence to the live engine (32/0/0). Stage completion now
+requires `qa:skills` + build + browser evidence. The engine is the source of
+truth — gate patterns adapt to it, never the reverse. See `THREEJS_SKILL_ADOPTION.md`.

@@ -75,6 +75,7 @@ export class DebugPanel {
       `<span style="color:#8fa899">LOD 0/1/2  </span>${lod[0]}/${lod[1]}/${lod[2]}  (${pct(lod[0])}/${pct(lod[1])}/${pct(lod[2])}%)\n` +
       `<span style="color:#8fa899">build queue</span>${s.queueLength} (+${s.builtThisFrame}/f)\n` +
       treeLines(trees, k) +
+      bushLines(data.bushes, k) +
       `<span style="color:#8fa899">player xyz </span>${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `<span style="color:#8fa899">grounded   </span>${data.grounded ? "yes" : "airborne"}`;
   }
@@ -82,6 +83,17 @@ export class DebugPanel {
   dispose() {
     this.el.remove();
   }
+}
+
+function bushLines(bushes, k) {
+  if (!bushes) return "";
+  return (
+    `<span style="color:#7fdca0;letter-spacing:.12em">BUSHES</span>\n` +
+    `<span style="color:#8fa899">patches    </span>${bushes.visiblePatches} vis / ${bushes.activePatches} active\n` +
+    `<span style="color:#8fa899">bushes~    </span>${k(bushes.visibleBushes)}\n` +
+    `<span style="color:#8fa899">LOD 0/1/2  </span>${bushes.lod[0]}/${bushes.lod[1]}/${bushes.lod[2]}\n` +
+    `<span style="color:#8fa899">bush draws </span>${bushes.drawCalls}\n`
+  );
 }
 
 function treeLines(trees, k) {

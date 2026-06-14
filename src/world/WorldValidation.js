@@ -73,6 +73,22 @@ export function validateWorldDocument(input) {
   doc.trees.seed = Math.floor(numberOr(doc.trees.seed, 1337));
   doc.trees.respectExclusions = doc.trees.respectExclusions !== false;
 
+  doc.bushes = doc.bushes ?? {};
+  doc.bushes.enabled = doc.bushes.enabled !== false;
+  // Cap density + patch size (defense in depth; bushCandidateCount also caps the
+  // product) so a hostile world can't request an enormous synchronous loop.
+  doc.bushes.density = Math.min(5, Math.max(0, numberOr(doc.bushes.density, 0.05)));
+  doc.bushes.patchSize = Math.min(200, positiveNumber(doc.bushes.patchSize, 28));
+  doc.bushes.visibleDistance = positiveNumber(doc.bushes.visibleDistance, 130);
+  doc.bushes.keepDistance = Math.max(doc.bushes.visibleDistance, positiveNumber(doc.bushes.keepDistance, 165));
+  doc.bushes.seed = Math.floor(numberOr(doc.bushes.seed, 911));
+  doc.bushes.respectExclusions = doc.bushes.respectExclusions !== false;
+  doc.bushes.slopeLimit = clamp01(numberOr(doc.bushes.slopeLimit, 0.5));
+  doc.bushes.clumpStrength = clamp01(numberOr(doc.bushes.clumpStrength, 0.45));
+  doc.bushes.clumpScale = positiveNumber(doc.bushes.clumpScale, 0.06);
+  doc.bushes.minHeight = numberOr(doc.bushes.minHeight, -1e6);
+  doc.bushes.maxHeight = Math.max(doc.bushes.minHeight, numberOr(doc.bushes.maxHeight, 1e6));
+
   return { document: doc, warnings };
 }
 

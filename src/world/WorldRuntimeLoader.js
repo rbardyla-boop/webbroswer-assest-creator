@@ -4,7 +4,9 @@ import { TERRAIN } from "../terrain/terrainSampling.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { GrassSystem } from "../grass/GrassSystem.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
+import { createBushConfig } from "../bushes/BushConfig.js";
 import { TreeSystem } from "../trees/TreeSystem.js";
+import { BushSystem } from "../bushes/BushSystem.js";
 import { ColliderSystem } from "../physics/ColliderSystem.js";
 import { WorldObjectManager } from "./WorldObjectManager.js";
 import { validateWorldDocument } from "./WorldValidation.js";
@@ -21,6 +23,7 @@ export class WorldRuntimeLoader {
     this.terrain = null;
     this.grass = null;
     this.trees = null;
+    this.bushes = null;
     this.manager = null;
     this.document = null;
     this.warnings = [];
@@ -48,6 +51,7 @@ export class WorldRuntimeLoader {
       onChange: () => {
         this.grass?.rebuildActivePatches();
         this.trees?.rebuildActivePatches();
+        this.bushes?.rebuildActivePatches();
       },
     });
     await this.manager.loadWorldObjects(document.objects);
@@ -56,6 +60,7 @@ export class WorldRuntimeLoader {
     // grass material captures the world's actual fog, not a stale reference.
     this.grass = new GrassSystem(this.scene, this.lights, this.scene.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
     this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees), this.colliderSystem);
+    this.bushes = new BushSystem(this.scene, bushConfigFromDocument(document.bushes), this.colliderSystem);
 
     return {
       document,
@@ -63,6 +68,7 @@ export class WorldRuntimeLoader {
       terrain: this.terrain,
       grass: this.grass,
       trees: this.trees,
+      bushes: this.bushes,
       objectManager: this.manager,
       colliderSystem: this.colliderSystem,
     };
@@ -73,6 +79,7 @@ export class WorldRuntimeLoader {
     this.document.terrain = terrainDocumentFromRuntime(this.document.terrain);
     this.document.grass = grassDocumentFromRuntime(this.grass?.cfg, this.document.grass);
     this.document.trees = treeDocumentFromRuntime(this.trees?.cfg, this.document.trees);
+    this.document.bushes = bushDocumentFromRuntime(this.bushes?.cfg, this.document.bushes);
     this.document.objects = this.manager?.serializeWorldObjects() ?? [];
     // lighting has no separate runtime state to read back — it lives on
     // this.document and the editor mutates it in place on every edit, so it is
@@ -90,6 +97,7 @@ export class WorldRuntimeLoader {
     this.animationRuntime?.clear();
     this.grass?.dispose();
     this.trees?.dispose();
+    this.bushes?.dispose();
     if (this.manager) {
       this.manager.onChange = null;
       this.manager.clear();
@@ -101,6 +109,7 @@ export class WorldRuntimeLoader {
     }
     this.grass = null;
     this.trees = null;
+    this.bushes = null;
     this.manager = null;
     this.terrain = null;
   }
@@ -141,6 +150,23 @@ function treeConfigFromDocument(trees = {}) {
     keepDistance: trees.keepDistance,
     seed: trees.seed,
     respectExclusions: trees.respectExclusions,
+  });
+}
+
+function bushConfigFromDocument(bushes = {}) {
+  return createBushConfig({
+    enabled: bushes.enabled,
+    density: bushes.density,
+    patchSize: bushes.patchSize,
+    visibleDistance: bushes.visibleDistance,
+    keepDistance: bushes.keepDistance,
+    seed: bushes.seed,
+    respectExclusions: bushes.respectExclusions,
+    slopeLimit: bushes.slopeLimit,
+    clumpStrength: bushes.clumpStrength,
+    clumpScale: bushes.clumpScale,
+    minHeight: bushes.minHeight,
+    maxHeight: bushes.maxHeight,
   });
 }
 
@@ -188,5 +214,23 @@ function treeDocumentFromRuntime(cfg = {}, fallback = {}) {
     keepDistance: cfg.keepDistance ?? fallback.keepDistance,
     seed: cfg.seed ?? fallback.seed,
     respectExclusions: cfg.respectExclusions ?? fallback.respectExclusions,
+  };
+}
+
+function bushDocumentFromRuntime(cfg = {}, fallback = {}) {
+  return {
+    ...fallback,
+    enabled: cfg.enabled ?? fallback.enabled,
+    density: cfg.density ?? fallback.density,
+    patchSize: cfg.patchSize ?? fallback.patchSize,
+    visibleDistance: cfg.visibleDistance ?? fallback.visibleDistance,
+    keepDistance: cfg.keepDistance ?? fallback.keepDistance,
+    seed: cfg.seed ?? fallback.seed,
+    respectExclusions: cfg.respectExclusions ?? fallback.respectExclusions,
+    slopeLimit: cfg.slopeLimit ?? fallback.slopeLimit,
+    clumpStrength: cfg.clumpStrength ?? fallback.clumpStrength,
+    clumpScale: cfg.clumpScale ?? fallback.clumpScale,
+    minHeight: cfg.minHeight ?? fallback.minHeight,
+    maxHeight: cfg.maxHeight ?? fallback.maxHeight,
   };
 }

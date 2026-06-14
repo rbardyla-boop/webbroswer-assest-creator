@@ -1,6 +1,7 @@
 import { TERRAIN } from "../terrain/terrainSampling.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
+import { createBushConfig } from "../bushes/BushConfig.js";
 import { defaultLighting } from "../lighting/LightingTypes.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
@@ -11,6 +12,7 @@ export function createWorldDocument(overrides = {}) {
   const now = new Date().toISOString();
   const grass = createGrassConfig();
   const trees = createTreeConfig();
+  const bushes = createBushConfig();
 
   return mergeWorldDocument({
     version: WORLD_DOCUMENT_VERSION,
@@ -53,6 +55,20 @@ export function createWorldDocument(overrides = {}) {
       keepDistance: trees.keepDistance,
       seed: trees.seed,
       respectExclusions: trees.respectExclusions,
+    },
+    bushes: {
+      enabled: bushes.enabled,
+      density: bushes.density,
+      patchSize: bushes.patchSize,
+      visibleDistance: bushes.visibleDistance,
+      keepDistance: bushes.keepDistance,
+      seed: bushes.seed,
+      respectExclusions: bushes.respectExclusions,
+      slopeLimit: bushes.slopeLimit,
+      clumpStrength: bushes.clumpStrength,
+      clumpScale: bushes.clumpScale,
+      minHeight: bushes.minHeight,
+      maxHeight: bushes.maxHeight,
     },
     player: {
       spawn: { x: 0, y: 0, z: 0 },
