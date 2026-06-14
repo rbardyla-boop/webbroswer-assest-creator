@@ -22,6 +22,7 @@ import { applyLighting } from "../lighting/LightingRig.js";
 import { ParticlePanel } from "./ParticlePanel.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { ParticleRuntime } from "../particles/ParticleRuntime.js";
+import { VoxelDebugPanel } from "../voxels/VoxelDebugPanel.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -185,6 +186,9 @@ export class WorldEditor {
     // world-reload path (_load/_loadSample/_importWorld/_loadModWorld) routes
     // through onLoadWorld → setWorldContext, so this is the single choke point.
     this.history.clear();
+    // A reloaded world is a fresh object graph — drop any voxel-lab preview so it
+    // never references torn-down meshes.
+    this.voxelPanel?.clear();
     this._armPrefabPlacement(null);
     this.prefabPanel?.refresh();
     // A reloaded world brings its own lighting — refresh the editor panel from it.
@@ -452,6 +456,16 @@ export class WorldEditor {
     root.appendChild(this._section("Bushes", this._buildBushControls()));
     root.appendChild(this._section("Trees", this._buildTreeControls()));
     root.appendChild(this._section("Terrain material", this._buildTerrainControls()));
+
+    // Editor/debug-only Voxel Lab: voxelize the selection, visualize occupancy,
+    // ray-traverse it. Owns a transient debug mesh (never serialized/exported).
+    this.voxelPanel = new VoxelDebugPanel({
+      scene: this.scene,
+      camera: this.camera,
+      getSelection: () => this.selection.objects,
+    });
+    this.voxelLab = this.voxelPanel; // stable name for the __WORLD_EDITOR__ proof
+    root.appendChild(this._section("Voxel Lab (debug)", this.voxelPanel.root));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });

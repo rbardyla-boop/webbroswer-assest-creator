@@ -52,6 +52,10 @@ import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
 import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
 import { Terrain, sanitizeTerrainMaterial, DEFAULT_TERRAIN_MATERIAL } from "../src/terrain/Terrain.js";
 import { summarizeReverseDepth, getReverseDepthStatus } from "../src/core/renderer.js";
+import { voxelizeObjects } from "../src/voxels/Voxelizer.js";
+import { raycastVoxels } from "../src/voxels/VoxelRaycast.js";
+import { VoxelGrid } from "../src/voxels/VoxelGrid.js";
+import { VOXEL_LIMITS, createVoxelConfig, clampInt } from "../src/voxels/VoxelTypes.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1888,5 +1892,115 @@ const mockUnsupported = {
 assert.equal(getReverseDepthStatus(mockUnsupported).active, false);
 assert.equal(getReverseDepthStatus(mockUnsupported).mode, "normal-z");
 assert.equal(getReverseDepthStatus(mockUnsupported).requested, true); // requested, just unsupported
+
+// --- Stage 16: Voxel Debug Lab -----------------------------------------------
+
+// Config caps: resolution clamps into [MIN, MAX]; garbage → default.
+assert.equal(createVoxelConfig({ resolution: 99999 }).resolution, VOXEL_LIMITS.MAX_RESOLUTION);
+assert.equal(createVoxelConfig({ resolution: -5 }).resolution, VOXEL_LIMITS.MIN_RESOLUTION);
+assert.equal(createVoxelConfig({ resolution: "abc" }).resolution, VOXEL_LIMITS.DEFAULT_RESOLUTION);
+assert.equal(createVoxelConfig(null).resolution, VOXEL_LIMITS.DEFAULT_RESOLUTION);
+assert.equal(clampInt(5.9, 0, 4, 1), 4);
+assert.equal(clampInt(NaN, 0, 4, 2), 2);
+
+// Voxelize a unit box: deterministic, bounded, hollow-surface (not solid-filled).
+const voxBox = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial());
+voxBox.position.set(10, 0, 0);
+voxBox.updateMatrixWorld(true);
+const vox1 = voxelizeObjects([voxBox], { resolution: 16 });
+const vox2 = voxelizeObjects([voxBox], { resolution: 16 });
+assert.ok(vox1.stats.occupied > 0, "box voxelizes to occupied cells");
+assert.equal(vox1.stats.occupied, vox2.stats.occupied, "voxelization is deterministic");
+assert.deepEqual(vox1.stats.dims, vox2.stats.dims);
+// Byte-for-byte identical occupancy (full determinism, not just count).
+assert.ok(vox1.grid.occupancy.every((b, i) => b === vox2.grid.occupancy[i]), "occupancy is byte-identical across runs");
+assert.ok(vox1.stats.occupied < vox1.grid.cellCount, "surface voxelization is hollow, not solid");
+assert.ok(vox1.stats.dims.x <= 16 && vox1.stats.dims.y <= 16 && vox1.stats.dims.z <= 16, "per-axis counts bounded by resolution");
+assert.equal(vox1.stats.truncated, false, "a small mesh is not truncated");
+
+// Resolution request is hard-capped even when authored absurdly high.
+const voxHuge = voxelizeObjects([voxBox], { resolution: 100000 });
+assert.ok(voxHuge.stats.resolution <= VOXEL_LIMITS.MAX_RESOLUTION, "resolution capped");
+assert.ok(voxHuge.grid.cellCount <= VOXEL_LIMITS.MAX_TOTAL_CELLS, "total cells under the hard cap");
+
+// Selection count is capped — extra objects are dropped, flagged as truncated.
+const manyBoxes = [];
+for (let i = 0; i < VOXEL_LIMITS.MAX_SELECTED_OBJECTS + 8; i++) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+  b.position.set(i * 3, 0, 0);
+  b.updateMatrixWorld(true);
+  manyBoxes.push(b);
+}
+const voxMany = voxelizeObjects(manyBoxes, { resolution: 8 });
+assert.equal(voxMany.stats.objects, VOXEL_LIMITS.MAX_SELECTED_OBJECTS, "selection count capped");
+assert.equal(voxMany.stats.objectCapped, true);
+assert.equal(voxMany.stats.truncated, true, "object-capped voxelization reports truncated");
+
+// Empty / garbage selections never throw.
+assert.equal(voxelizeObjects([], { resolution: 8 }).grid, null);
+assert.equal(voxelizeObjects(null).grid, null);
+
+// Non-finite geometry (NaN/Infinity vertex coords) fails safe: no grid, no NaN
+// stats, no throw — the boundary rejects it rather than building a degenerate grid.
+function meshFromCoords(coords) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(coords), 3));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial());
+  m.updateMatrixWorld(true);
+  return m;
+}
+const nanVox = voxelizeObjects([meshFromCoords([NaN, 0, 0, 1, NaN, 0, 0, 1, NaN])], { resolution: 32 });
+assert.equal(nanVox.grid, null, "NaN geometry produces no grid");
+assert.equal(nanVox.stats.occupied, 0);
+const infVox = voxelizeObjects([meshFromCoords([Infinity, 0, 0, 1, 5, 0, 0, 1, 3])], { resolution: 32 });
+assert.equal(infVox.grid, null, "Infinity geometry produces no grid");
+
+// --- Amanatides–Woo ray traversal edge cases (manual single-voxel grid) ------
+// 4×4×4 grid over [0,4]^3, cellSize 1, one occupied cell at (2,2,2) [center 2.5].
+const rg = new VoxelGrid({ min: new THREE.Vector3(0, 0, 0), max: new THREE.Vector3(4, 4, 4), resolution: 4 });
+rg.setOccupied(2, 2, 2, 0);
+assert.equal(rg.nx, 4);
+assert.equal(rg.cellSize, 1);
+
+// Hit, axis-aligned +x: enters the cell through its -x face.
+const hX = raycastVoxels(rg, { x: -10, y: 2.5, z: 2.5 }, { x: 1, y: 0, z: 0 });
+assert.equal(hX.hit, true);
+assert.deepEqual(hX.voxel, { x: 2, y: 2, z: 2 });
+assert.deepEqual(hX.normal, { x: -1, y: 0, z: 0 });
+assert.equal(hX.face, "-x");
+assert.equal(hX.id, 0, "ray reports the source-object id");
+assert.ok(Math.abs(hX.distance - 12) < 1e-6, `entry distance, got ${hX.distance}`);
+
+// Hit, negative direction -x: enters through the +x face.
+const hNeg = raycastVoxels(rg, { x: 14, y: 2.5, z: 2.5 }, { x: -1, y: 0, z: 0 });
+assert.equal(hNeg.hit, true);
+assert.deepEqual(hNeg.normal, { x: 1, y: 0, z: 0 });
+assert.equal(hNeg.face, "+x");
+
+// Hit, axis-aligned +y and +z (no NaN from zero direction components).
+assert.equal(raycastVoxels(rg, { x: 2.5, y: -10, z: 2.5 }, { x: 0, y: 1, z: 0 }).face, "-y");
+assert.equal(raycastVoxels(rg, { x: 2.5, y: 2.5, z: -10 }, { x: 0, y: 0, z: 1 }).face, "-z");
+
+// Miss — bounds exit: enters the grid in an empty row and leaves without hitting.
+const mExit = raycastVoxels(rg, { x: -10, y: 0.5, z: 0.5 }, { x: 1, y: 0, z: 0 });
+assert.equal(mExit.hit, false);
+assert.equal(mExit.reason, "bounds-exit");
+
+// Miss — parallel and outside the grid slab entirely.
+const mOut = raycastVoxels(rg, { x: -10, y: 100, z: 2.5 }, { x: 1, y: 0, z: 0 });
+assert.equal(mOut.hit, false);
+assert.equal(mOut.reason, "miss");
+
+// Miss — pointing away from the grid.
+const mAway = raycastVoxels(rg, { x: -10, y: 2.5, z: 2.5 }, { x: -1, y: 0, z: 0 });
+assert.equal(mAway.hit, false);
+
+// Miss — zero-length direction is rejected, not NaN-traversed.
+const mZero = raycastVoxels(rg, { x: 2.5, y: 2.5, z: 2.5 }, { x: 0, y: 0, z: 0 });
+assert.equal(mZero.hit, false);
+assert.equal(mZero.reason, "zero-direction");
+
+// Determinism: identical ray → identical result object.
+assert.deepEqual(raycastVoxels(rg, { x: -10, y: 2.5, z: 2.5 }, { x: 1, y: 0, z: 0 }), hX);
 
 console.log("world document regression checks passed");

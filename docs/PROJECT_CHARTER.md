@@ -248,6 +248,53 @@ skill-pack's required evidence to the live engine (32/0/0). Stage completion now
 requires `qa:skills` + build + browser evidence. The engine is the source of
 truth — gate patterns adapt to it, never the reverse. See `THREEJS_SKILL_ADOPTION.md`.
 
+## ADR-016 — Voxel Debug Lab (Stage 16)
+
+**Decision.** Add an editor/debug-only voxelization + ray-traversal inspection tool
+under `src/voxels/`, as a proof/inspection surface before any later procedural or
+destruction work. It is explicitly NOT a voxel renderer, destructible-terrain
+system, or procedural-cave system — those stay later. CPU voxelization + a single
+instanced debug mesh; no GPU compute, no SVO, no 3D textures.
+
+**Shape.** `VoxelTypes` (hard caps + `createVoxelConfig`), `VoxelGrid` (bounded
+uniform-cell occupancy grid: `Uint8` occupancy + optional `Uint16` ids, fixed
+z/y/x iteration), `Voxelizer` (combined world AABB → grid → per-triangle clamped
+cell-AABB → triangle-box SAT), `VoxelRaycast` (Amanatides–Woo DDA), `VoxelDebugMesh`
+(ONE `InstancedMesh` of unit cubes), `VoxelDebugPanel` (editor panel + controller,
+owns a transient debug mesh added directly to the scene, never via the
+WorldObjectManager → never serialized or exported).
+
+**Bounds (the core value of the stage).** Every input is capped: resolution clamped
+to ≤64 (so ≤64³ = 262144 cells, 256 KB occupancy), selection ≤32 objects, ≤1.5M
+source triangles, and a global ≤8M triangle×cell SAT-test budget that aborts both
+loops via a labeled break — so a pathological or hostile mesh (huge triangle,
+millions of triangles) can never spin an unbounded loop or allocation. Non-finite
+geometry (NaN/Infinity vertex coords) is rejected at the boundary (no grid, clean
+stats), verified empirically. Occupancy is one capped instanced draw call, never a
+Mesh per voxel.
+
+**Determinism + traversal.** Voxelization is deterministic (objects in selection
+order, meshes in traversal order, triangles in index order, cells z/y/x,
+first-writer-wins ids; no RNG/clock) — asserted byte-identical in the Node
+regression. The A–W ray traversal handles every awkward case explicitly: AABB-slab
+entry, rays that miss, rays parallel to an axis (zero direction components → no
+divide-by-zero), negative directions, rays starting inside the grid, and bounds
+exit; the hit reports voxel coord, face/normal (= −sign(dir) on the entry axis),
+distance, and source id.
+
+**Runtime inertness.** The lab is imported only by `WorldEditor`, which is
+dynamically imported only in non-runtime mode, so the voxel code lands solely in the
+lazy editor chunk and is absent from the runtime (index) bundle — verified, and the
+browser proof confirms `__WORLD_EDITOR__` (and thus the lab) is undefined under
+`?runtime=1`. It is cleared on world reload so it never references torn-down meshes.
+
+**Evidence.** `npm run test:voxel` (SwiftShader) voxelizes a selected mesh (1
+instanced draw call, deterministic, stable ray first-hit, clean teardown, zero
+console errors) and confirms runtime inertness; the Node regression covers
+voxelization determinism/caps + every ray edge case + the non-finite guard. Stage 17
+(Procedural Build System v1) can build on this for occupancy/placement validation.
+Combat/Skybreak stays blocked.
+
 ## ADR-015 — Reverse-Z depth gate (Stage 15)
 
 **Decision.** Request a reversed-Z depth buffer for the main renderer (default on),
