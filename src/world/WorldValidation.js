@@ -60,6 +60,10 @@ export function validateWorldDocument(input) {
   doc.grass.keepDistance = Math.max(doc.grass.visibleDistance, positiveNumber(doc.grass.keepDistance, 200));
   doc.grass.lodDistances = sanitizeNumberArray(doc.grass.lodDistances, [55, 110]);
   doc.grass.seed = Math.floor(numberOr(doc.grass.seed, 0));
+  doc.grass.clumpStrength = clamp01(numberOr(doc.grass.clumpStrength, 0));
+  doc.grass.clumpScale = positiveNumber(doc.grass.clumpScale, 0.05);
+  doc.grass.distanceTint = clamp01(numberOr(doc.grass.distanceTint, 0.22));
+  doc.grass.fresnelIntensity = clamp01(numberOr(doc.grass.fresnelIntensity, 0.35));
 
   doc.trees.enabled = doc.trees.enabled !== false;
   doc.trees.density = Math.max(0, numberOr(doc.trees.density, 0.018));
@@ -255,6 +259,10 @@ function numberOr(value, fallback) {
 function positiveNumber(value, fallback) {
   const n = numberOr(value, fallback);
   return n > 0 ? n : fallback;
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
 }
 
 function stringOrNow(value) {

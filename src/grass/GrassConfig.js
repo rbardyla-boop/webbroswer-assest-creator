@@ -31,6 +31,13 @@ export function createGrassConfig(overrides = {}) {
       hue: 0.12, // tint spread
     },
 
+    // --- vegetation v2: clumping (placement) + view/distance tint (shader) ----
+    clumpStrength: 0.0, // 0 = uniform scatter; →1 thins blades outside noise clumps
+    clumpScale: 0.05, // spatial frequency of the clump noise field
+    distanceTint: 0.22, // distance bias toward the tip color (reuses the fog factor)
+    fresnelIntensity: 0.35, // grazing-angle bias toward the tip color
+    // (Fresnel curve steepness is a fixed shader constant — see GrassMaterial.)
+
     // --- color ----------------------------------------------------------------
     colorBase: new THREE.Color(0x36531f), // root color (shadowed)
     colorTip: new THREE.Color(0x9bcf5a), // tip color (lit)

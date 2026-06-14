@@ -39,6 +39,11 @@ export function createWorldDocument(overrides = {}) {
       lodDistances: [...grass.lodDistances],
       wind: serializeWind(grass.wind),
       seed: 0,
+      // Vegetation v2 (clumping + view/distance tint).
+      clumpStrength: grass.clumpStrength,
+      clumpScale: grass.clumpScale,
+      distanceTint: grass.distanceTint,
+      fresnelIntensity: grass.fresnelIntensity,
     },
     trees: {
       enabled: trees.enabled,

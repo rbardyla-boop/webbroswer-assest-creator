@@ -5,7 +5,7 @@
 // Placement goes through the terrain sampling rules (height, slope, meadow
 // mask) — grass never floats and never climbs cliffs.
 
-import { mulberry32, hash2i } from "../utils/random.js";
+import { mulberry32, hash2i, fbm2D } from "../utils/random.js";
 import { TAU } from "../utils/math.js";
 import { getHeight, canPlaceGrass } from "../terrain/terrainSampling.js";
 import { patchCandidateCount } from "./GrassConfig.js";
@@ -35,12 +35,25 @@ export function generatePatchInstances(gx, gz, cfg, exclusionSystem = null) {
   const baseH = cfg.grassSize.height;
   const baseW = cfg.grassSize.width;
   const vr = cfg.variation;
+  const clumpStrength = Math.min(1, Math.max(0, cfg.clumpStrength ?? 0));
+  const clumpScale = cfg.clumpScale > 0 ? cfg.clumpScale : 0.05;
 
   for (let i = 0; i < candidates; i++) {
     const rx = rng();
     const rz = rng();
     const x = originX + rx * size;
     const z = originZ + rz * size;
+
+    // Deterministic procedural clumping: thin candidates that fall outside the
+    // high-density regions of a smooth noise field. The field is position-based
+    // and the rng is seeded per patch, so a patch rebuilds identically for a
+    // fixed config. (Toggling clumpStrength across the 0↔>0 boundary adds/removes
+    // an rng draw, so the whole placement reshuffles — by design, since a config
+    // change always triggers a full rebuild.)
+    if (clumpStrength > 0) {
+      const mask = fbm2D(x * clumpScale, z * clumpScale) * 0.5 + 0.5; // [0,1]
+      if (rng() < (1 - mask) * clumpStrength) continue;
+    }
 
     // Placement rule (uses its own random draw for thinning).
     if (!canPlaceGrass(x, z, rng())) continue;

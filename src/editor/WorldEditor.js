@@ -199,6 +199,14 @@ export class WorldEditor {
       this.treeVisible.value = this.treeSystem.cfg.visibleDistance;
       this.treeSeed.value = this.treeSystem.cfg.seed;
     }
+    if (this.grassSystem && this.grassDensity) {
+      const g = this.grassSystem.cfg;
+      this.grassDensity.value = g.density;
+      this.grassClump.value = g.clumpStrength ?? 0;
+      this.grassClumpScale.value = g.clumpScale ?? 0.05;
+      this.grassDistanceTint.value = g.distanceTint ?? 0.22;
+      this.grassFresnel.value = g.fresnelIntensity ?? 0.35;
+    }
     this._select(null);
     this._refreshPerf();
   }
@@ -420,6 +428,7 @@ export class WorldEditor {
     });
     root.appendChild(this._section("Particles", this.particlePanel.root));
 
+    root.appendChild(this._section("Grass", this._buildGrassControls()));
     root.appendChild(this._section("Trees", this._buildTreeControls()));
 
     this.selectionLabel = document.createElement("div");
@@ -483,6 +492,40 @@ export class WorldEditor {
     wrap.appendChild(this.treeRespect.label);
     wrap.appendChild(this._button("Apply Trees", () => this._applyTreeSettings()));
     return wrap;
+  }
+
+  _buildGrassControls() {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, { display: "grid", gap: "8px" });
+    const cfg = this.grassSystem?.cfg ?? {};
+
+    this.grassDensity = this._numberInput(cfg.density ?? 7, 0.5);
+    this.grassClump = this._numberInput(cfg.clumpStrength ?? 0, 0.05);
+    this.grassClumpScale = this._numberInput(cfg.clumpScale ?? 0.05, 0.005);
+    this.grassDistanceTint = this._numberInput(cfg.distanceTint ?? 0.22, 0.02);
+    this.grassFresnel = this._numberInput(cfg.fresnelIntensity ?? 0.35, 0.02);
+
+    wrap.appendChild(this._labeledControl("Density", this.grassDensity));
+    wrap.appendChild(this._labeledControl("Clump", this.grassClump));
+    wrap.appendChild(this._labeledControl("Clump scale", this.grassClumpScale));
+    wrap.appendChild(this._labeledControl("Dist tint", this.grassDistanceTint));
+    wrap.appendChild(this._labeledControl("Fresnel", this.grassFresnel));
+    wrap.appendChild(this._button("Apply Grass", () => this._applyGrassSettings()));
+    return wrap;
+  }
+
+  _applyGrassSettings() {
+    if (!this.grassSystem) return;
+    const t0 = performance.now();
+    this.grassSystem.updateSettings({
+      density: Math.max(0, parseFloat(this.grassDensity.value) || 0),
+      clumpStrength: Math.min(1, Math.max(0, parseFloat(this.grassClump.value) || 0)),
+      clumpScale: Math.max(0.001, parseFloat(this.grassClumpScale.value) || 0.05),
+      distanceTint: Math.min(1, Math.max(0, parseFloat(this.grassDistanceTint.value) || 0)),
+      fresnelIntensity: Math.min(1, Math.max(0, parseFloat(this.grassFresnel.value) || 0)),
+    });
+    this.stats.lastActionMs = performance.now() - t0;
+    this._refreshPerf();
   }
 
   _checkbox(label, checked) {

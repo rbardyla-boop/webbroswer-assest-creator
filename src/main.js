@@ -103,6 +103,17 @@ if (import.meta.env.DEV) {
     hemiIntensity: lights.hemi.intensity,
     fog: scene.fog ? { color: `#${scene.fog.color.getHexString()}`, near: scene.fog.near, far: scene.fog.far } : null,
   });
+  // Dev/test-only: read the live grass system (vegetation v2 state).
+  window.__GRASS_DEBUG__ = () => {
+    const u = grass?.grassMaterial?.material?.uniforms ?? {};
+    return {
+      visibleBlades: grass?.stats?.visibleBlades ?? 0,
+      activePatches: grass?.stats?.activePatches ?? 0,
+      clumpStrength: grass?.cfg?.clumpStrength ?? null,
+      distanceTint: u.uDistanceTint?.value ?? null,
+      fresnelIntensity: u.uFresnelIntensity?.value ?? null,
+    };
+  };
 }
 
 function handleWorldChanged(change = {}) {

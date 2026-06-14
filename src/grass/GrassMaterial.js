@@ -29,6 +29,7 @@ const vertexShader = /* glsl */ `
   varying float vTint;
   varying vec3  vNormalW;
   varying float vFog;
+  varying vec3  vViewDirW; // world-space camera direction (for Fresnel)
 
   mat2 rot2(float a) {
     float c = cos(a), s = sin(a);
@@ -61,6 +62,7 @@ const vertexShader = /* glsl */ `
     bladed.z += uWindDir.y * windAmt;
 
     vec3 worldPos = aOffset + bladed;
+    vViewDirW = cameraPosition - worldPos; // normalized in the fragment shader
 
     // Cheap normal: facing direction rotated by yaw, biased upward.
     vec2 faceXZ = rot2(aRot) * vec2(0.0, 1.0);
@@ -86,11 +88,15 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uColorTip;
   uniform vec3 uColorDry;
   uniform vec3 uFogColor;
+  uniform float uDistanceTint;     // distance bias toward the tip color
+  uniform float uFresnelIntensity; // grazing-angle bias toward the tip color
+  uniform float uFresnelPower;
 
   varying float vHeight;
   varying float vTint;
   varying vec3  vNormalW;
   varying float vFog;
+  varying vec3  vViewDirW;
 
   void main() {
     vec3 N = normalize(vNormalW);
@@ -102,6 +108,15 @@ const fragmentShader = /* glsl */ `
 
     vec3 col = mix(uColorBase, uColorTip, vHeight);
     col = mix(col, uColorDry, clamp(vTint * 0.5 + 0.15, 0.0, 1.0) * 0.35);
+
+    // Vegetation v2: distant grass reads as a soft tip-colored mass (reuse the
+    // fog factor), and grazing-angle (Fresnel) views bias toward the tip too.
+    col = mix(col, uColorTip, clamp(vFog * uDistanceTint, 0.0, 1.0));
+    // Guard normalize() against a zero view vector (camera coincident with a blade).
+    float viewLen = length(vViewDirW);
+    vec3 V = viewLen > 1e-5 ? vViewDirW / viewLen : vec3(0.0, 1.0, 0.0);
+    float fresnel = pow(clamp(1.0 - abs(dot(N, V)), 0.0, 1.0), uFresnelPower);
+    col = mix(col, uColorTip, fresnel * uFresnelIntensity);
 
     float ao = mix(0.55, 1.0, vHeight); // darker at the root
     vec3 lit = col * (ambient * ao + uSunColor * ndl * 0.9);
@@ -115,6 +130,10 @@ const fragmentShader = /* glsl */ `
 // Fog distances that push the grass fade past any view distance (fog disabled).
 const NO_FOG_NEAR = 1e6;
 const NO_FOG_FAR = 1e6 + 1;
+
+// Fresnel curve steepness is a fixed aesthetic constant — authors tune the
+// strength (fresnelIntensity), not the curve — so it does not round-trip.
+const FRESNEL_POWER = 3.0;
 
 export class GrassMaterial {
   constructor(cfg, lights, fog) {
@@ -141,12 +160,23 @@ export class GrassMaterial {
         uColorBase: { value: cfg.colorBase.clone() },
         uColorTip: { value: cfg.colorTip.clone() },
         uColorDry: { value: cfg.colorDry.clone() },
+        uDistanceTint: { value: cfg.distanceTint ?? 0 },
+        uFresnelIntensity: { value: cfg.fresnelIntensity ?? 0 },
+        uFresnelPower: { value: FRESNEL_POWER },
       },
     });
   }
 
   update(elapsed) {
     this.material.uniforms.uTime.value = elapsed;
+  }
+
+  // Re-read vegetation-v2 values from config (lets the editor tune them live).
+  syncVegetation() {
+    const u = this.material.uniforms;
+    u.uDistanceTint.value = this.cfg.distanceTint ?? 0;
+    u.uFresnelIntensity.value = this.cfg.fresnelIntensity ?? 0;
+    // uFresnelPower is a fixed constant — never re-read from config.
   }
 
   // Re-read wind values from config (lets a UI tweak wind live).

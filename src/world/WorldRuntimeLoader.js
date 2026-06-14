@@ -125,6 +125,10 @@ function grassConfigFromDocument(grass = {}) {
     keepDistance: grass.keepDistance,
     lodDistances: grass.lodDistances,
     wind,
+    clumpStrength: grass.clumpStrength,
+    clumpScale: grass.clumpScale,
+    distanceTint: grass.distanceTint,
+    fresnelIntensity: grass.fresnelIntensity,
   });
 }
 
@@ -159,6 +163,10 @@ function grassDocumentFromRuntime(cfg = {}, fallback = {}) {
     visibleDistance: cfg.visibleDistance ?? fallback.visibleDistance,
     keepDistance: cfg.keepDistance ?? fallback.keepDistance,
     lodDistances: [...(cfg.lodDistances ?? fallback.lodDistances ?? [])],
+    clumpStrength: cfg.clumpStrength ?? fallback.clumpStrength,
+    clumpScale: cfg.clumpScale ?? fallback.clumpScale,
+    distanceTint: cfg.distanceTint ?? fallback.distanceTint,
+    fresnelIntensity: cfg.fresnelIntensity ?? fallback.fresnelIntensity,
     wind: {
       ...(fallback.wind ?? {}),
       ...(cfg.wind ?? {}),

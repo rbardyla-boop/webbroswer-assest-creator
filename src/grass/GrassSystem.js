@@ -54,6 +54,19 @@ export class GrassSystem {
     this.grassMaterial.syncLighting(lighting, sunDirection ?? this.lights?.sunDirection ?? null);
   }
 
+  // Apply edited grass settings live. Shader-only fields (distance/Fresnel tint)
+  // update uniforms; placement fields (density/clump) trigger a patch rebuild.
+  updateSettings(partial = {}) {
+    let needsRebuild = false;
+    for (const [key, value] of Object.entries(partial)) {
+      if (value === undefined) continue;
+      this.cfg[key] = value;
+      if (key === "density" || key === "clumpStrength" || key === "clumpScale") needsRebuild = true;
+    }
+    this.grassMaterial.syncVegetation();
+    if (needsRebuild) this.rebuildActivePatches();
+  }
+
   // Ensure every patch within visibleDistance is built or queued, and dispose
   // patches past keepDistance. Then frustum-cull + assign LOD to active ones.
   update(camera, elapsed) {

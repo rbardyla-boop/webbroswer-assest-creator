@@ -44,6 +44,7 @@ import { computeSunOffset, defaultLighting } from "../src/lighting/LightingTypes
 import { applyLighting } from "../src/lighting/LightingRig.js";
 import { GrassMaterial } from "../src/grass/GrassMaterial.js";
 import { createGrassConfig } from "../src/grass/GrassConfig.js";
+import { generatePatchInstances } from "../src/grass/GrassPlacement.js";
 import { sanitizeParticles } from "../src/particles/ParticleValidation.js";
 import { ParticleRuntime } from "../src/particles/ParticleRuntime.js";
 
@@ -1677,5 +1678,48 @@ assert.equal(rtPartValidated.warnings.length, 0);
 assert.equal(rtPartValidated.document.objects[0].particles.kind, "smoke");
 const rtPartPack = await buildWorldPack(rtPartValidated.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
 assert.equal(rtPartPack.world.objects[0].particles.color, "#ff0000");
+
+// --- Stage 14A: grass v2 (clumping + view/distance tint) --------------------
+
+// Grass-config round-trip: new fields validate (clamped) and survive worldpack.
+const grassDoc = validateWorldDocument(createWorldDocument({ grass: { clumpStrength: 5, clumpScale: 0.08, distanceTint: 0.4, fresnelIntensity: 0.6 } }));
+assert.equal(grassDoc.warnings.length, 0);
+assert.equal(grassDoc.document.grass.clumpStrength, 1); // clamped to [0,1]
+assert.equal(grassDoc.document.grass.clumpScale, 0.08);
+assert.equal(grassDoc.document.grass.distanceTint, 0.4);
+assert.equal(grassDoc.document.grass.fresnelIntensity, 0.6);
+const grassPack = await buildWorldPack(grassDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(grassPack.world.grass.clumpStrength, 1);
+assert.equal(grassPack.world.grass.distanceTint, 0.4);
+
+// Clumping is deterministic and thins the field; clumpStrength 0 = unchanged.
+const cfgNoClump = createGrassConfig({ clumpStrength: 0 });
+const cfgClump = createGrassConfig({ clumpStrength: 0.9, clumpScale: 0.05 });
+// A single patch rebuilds identically (placement stays deterministic).
+const patchA = generatePatchInstances(2, 3, cfgClump);
+const patchB = generatePatchInstances(2, 3, cfgClump);
+assert.equal(patchA.count, patchB.count);
+if (patchA.count > 0) assert.equal(patchA.offset.length, patchA.count * 3); // buffer shape intact
+// Aggregate over several patches: clumping removes blades, never adds.
+let baseTotal = 0;
+let clumpTotal = 0;
+for (let g = 0; g < 12; g++) {
+  baseTotal += generatePatchInstances(g, g + 1, cfgNoClump).count;
+  clumpTotal += generatePatchInstances(g, g + 1, cfgClump).count;
+}
+assert.ok(baseTotal > 0, "found populated grass patches");
+assert.ok(clumpTotal < baseTotal, "clumping thins the aggregate field");
+
+// Grass shader exposes the new vegetation uniforms; syncVegetation pushes config.
+const vegCfg = createGrassConfig({ distanceTint: 0.3, fresnelIntensity: 0.5 });
+const vegMat = new GrassMaterial(vegCfg, { sunDirection: new THREE.Vector3(0, 1, 0) }, null);
+assert.equal(vegMat.material.uniforms.uDistanceTint.value, 0.3);
+assert.equal(vegMat.material.uniforms.uFresnelIntensity.value, 0.5);
+vegCfg.distanceTint = 0.1;
+vegCfg.fresnelIntensity = 0.2;
+vegMat.syncVegetation();
+assert.equal(vegMat.material.uniforms.uDistanceTint.value, 0.1);
+assert.equal(vegMat.material.uniforms.uFresnelIntensity.value, 0.2);
+vegMat.dispose();
 
 console.log("world document regression checks passed");
