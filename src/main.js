@@ -26,6 +26,7 @@ import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
 import { getSampleWorld } from "./world/samples/index.js";
 import { createAssetLibraryFromWorldPack } from "./export/PlayableBuildExport.js";
 import { ModRegistry } from "./mods/ModRegistry.js";
+import { AnimationRuntime } from "./animation/AnimationRuntime.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -59,6 +60,9 @@ const colliders = new ColliderSystem();
 colliders.attachScene(scene);
 
 let worldLoader = null;
+// Runtime-only: drives THREE.AnimationMixer playback for rigged assets. Absent in
+// the editor so authoring never auto-plays gameplay animation.
+const animationRuntime = runtimeMode ? new AnimationRuntime() : null;
 let world = null;
 let terrain = null;
 let grass = null;
@@ -168,6 +172,7 @@ async function boot() {
     fog: scene.fog,
     colliderSystem: colliders,
     assetLibrary: runtimeAssetLibrary,
+    animationRuntime,
   });
   world = await worldLoader.load(initialDoc);
   for (const warning of world.warnings) console.warn(warning);
@@ -284,6 +289,7 @@ function frame(now) {
   updateSun();
   grass.update(camera, elapsed);
   trees.update(camera);
+  animationRuntime?.update(dt);
 
   renderer.render(scene, camera);
   markWorldReady();

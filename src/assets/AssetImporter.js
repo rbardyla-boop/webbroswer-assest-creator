@@ -2,6 +2,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { ASSET_TYPES, createAssetId, defaultColliderTypeForAsset, defaultExclusionForAsset } from "./AssetTypes.js";
 import { computeBoundsFromGeometry, computeBoundsFromObject } from "./AssetPreview.js";
 import { iconThumbnail, thumbnailFromImageBlob } from "./AssetThumbnails.js";
+import { extractAnimationMetadata } from "../animation/AnimationMetadata.js";
 
 export class AssetImporter {
   constructor(assetLibrary) {
@@ -13,6 +14,9 @@ export class AssetImporter {
     const blob = file.slice(0, file.size, file.type || "model/gltf-binary");
     const loaded = await parseGLTFBlob(blob);
     const assetShape = { type: ASSET_TYPES.gltf };
+    // Detect skeleton/skinned meshes + animation clips. Static GLBs get empty
+    // clip metadata and behave exactly as before.
+    const animation = extractAnimationMetadata(loaded.scene, loaded.animations);
     const metadata = await this.library.storeAsset({
       id,
       type: ASSET_TYPES.gltf,
@@ -25,8 +29,9 @@ export class AssetImporter {
       defaultColliderType: defaultColliderTypeForAsset(assetShape),
       defaultExclusion: defaultExclusionForAsset(assetShape),
       runtime: { static: true },
+      animation,
     }, blob);
-    this.library.cacheLoadedAsset(id, { ...metadata, scene: loaded.scene });
+    this.library.cacheLoadedAsset(id, { ...metadata, scene: loaded.scene, animations: loaded.animations ?? [] });
     return metadata;
   }
 

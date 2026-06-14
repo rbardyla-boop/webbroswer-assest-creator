@@ -12,6 +12,9 @@ import { ModRegistry } from "../mods/ModRegistry.js";
 import { ModPanel } from "./ModPanel.js";
 import { importModFile } from "../mods/ModImporter.js";
 import { downloadModPackage, downloadModPackageZip } from "../mods/ModExporter.js";
+import { AnimationPanel } from "./AnimationPanel.js";
+import { AnimationPreview } from "../animation/AnimationPreview.js";
+import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
@@ -69,6 +72,7 @@ export class WorldEditor {
     this.armedPrefab = null;
     this.lastExportReport = null;
     this.modRegistry = modRegistry ?? new ModRegistry();
+    this.animationPreview = new AnimationPreview();
 
     this.manager = objectManager;
     this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
@@ -169,14 +173,17 @@ export class WorldEditor {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.root.style.display = "none";
+    this.animationPreview.stop();
     this._clearSelection();
     this.input?.setEnabled?.(true);
     this.onClose?.();
   }
 
-  update() {
+  update(dt = 0) {
     if (!this.isOpen) return;
     this.transform.enabled = true;
+    // Advance the editor-only animation preview (a single mixer, if active).
+    this.animationPreview.update(dt);
     this._refreshPerf();
   }
 
@@ -307,6 +314,17 @@ export class WorldEditor {
       onToggleDebug: () => this.colliderSystem?.toggleDebug(),
     });
     root.appendChild(this._section("Collider", this.colliderInspector.root));
+
+    this.animationPanel = new AnimationPanel({
+      onChange: (override) => {
+        const object = this.selection.primary;
+        if (object) object.userData.animation = override;
+      },
+      onPlay: () => this._previewAnimation(),
+      onStop: () => this.animationPreview.stop(),
+    });
+    root.appendChild(this._section("Animation", this.animationPanel.root));
+
     root.appendChild(this._section("Trees", this._buildTreeControls()));
 
     this.selectionLabel = document.createElement("div");
@@ -444,7 +462,10 @@ export class WorldEditor {
         button.appendChild(img);
       }
       const label = document.createElement("span");
-      label.textContent = `${asset.name}\n${asset.type}`;
+      const animationNote = asset.type === "gltf" && asset.animation?.clips?.length
+        ? `\n♦ ${summarizeAssetAnimation(asset.animation)}`
+        : "";
+      label.textContent = `${asset.name}\n${asset.type}${animationNote}`;
       label.style.whiteSpace = "pre-line";
       label.style.textAlign = "left";
       button.appendChild(label);
@@ -583,8 +604,28 @@ export class WorldEditor {
   _deleteSelected() {
     if (!this.selection.count) return;
     const objects = [...this.selection.objects];
+    for (const object of objects) this.animationPreview.stopFor(object);
     this._clearSelection();
     for (const object of objects) this.manager.remove(object);
+  }
+
+  // Preview the selected object's chosen clip with a single editor mixer.
+  _previewAnimation() {
+    const object = this.selection.primary;
+    const clips = object?.userData?.animationClips;
+    if (!object || !clips?.length) {
+      this.animationPanel.info.textContent = "No animation clips to preview.";
+      return;
+    }
+    const override = this.animationPanel.getOverride();
+    object.userData.animation = override;
+    const clipName = override.clip || object.userData.assetAnimation?.defaultClip || clips[0]?.name;
+    this.animationPreview.play(object, clips, {
+      clip: clipName,
+      loop: override.loop,
+      speed: override.playbackSpeed,
+      offset: override.startOffset,
+    });
   }
 
   async _duplicateSelected() {
@@ -890,13 +931,18 @@ export class WorldEditor {
   _refreshSelectionLabel() {
     if (!this.selectionLabel) return;
     const count = this.selection.count;
+    const primary = count ? this.selection.primary : null;
+    // Release the preview whenever it no longer targets the inspected object
+    // (object→object switch, not just full deselect).
+    if (this.animationPreview.root && this.animationPreview.root !== primary) this.animationPreview.stop();
     if (count === 0) {
       this.selectionLabel.textContent = "No object selected.";
       this.colliderInspector?.setObject(null);
+      this.animationPanel?.setObject(null);
       return;
     }
-    const primary = this.selection.primary;
     this.colliderInspector?.setObject(primary);
+    this.animationPanel?.setObject(primary);
     if (count > 1) {
       this.selectionLabel.textContent = `${count} objects selected — group transform active.`;
     } else {

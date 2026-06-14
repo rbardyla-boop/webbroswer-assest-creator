@@ -2,9 +2,11 @@ import * as THREE from "three";
 import { COLLIDER_TYPES } from "../physics/ColliderProxy.js";
 import { createWorldDocument, WORLD_DOCUMENT_FORMAT, WORLD_DOCUMENT_VERSION } from "./WorldDocument.js";
 import { sanitizePrefabManifest } from "../prefabs/PrefabValidation.js";
+import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
+import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 
 const PRIMITIVES = new Set(["cube", "sphere", "cylinder", "plane", "ramp"]);
-const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom"]);
+const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom", "gltf"]);
 const CAMERA_MODES = new Set(["first", "third"]);
 const COLLIDERS = new Set(Object.values(COLLIDER_TYPES));
 
@@ -122,6 +124,8 @@ function sanitizeObjects(objects, warnings) {
         radius: Math.max(0, numberOr(item?.exclusion?.radius, 0)),
         bounds: item?.exclusion?.bounds ?? null,
       },
+      // Optional placed-object animation override (null when absent/invalid).
+      animation: sanitizePlacedAnimation(item?.animation),
       runtime: {
         visible: item?.runtime?.visible !== false,
         static: item?.runtime?.static !== false,
@@ -163,6 +167,7 @@ function sanitizeAssetManifestItem(item) {
     defaultColliderType: item.defaultColliderType,
     defaultExclusion: item.defaultExclusion,
     runtime: item.runtime ?? {},
+    animation: sanitizeAssetAnimation(item.animation).animation,
   };
 }
 

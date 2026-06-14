@@ -10,12 +10,13 @@ import { WorldObjectManager } from "./WorldObjectManager.js";
 import { validateWorldDocument } from "./WorldValidation.js";
 
 export class WorldRuntimeLoader {
-  constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null } = {}) {
+  constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
     this.scene = scene;
     this.lights = lights;
     this.fog = fog;
     this.colliderSystem = colliderSystem ?? new ColliderSystem();
     this.assetLibrary = assetLibrary;
+    this.animationRuntime = animationRuntime;
     this.terrain = null;
     this.grass = null;
     this.trees = null;
@@ -39,6 +40,7 @@ export class WorldRuntimeLoader {
     this.manager = new WorldObjectManager(this.scene, {
       colliderSystem: this.colliderSystem,
       assetLibrary: this.assetLibrary,
+      animationRuntime: this.animationRuntime,
       onChange: () => {
         this.grass?.rebuildActivePatches();
         this.trees?.rebuildActivePatches();
@@ -76,6 +78,7 @@ export class WorldRuntimeLoader {
   }
 
   dispose() {
+    this.animationRuntime?.clear();
     this.grass?.dispose();
     this.trees?.dispose();
     if (this.manager) {

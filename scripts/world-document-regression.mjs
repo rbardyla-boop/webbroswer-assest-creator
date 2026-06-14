@@ -28,6 +28,9 @@ import { validateModPackage } from "../src/mods/ModValidation.js";
 import { parseModPackage } from "../src/mods/ModImporter.js";
 import { ModRegistry } from "../src/mods/ModRegistry.js";
 import { createModPackage } from "../src/mods/ModManifest.js";
+import { extractAnimationMetadata } from "../src/animation/AnimationMetadata.js";
+import { sanitizeAssetAnimation, sanitizePlacedAnimation, resolveClipName } from "../src/animation/AnimationValidation.js";
+import { AnimationRuntime } from "../src/animation/AnimationRuntime.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -983,5 +986,180 @@ assert.equal({}.polluted, undefined); // no prototype pollution occurred
 // Zip entry names are stripped of traversal segments on read.
 const slipZip = createZip([{ path: "a/../evil.txt", text: "x" }]);
 assert.ok(readZip(slipZip).every((e) => !e.path.includes("..")));
+
+// --- Stage 10: rigged asset runtime -----------------------------------------
+
+// Metadata extraction from a (fake) parsed GLB: clip + skinned-mesh detection.
+const fakeScene = new THREE.Group();
+const skinned = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+skinned.isSkinnedMesh = true;
+fakeScene.add(skinned);
+const extracted = extractAnimationMetadata(fakeScene, [new THREE.AnimationClip("Idle", 1.5, [])]);
+assert.equal(extracted.clips.length, 1);
+assert.equal(extracted.clips[0].name, "Idle");
+assert.equal(extracted.clips[0].duration, 1.5);
+assert.equal(extracted.hasSkinnedMesh, true);
+assert.equal(extracted.defaultClip, "Idle");
+const staticExtract = extractAnimationMetadata(new THREE.Group(), []);
+assert.equal(staticExtract.clips.length, 0);
+assert.equal(staticExtract.hasSkeleton, false);
+
+// Invalid metadata is repaired, not fatal.
+const dirty = sanitizeAssetAnimation({
+  clips: [{ name: "A", duration: -5 }, { name: "A", duration: 1 }, { name: "B", duration: 2 }],
+  defaultClip: "NoSuch",
+  playbackSpeed: 999,
+  autoplay: "yes",
+  loop: 0,
+}).animation;
+assert.equal(dirty.clips.length, 2); // duplicate "A" dropped
+assert.equal(dirty.clips[0].duration, 0); // negative repaired to 0
+assert.equal(dirty.defaultClip, "A"); // missing default → first clip
+assert.equal(dirty.playbackSpeed, 8); // clamped to max
+assert.equal(dirty.autoplay, true); // non-bool → default
+assert.equal(dirty.loop, true);
+assert.equal(sanitizeAssetAnimation(null).animation, null);
+const placedDirty = sanitizePlacedAnimation({ clip: 123, playbackSpeed: -10, startOffset: -3, autoplay: false, loop: true });
+assert.equal(placedDirty.clip, null);
+assert.equal(placedDirty.playbackSpeed, 0.05); // clamped to min
+assert.equal(placedDirty.startOffset, 0);
+assert.equal(placedDirty.autoplay, false);
+assert.equal(sanitizePlacedAnimation(null), null);
+
+// Runtime clip resolution + missing-clip fallback.
+assert.equal(resolveClipName({ clip: "Walk" }, { defaultClip: "Idle" }, ["Idle", "Walk"]), "Walk");
+assert.equal(resolveClipName({ clip: "Nope" }, { defaultClip: "Idle" }, ["Idle", "Walk"]), "Idle"); // missing → default
+assert.equal(resolveClipName({}, { defaultClip: "Gone" }, ["Idle", "Walk"]), "Idle"); // default missing → first
+assert.equal(resolveClipName(null, null, []), null);
+
+// AnimationRuntime: independent mixers, no crash on empty/bad input.
+const animRuntime = new AnimationRuntime();
+assert.equal(animRuntime.register(new THREE.Group(), { animations: [] }, null), null); // no clips → static
+assert.equal(animRuntime.register(null, null, null), null); // bad input → no crash
+const rigRootA = new THREE.Group();
+const rigRootB = new THREE.Group();
+const idleClip = new THREE.AnimationClip("Idle", 1, []);
+const asset10 = { animations: [idleClip], animation: { defaultClip: "Idle", autoplay: true, loop: true, playbackSpeed: 1 } };
+assert.ok(animRuntime.register(rigRootA, asset10, { clip: "Idle" }));
+assert.ok(animRuntime.register(rigRootB, asset10, { clip: "Idle" })); // second instance independent
+assert.equal(animRuntime.count, 2);
+animRuntime.update(0.016); // no throw
+animRuntime.remove(rigRootA);
+assert.equal(animRuntime.count, 1);
+animRuntime.clear();
+assert.equal(animRuntime.count, 0);
+
+// Asset record round-trip: animation metadata survives store + manifest.
+const riggedBlob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "model/gltf-binary" });
+const riggedAsset = await assetLibrary.storeAsset(
+  {
+    id: "gltf-rigged-test",
+    type: "gltf",
+    name: "Rigged",
+    sourceName: "rigged.glb",
+    mimeType: "model/gltf-binary",
+    sizeBytes: 4,
+    animation: {
+      hasSkeleton: true,
+      hasSkinnedMesh: true,
+      clips: [
+        { name: "Idle", duration: 1.5, uuid: "u-idle", index: 0 },
+        { name: "Walk", duration: 0.9, uuid: "u-walk", index: 1 },
+      ],
+      defaultClip: "Idle",
+      autoplay: true,
+      loop: true,
+      playbackSpeed: 1,
+    },
+  },
+  riggedBlob
+);
+assert.equal(riggedAsset.animation.clips.length, 2);
+assert.equal(riggedAsset.animation.defaultClip, "Idle");
+const riggedManifestItem = assetLibrary.createManifest().items.find((i) => i.id === riggedAsset.id);
+assert.equal(riggedManifestItem.animation.clips.length, 2);
+
+// Static GLB still supported (no animation → null, nothing breaks).
+const staticGltf = await assetLibrary.storeAsset(
+  { id: "gltf-static-test", type: "gltf", name: "Static", mimeType: "model/gltf-binary", sizeBytes: 4 },
+  new Blob([new Uint8Array([5, 6, 7, 8])])
+);
+assert.equal(staticGltf.animation, null);
+
+// Placed-object override round-trips through the world document (incl. gltf type).
+const animWorld = createWorldDocument({
+  metadata: { name: "Anim World" },
+  player: { spawn: { x: -20, y: 0, z: -20 }, cameraMode: "third" },
+  objects: [
+    {
+      id: "obj-rigged",
+      name: "Rigged",
+      type: "gltf",
+      assetRef: riggedAsset.id,
+      transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+      animation: { clip: "Walk", autoplay: true, loop: false, playbackSpeed: 2, startOffset: 0.5 },
+    },
+  ],
+});
+const animValidated = validateWorldDocument(animWorld);
+assert.equal(animValidated.warnings.length, 0);
+assert.equal(animValidated.document.objects[0].type, "gltf"); // type now round-trips
+assert.equal(animValidated.document.objects[0].animation.clip, "Walk");
+assert.equal(animValidated.document.objects[0].animation.loop, false);
+assert.equal(animValidated.document.objects[0].animation.playbackSpeed, 2);
+assert.equal(animValidated.document.objects[0].animation.startOffset, 0.5);
+
+// Worldpack export preserves animation metadata (asset + placed override).
+const animPack = await buildWorldPack(animWorld, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+const packAsset = animPack.assets.find((a) => a.id === riggedAsset.id);
+assert.ok(packAsset);
+assert.equal(packAsset.animation.clips.length, 2);
+assert.equal(animPack.world.objects.find((o) => o.assetRef === riggedAsset.id).animation.clip, "Walk");
+
+// Mod package export → install → load preserves animation metadata.
+const animMod = await buildWorldMod(animWorld, assetLibrary, modPrefabLib, { name: "Anim Mod", exportedAt: "2026-06-14T00:00:00.000Z" });
+const animModPackObj = animMod.contents.worldpacks[0].world.objects.find((o) => o.assetRef === riggedAsset.id);
+assert.equal(animModPackObj.animation.clip, "Walk");
+assert.equal(animMod.contents.worldpacks[0].assets.find((a) => a.id === riggedAsset.id).animation.clips.length, 2);
+
+const freshAssetLib = await new AssetLibrary({ store: new MemoryAssetStore() }).init();
+const animModReg = await new ModRegistry({ store: new MemoryModStore() }).init();
+const animInstallPrefabs = await new PrefabLibrary({ store: new MemoryPrefabStore() }).init();
+await animModReg.install(animMod, { assetLibrary: freshAssetLib, prefabLibrary: animInstallPrefabs });
+assert.equal(freshAssetLib.get(riggedAsset.id).animation.clips.length, 2); // asset imported with animation
+const installedAnimWorld = animModReg.getModWorld(animMod.id);
+assert.equal(installedAnimWorld.document.objects.find((o) => o.assetRef === riggedAsset.id).animation.clip, "Walk");
+
+// A sparse placed override must NOT mask asset-level autoplay/loop defaults.
+const maskRuntime = new AnimationRuntime();
+const maskClip = new THREE.AnimationClip("Idle", 1, []);
+const maskAsset = { animations: [maskClip], animation: { defaultClip: "Idle", autoplay: false, loop: true, playbackSpeed: 1 } };
+const maskReg = maskRuntime.register(new THREE.Group(), maskAsset, sanitizePlacedAnimation({ clip: "Idle" }));
+assert.equal(maskReg.action.isRunning(), false); // asset autoplay:false respected through a sparse override
+const playReg = maskRuntime.register(new THREE.Group(), maskAsset, sanitizePlacedAnimation({ clip: "Idle", autoplay: true }));
+assert.equal(playReg.action.isRunning(), true); // explicit override still wins
+maskRuntime.clear();
+
+// Interactive placement (addFromAsset) resolves a metadata-only asset and stashes
+// animation state, so a freshly placed rigged GLB is configurable immediately.
+const placeManager = new WorldObjectManager(new THREE.Scene(), { assetLibrary });
+const reliefMetaOnly = assetLibrary.get(reliefAsset.id);
+assert.ok(!reliefMetaOnly.geometry); // library entry is metadata-only
+const placedRelief = await placeManager.addFromAsset(reliefMetaOnly, new THREE.Vector3(1, 0, 1));
+assert.equal(placedRelief.userData.asset.type, "relief"); // resolved, not a cube fallback
+assert.equal(placedRelief.userData.animation, null); // fresh placement → no override yet
+const riggedResolved = {
+  id: "gltf-fake-resolved",
+  type: "gltf",
+  name: "FakeRig",
+  scene: new THREE.Group(),
+  animations: [new THREE.AnimationClip("Idle", 1, [])],
+  animation: { clips: [{ name: "Idle", duration: 1, uuid: "u", index: 0 }], defaultClip: "Idle", autoplay: true, loop: true, playbackSpeed: 1 },
+};
+const placedRig = await placeManager.addFromAsset(riggedResolved, new THREE.Vector3(2, 0, 2));
+assert.equal(placedRig.userData.assetAnimation.clips.length, 1); // clip metadata for the editor panel
+assert.equal(placedRig.userData.animationClips.length, 1); // parsed clips for preview
 
 console.log("world document regression checks passed");

@@ -92,6 +92,7 @@ export class AssetLibrary {
         defaultColliderType: asset.defaultColliderType,
         defaultExclusion: asset.defaultExclusion,
         runtime: asset.runtime,
+        animation: asset.animation ?? null,
       })),
     };
   }
@@ -111,7 +112,8 @@ export class AssetLibrary {
 
     if (metadata.type === ASSET_TYPES.gltf) {
       const gltf = await parseGLTFBlob(blob);
-      const asset = { ...metadata, scene: gltf.scene };
+      // Keep the parsed clips alongside the scene so the runtime can play them.
+      const asset = { ...metadata, scene: gltf.scene, animations: gltf.animations ?? [] };
       this.loaded.set(id, asset);
       return asset;
     }

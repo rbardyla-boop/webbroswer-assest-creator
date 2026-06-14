@@ -1,14 +1,17 @@
 import * as THREE from "three";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { getHeight } from "../terrain/terrainSampling.js";
 import { normalizeCollider } from "../physics/ColliderProxy.js";
 import { createImageMesh, createMissingAssetMesh, createPlacedObject, createPrimitiveMesh } from "./PlacedObject.js";
 import { ASSET_TYPES } from "../assets/AssetTypes.js";
+import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 
 export class WorldObjectManager {
-  constructor(scene, { colliderSystem, onChange, assetLibrary } = {}) {
+  constructor(scene, { colliderSystem, onChange, assetLibrary, animationRuntime = null } = {}) {
     this.scene = scene;
     this.colliderSystem = colliderSystem;
     this.assetLibrary = assetLibrary;
+    this.animationRuntime = animationRuntime;
     this.onChange = onChange;
     this.root = new THREE.Group();
     this.root.name = "World Objects";
@@ -21,22 +24,47 @@ export class WorldObjectManager {
   }
 
   async addFromAsset(asset, position) {
+    // Resolve metadata-only library assets so GLB/relief/image render correctly
+    // (and rigged GLBs expose their clips) the moment they are placed.
+    const resolved = await this._resolveForPlacement(asset);
     const id = `obj-${this._nextId++}`;
-    const object3D = await this._buildObject3D(asset);
+    const object3D = await this._buildObject3D(resolved);
     const snapped = position.clone();
     snapped.y = getHeight(snapped.x, snapped.z);
 
     const object = createPlacedObject({
       id,
-      asset,
+      asset: resolved,
       object3D,
       position: snapped.toArray(),
     });
-    object.userData.assetRef = asset.id ?? null;
+    object.userData.assetRef = resolved.id ?? asset.id ?? null;
+    this._attachAnimation(object, resolved, null);
     this.root.add(object);
     this.objects.set(id, object);
     this._changed({ boxes: [this.getWorldBox(object)] });
     return object;
+  }
+
+  // Resolve a metadata-only asset to its loaded form (scene/texture/geometry +
+  // animation clips). Primitives and already-resolved assets pass through.
+  async _resolveForPlacement(asset) {
+    if (!this.assetLibrary || !asset?.id || asset.type === "primitive") return asset;
+    if (asset.scene || asset.texture || asset.geometry) return asset;
+    return (await this.assetLibrary.resolve(asset.id)) ?? asset;
+  }
+
+  // Attach animation state to a placed object: the serialized override, the
+  // asset-level clip metadata (for the editor panel) and the parsed clips (for
+  // preview/runtime). Registers with the runtime when one is present (runtime
+  // mode only) so authoring never auto-plays.
+  _attachAnimation(object, asset, overrideInput) {
+    object.userData.animation = sanitizePlacedAnimation(overrideInput);
+    object.userData.assetAnimation = asset?.animation ?? null;
+    object.userData.animationClips = Array.isArray(asset?.animations) ? asset.animations : null;
+    if (this.animationRuntime && object.userData.animationClips?.length) {
+      this.animationRuntime.register(object, asset, object.userData.animation);
+    }
   }
 
   duplicate(object) {
@@ -53,6 +81,8 @@ export class WorldObjectManager {
     // Preserve identity metadata so duplicates keep their asset + prefab links.
     if (object.userData.assetRef) copy.userData.assetRef = object.userData.assetRef;
     copy.userData.prefabRef = object.userData.prefabRef ?? null;
+    // Carry the source's animation override + clips so the duplicate matches.
+    this._attachAnimation(copy, object.userData.asset, object.userData.animation);
     copy.position.y = object.position.y;
     this._changed({ boxes: [this.getWorldBox(copy)] });
     return copy;
@@ -61,6 +91,7 @@ export class WorldObjectManager {
   remove(object) {
     if (!object) return;
     const oldBox = this.getWorldBox(object);
+    this.animationRuntime?.remove(object);
     this.objects.delete(object.userData.objectId);
     object.removeFromParent();
     object.traverse((child) => {
@@ -126,6 +157,7 @@ export class WorldObjectManager {
         radius: 0,
         bounds: null,
       },
+      animation: object.userData.animation ?? null,
       runtime: {
         visible: object.visible,
         static: true,
@@ -207,12 +239,18 @@ export class WorldObjectManager {
       excludeTrees: item.exclusion?.trees ?? item.exclusion?.grass ?? false,
     });
     object.userData.collider.excludeTrees = item.exclusion?.trees ?? item.exclusion?.grass ?? false;
+
+    // Animation: stash override + asset clip metadata + parsed clips, and (in
+    // runtime mode) start playback. In the editor no runtime is present, so
+    // authoring never auto-plays.
+    this._attachAnimation(object, asset, item.animation);
     return object;
   }
 
   clear() {
     const boxes = [...this.objects.values()].map((object) => this.getWorldBox(object));
     for (const object of [...this.objects.values()]) {
+      this.animationRuntime?.remove(object);
       this.objects.delete(object.userData.objectId);
       object.removeFromParent();
       object.traverse((child) => {
@@ -275,7 +313,9 @@ export class WorldObjectManager {
       return mesh;
     }
     if (asset.type === ASSET_TYPES.gltf && asset.scene) {
-      const clone = asset.scene.clone(true);
+      // SkeletonUtils.clone duplicates skeletons/bones so each placed instance
+      // animates independently; it is also correct for non-skinned scenes.
+      const clone = cloneSkeleton(asset.scene);
       clone.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;

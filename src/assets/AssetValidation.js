@@ -1,4 +1,5 @@
 import { ASSET_TYPES, defaultColliderTypeForAsset, defaultExclusionForAsset } from "./AssetTypes.js";
+import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 
 export function normalizeAssetMetadata(metadata) {
   const now = new Date().toISOString();
@@ -18,6 +19,8 @@ export function normalizeAssetMetadata(metadata) {
     defaultColliderType: metadata?.defaultColliderType,
     defaultExclusion: metadata?.defaultExclusion,
     runtime: metadata?.runtime ?? { static: true },
+    // Optional rigged-asset animation metadata (gltf only); null when absent.
+    animation: sanitizeAssetAnimation(metadata?.animation).animation,
   };
   if (!asset.defaultColliderType) asset.defaultColliderType = defaultColliderTypeForAsset(asset);
   if (!asset.defaultExclusion) asset.defaultExclusion = defaultExclusionForAsset(asset);

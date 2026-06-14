@@ -59,6 +59,7 @@ export async function collectBuildAssets(document, assetLibrary) {
       defaultColliderType: metadata.defaultColliderType ?? null,
       defaultExclusion: metadata.defaultExclusion ?? null,
       runtime: metadata.runtime ?? null,
+      animation: metadata.animation ?? null,
       dataBase64: await blobToBase64(blob),
     });
   }
