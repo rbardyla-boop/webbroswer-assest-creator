@@ -223,6 +223,9 @@ async function boot() {
       },
     });
     document.getElementById("open-editor").addEventListener("click", () => editor.open());
+    // Debug-safe observability hook (editor builds only; never in runtime/play
+    // exports). Lets tests/devtools drive and inspect the editor + undo history.
+    window.__WORLD_EDITOR__ = editor;
   }
 
   cameraController.update(0.016);

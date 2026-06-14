@@ -21,6 +21,8 @@ import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
 import { PrefabInstancer } from "../prefabs/PrefabInstancer.js";
 import { PrefabPanel } from "./PrefabPanel.js";
 import { SelectionGroup } from "./SelectionGroup.js";
+import { CommandStack } from "./CommandStack.js";
+import { AddObjectsCommand, RemoveObjectsCommand, TransformObjectsCommand } from "./commands/WorldObjectCommands.js";
 import { getSampleWorld, VERTICAL_SLICE_ID } from "../world/samples/index.js";
 
 export class WorldEditor {
@@ -76,10 +78,15 @@ export class WorldEditor {
 
     this.manager = objectManager;
     this.selection = new SelectionGroup({ scene: this.scene, manager: objectManager });
+    // Bounded in-memory undo/redo for spatial authoring (place / prefab / dup /
+    // delete / transform). Cleared whenever the world is reloaded so history
+    // never references objects from a torn-down world.
+    this.history = new CommandStack({ limit: 100, onChange: () => this._refreshHistoryControls() });
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.selectedAsset = this.assetLibrary.list()[0];
     this._transformStartBox = null;
+    this._dragBefore = null;
     this._transformUpdates = 0;
     this.stats = {
       lastActionMs: 0,
@@ -99,6 +106,9 @@ export class WorldEditor {
       this._refreshSelectionLabel();
     });
     this.transform.addEventListener("mouseDown", () => {
+      // Snapshot the pre-drag transforms so the finished move can be recorded as
+      // a single undoable command (one per drag, not per gizmo tick).
+      this._dragBefore = this._snapshotTransforms(this.selection.objects);
       if (this.selection.isMulti) this.selection.beginDrag();
       else this._transformStartBox = this.selection.primary ? this.manager.getWorldBox(this.selection.primary) : null;
       this._transformUpdates = 0;
@@ -113,6 +123,13 @@ export class WorldEditor {
       } else if (this.selection.primary) {
         this.manager.commitObjectChange(this.selection.primary, this._transformStartBox);
       }
+      // Record the drag for undo only if it actually moved something (a bare
+      // click on the gizmo must not push an empty command).
+      const after = this._snapshotTransforms(this.selection.objects);
+      if (this._transformsChanged(this._dragBefore, after)) {
+        this.history.push(new TransformObjectsCommand(this.manager, this._dragBefore, after));
+      }
+      this._dragBefore = null;
       this.stats.lastActionMs = performance.now() - t0;
       this._transformStartBox = null;
       this._refreshPerf();
@@ -144,6 +161,12 @@ export class WorldEditor {
       this.selection.setManager(objectManager);
     }
     this.selection.clear();
+    // A reloaded world is a fresh object graph (applyLoadedWorld builds a NEW
+    // WorldObjectManager, never clear()-ing the old one in place). Discard
+    // history here so no parked command references a torn-down object. Every
+    // world-reload path (_load/_loadSample/_importWorld/_loadModWorld) routes
+    // through onLoadWorld → setWorldContext, so this is the single choke point.
+    this.history.clear();
     this._armPrefabPlacement(null);
     this.prefabPanel?.refresh();
     this.treeSystem = treeSystem ?? this.treeSystem;
@@ -266,6 +289,20 @@ export class WorldEditor {
     actions.appendChild(this._button("Close", () => this.close()));
     root.appendChild(actions);
 
+    const history = document.createElement("div");
+    Object.assign(history.style, { display: "flex", flexDirection: "column", gap: "7px" });
+    const historyButtons = document.createElement("div");
+    Object.assign(historyButtons.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
+    this.undoButton = this._button("Undo", () => this._undo());
+    this.redoButton = this._button("Redo", () => this._redo());
+    historyButtons.appendChild(this.undoButton);
+    historyButtons.appendChild(this.redoButton);
+    this.historyLabel = document.createElement("div");
+    Object.assign(this.historyLabel.style, { color: "#8fa899", fontSize: "10px" });
+    history.appendChild(historyButtons);
+    history.appendChild(this.historyLabel);
+    root.appendChild(this._section("History (Ctrl+Z / Ctrl+Shift+Z)", history));
+
     const assetActions = document.createElement("div");
     Object.assign(assetActions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     assetActions.appendChild(this._button("Rename Asset", () => this._renameSelectedAsset()));
@@ -339,6 +376,7 @@ export class WorldEditor {
     this.root = root;
     this._renderAssetList();
     this._refreshSelectionLabel();
+    this._refreshHistoryControls();
   }
 
   _section(label, child) {
@@ -486,6 +524,24 @@ export class WorldEditor {
 
     window.addEventListener("keydown", (event) => {
       if (!this.isOpen || this.reliefTool.isOpen) return;
+      // Undo/redo: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y. Skip while typing in a
+      // field so native text undo still works.
+      const typing = /^(input|textarea|select)$/i.test(event.target?.tagName ?? "") || event.target?.isContentEditable;
+      if ((event.ctrlKey || event.metaKey) && !typing) {
+        if (event.code === "KeyZ" && !event.shiftKey) {
+          event.preventDefault();
+          this._undo();
+          return;
+        }
+        if ((event.code === "KeyZ" && event.shiftKey) || event.code === "KeyY") {
+          event.preventDefault();
+          this._redo();
+          return;
+        }
+      }
+      // Don't let editor shortcuts (delete / transform-mode) hijack text editing
+      // in the panel's number inputs (tree density/visible/seed).
+      if (typing) return;
       if (event.code === "Delete" || event.code === "Backspace") this._deleteSelected();
       if (event.code === "Escape") {
         // Escape disarms prefab placement first, then closes the editor.
@@ -560,7 +616,9 @@ export class WorldEditor {
     }
     const point = terrainHits[0].point;
     point.y = getHeight(point.x, point.z);
-    this._select(await this.manager.addFromAsset(this.selectedAsset, point));
+    const placed = await this.manager.addFromAsset(this.selectedAsset, point);
+    this.history.push(new AddObjectsCommand(this.manager, [placed]));
+    this._select(placed);
   }
 
   _findEditorRoot(object) {
@@ -606,7 +664,63 @@ export class WorldEditor {
     const objects = [...this.selection.objects];
     for (const object of objects) this.animationPreview.stopFor(object);
     this._clearSelection();
-    for (const object of objects) this.manager.remove(object);
+    // execute() detaches the objects now; the command parks them so undo can
+    // restore the exact same instances.
+    this.history.execute(new RemoveObjectsCommand(this.manager, objects));
+  }
+
+  _undo() {
+    if (this.history.undo()) this._syncSelectionAfterHistory();
+  }
+
+  _redo() {
+    if (this.history.redo()) this._syncSelectionAfterHistory();
+  }
+
+  // After undo/redo the world changed under the selection: drop any selected
+  // objects that are no longer present, then rebuild gizmo + highlight + labels.
+  _syncSelectionAfterHistory() {
+    const valid = this.selection.objects.filter((object) => this.manager.objects.has(object.userData.objectId));
+    this.selection.set(valid); // rebuilds BoxHelpers at current positions
+    this._applySelection();
+    this._refreshPerf();
+  }
+
+  _refreshHistoryControls() {
+    if (this.undoButton) {
+      this.undoButton.disabled = !this.history.canUndo;
+      this.undoButton.style.opacity = this.history.canUndo ? "1" : "0.4";
+    }
+    if (this.redoButton) {
+      this.redoButton.disabled = !this.history.canRedo;
+      this.redoButton.style.opacity = this.history.canRedo ? "1" : "0.4";
+    }
+    if (this.historyLabel) {
+      this.historyLabel.textContent = `history: ${this.history.depth} undo · ${this.history.redoDepth} redo`;
+    }
+  }
+
+  _snapshotTransforms(objects) {
+    return objects.map((object) => ({
+      id: object.userData.objectId,
+      position: object.position.toArray(),
+      rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
+      scale: object.scale.toArray(),
+    }));
+  }
+
+  _transformsChanged(before, after) {
+    if (!before || !after || before.length !== after.length) return false;
+    const eps = 1e-6;
+    for (let i = 0; i < before.length; i++) {
+      if (before[i].id !== after[i].id) return true;
+      for (const key of ["position", "rotation", "scale"]) {
+        for (let j = 0; j < 3; j++) {
+          if (Math.abs(before[i][key][j] - after[i][key][j]) > eps) return true;
+        }
+      }
+    }
+    return false;
   }
 
   // Preview the selected object's chosen clip with a single editor mixer.
@@ -637,6 +751,7 @@ export class WorldEditor {
       const copy = await this.manager.duplicate(source);
       if (copy) copies.push(copy);
     }
+    if (copies.length) this.history.push(new AddObjectsCommand(this.manager, copies));
     this.selection.set(copies);
     this._applySelection();
   }
@@ -680,7 +795,10 @@ export class WorldEditor {
     const placed = await this.prefabInstancer.instantiate(prefab, {
       position: { x: point.x, y: point.y, z: point.z },
     });
-    if (placed.length) this._select(placed[0]);
+    if (placed.length) {
+      this.history.push(new AddObjectsCommand(this.manager, placed));
+      this._select(placed[0]);
+    }
     this.prefabPanel.setStatus(`Placed "${prefab.name}" (${placed.length} object). Click again to place more.`);
   }
 

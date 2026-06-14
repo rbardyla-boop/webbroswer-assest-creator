@@ -33,6 +33,8 @@ import { sanitizeAssetAnimation, sanitizePlacedAnimation, resolveClipName } from
 import { AnimationRuntime } from "../src/animation/AnimationRuntime.js";
 import { buildAnimatedFixtureScene, FIXTURE_CLIP_NAMES } from "../src/animation/fixtures/animatedFixture.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { CommandStack } from "../src/editor/CommandStack.js";
+import { AddObjectsCommand, RemoveObjectsCommand, TransformObjectsCommand } from "../src/editor/commands/WorldObjectCommands.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -1206,5 +1208,125 @@ assert.deepEqual(dbgRuntime.activeObjectIds(), ["obj-dbg"]);
 assert.deepEqual(dbgRuntime.activeClipNames(), ["Idle"]);
 dbgRuntime.clear();
 assert.equal(dbgRuntime.debugSnapshot().count, 0);
+
+// --- Stage 11: editor command stack (undo/redo) -----------------------------
+
+const cubeAsset = { type: "primitive", kind: "cube", name: "Cube" };
+
+// Add → undo removes, redo restores the EXACT same instance (object retention).
+const histManager = new WorldObjectManager(new THREE.Scene());
+const placed1 = await histManager.addFromAsset(cubeAsset, new THREE.Vector3(0, 0, 0));
+const id1 = placed1.userData.objectId;
+const stack = new CommandStack({ limit: 5 });
+stack.push(new AddObjectsCommand(histManager, [placed1]));
+assert.equal(histManager.objects.size, 1);
+assert.equal(stack.canUndo, true);
+assert.equal(stack.canRedo, false);
+stack.undo();
+assert.equal(histManager.objects.size, 0);
+assert.equal(stack.canRedo, true);
+stack.redo();
+assert.equal(histManager.objects.size, 1);
+assert.equal(histManager.objects.get(id1), placed1); // same object, same id
+assert.equal(stack.canRedo, false);
+
+// Transform → undo/redo restores exact position/rotation/scale.
+const before1 = [
+  { id: id1, position: placed1.position.toArray(), rotation: [placed1.rotation.x, placed1.rotation.y, placed1.rotation.z], scale: placed1.scale.toArray() },
+];
+placed1.position.set(7, 0, -3);
+placed1.rotation.set(0, 0.5, 0);
+placed1.scale.set(2, 2, 2);
+placed1.updateMatrixWorld(true);
+const after1 = [{ id: id1, position: [7, 0, -3], rotation: [0, 0.5, 0], scale: [2, 2, 2] }];
+stack.push(new TransformObjectsCommand(histManager, before1, after1));
+stack.undo();
+assert.ok(Math.abs(placed1.position.x - 0) < 1e-9);
+assert.ok(Math.abs(placed1.scale.x - 1) < 1e-9);
+assert.ok(Math.abs(placed1.rotation.y - 0) < 1e-9);
+stack.redo();
+assert.ok(Math.abs(placed1.position.x - 7) < 1e-9);
+assert.ok(Math.abs(placed1.scale.x - 2) < 1e-9);
+assert.ok(Math.abs(placed1.rotation.y - 0.5) < 1e-9);
+
+// Delete (execute) detaches; undo re-attaches the same instance; redo removes.
+const placed2 = await histManager.addFromAsset(cubeAsset, new THREE.Vector3(5, 0, 5));
+const id2 = placed2.userData.objectId;
+stack.push(new AddObjectsCommand(histManager, [placed2]));
+assert.equal(histManager.objects.size, 2);
+stack.execute(new RemoveObjectsCommand(histManager, [placed2]));
+assert.equal(histManager.objects.size, 1);
+assert.equal(histManager.objects.has(id2), false);
+stack.undo();
+assert.equal(histManager.objects.size, 2);
+assert.equal(histManager.objects.get(id2), placed2); // exact instance restored
+stack.redo();
+assert.equal(histManager.objects.has(id2), false);
+
+// A fresh action discards the redo branch.
+stack.undo(); // bring placed2 back so there is something to compare
+assert.equal(histManager.objects.has(id2), true);
+stack.undo(); // undo the add of placed2 → detached, sits in redo
+assert.equal(stack.canRedo, true);
+const placed3 = await histManager.addFromAsset(cubeAsset, new THREE.Vector3(9, 0, 9));
+stack.push(new AddObjectsCommand(histManager, [placed3])); // new action clears redo
+assert.equal(stack.canRedo, false);
+
+// Multi-object add (prefab/duplicate shape): one command, N objects.
+const multiManager = new WorldObjectManager(new THREE.Scene());
+const a = await multiManager.addFromAsset(cubeAsset, new THREE.Vector3(0, 0, 0));
+const b = await multiManager.addFromAsset(cubeAsset, new THREE.Vector3(1, 0, 0));
+const multiStack = new CommandStack();
+multiStack.push(new AddObjectsCommand(multiManager, [a, b]));
+assert.equal(multiManager.objects.size, 2);
+multiStack.undo();
+assert.equal(multiManager.objects.size, 0); // both removed by one undo
+multiStack.redo();
+assert.equal(multiManager.objects.size, 2);
+
+// Bounded history: evicting a LIVE (done) add command must NOT dispose its
+// object — it is still in the scene.
+const evManager = new WorldObjectManager(new THREE.Scene());
+const evStack = new CommandStack({ limit: 2 });
+for (let i = 0; i < 4; i++) {
+  const o = await evManager.addFromAsset(cubeAsset, new THREE.Vector3(i, 0, 0));
+  evStack.push(new AddObjectsCommand(evManager, [o]));
+}
+assert.equal(evStack.depth, 2); // only the two newest remain undoable
+assert.equal(evManager.objects.size, 4); // evicted-but-live objects kept in scene
+evStack.undo();
+evStack.undo();
+assert.equal(evStack.canUndo, false);
+assert.equal(evManager.objects.size, 2); // only the two retained commands undone
+
+// Discarding the redo branch disposes objects parked there (frees GPU memory).
+const dispManager = new WorldObjectManager(new THREE.Scene());
+let disposed = 0;
+const realDispose = dispManager.disposeObject.bind(dispManager);
+dispManager.disposeObject = (o) => { disposed++; return realDispose(o); };
+const dispStack = new CommandStack({ limit: 5 });
+const dObj = await dispManager.addFromAsset(cubeAsset, new THREE.Vector3(0, 0, 0));
+dispStack.push(new AddObjectsCommand(dispManager, [dObj]));
+dispStack.undo(); // dObj detached → parked in the redo branch
+assert.equal(dispManager.objects.size, 0);
+assert.equal(disposed, 0); // parked, not yet disposed
+const dObj2 = await dispManager.addFromAsset(cubeAsset, new THREE.Vector3(1, 0, 0));
+dispStack.push(new AddObjectsCommand(dispManager, [dObj2])); // clears redo
+assert.equal(disposed, 1); // the discarded, parked dObj was disposed
+
+// clear() disposes only parked (detached) objects, never live ones.
+const clManager = new WorldObjectManager(new THREE.Scene());
+let clDisposed = 0;
+const clReal = clManager.disposeObject.bind(clManager);
+clManager.disposeObject = (o) => { clDisposed++; return clReal(o); };
+const clStack = new CommandStack();
+const live = await clManager.addFromAsset(cubeAsset, new THREE.Vector3(0, 0, 0));
+clStack.push(new AddObjectsCommand(clManager, [live])); // live, in undo stack
+const gone = await clManager.addFromAsset(cubeAsset, new THREE.Vector3(1, 0, 0));
+clStack.push(new AddObjectsCommand(clManager, [gone]));
+clStack.undo(); // gone detached → parked in redo
+clStack.clear();
+assert.equal(clDisposed, 1); // only the parked object disposed
+assert.equal(clManager.objects.has(live.userData.objectId), true); // live object untouched
 
 console.log("world document regression checks passed");

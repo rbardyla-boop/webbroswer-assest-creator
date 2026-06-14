@@ -88,12 +88,37 @@ export class WorldObjectManager {
     return copy;
   }
 
-  remove(object) {
-    if (!object) return;
-    const oldBox = this.getWorldBox(object);
+  // Detach a placed object from the scene + registry WITHOUT disposing its GPU
+  // resources, so it can be re-attached later (the editor undo/redo stack parks
+  // detached objects and only disposes them when their command leaves history).
+  // Returns the world box it occupied so callers can rebuild grass/trees.
+  detach(object) {
+    if (!object) return null;
+    const box = this.getWorldBox(object);
     this.animationRuntime?.remove(object);
     this.objects.delete(object.userData.objectId);
     object.removeFromParent();
+    this._changed({ boxes: [box] });
+    return box;
+  }
+
+  // Re-attach a previously detached placed object under its original id. In
+  // runtime mode this re-registers animation; the editor has no runtime, so
+  // authoring never auto-plays.
+  attach(object) {
+    if (!object) return;
+    this.root.add(object);
+    this.objects.set(object.userData.objectId, object);
+    if (this.animationRuntime && object.userData.animationClips?.length) {
+      this.animationRuntime.register(object, object.userData.asset, object.userData.animation);
+    }
+    this._changed({ boxes: [this.getWorldBox(object)] });
+  }
+
+  // Free an object's geometry/material GPU resources. Call only when the object
+  // is gone for good (never on one that may be re-attached via undo).
+  disposeObject(object) {
+    if (!object) return;
     object.traverse((child) => {
       if (child.geometry) child.geometry.dispose?.();
       if (child.material) {
@@ -101,7 +126,12 @@ export class WorldObjectManager {
         else child.material.dispose?.();
       }
     });
-    this._changed({ boxes: [oldBox] });
+  }
+
+  remove(object) {
+    if (!object) return;
+    this.detach(object);
+    this.disposeObject(object);
   }
 
   snapToTerrain(object) {
