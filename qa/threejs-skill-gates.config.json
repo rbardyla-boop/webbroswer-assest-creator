@@ -24,7 +24,7 @@
     "src/utils/random.js"
   ],
   "docs": [
-    "THREEJS_SKILL_ADOPTION.md",
+    "docs/THREEJS_SKILL_ADOPTION.md",
     "docs/ASSET_IMPORT_GATE.md",
     "docs/IMAGE_GENERATION_GATE.md",
     "docs/AUDIO_GENERATION_GATE.md"

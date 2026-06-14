@@ -207,7 +207,7 @@ function checkDebugProfiler() {
 
 function checkQaRelease() {
   assertContains(
-    'THREEJS_SKILL_ADOPTION.md',
+    'docs/THREEJS_SKILL_ADOPTION.md',
     ['Skill-to-engine map', 'Stage-completion rule', 'npm run qa:skills', 'Browser smoke'],
     'qa/adoption-manual: maps skills to gates'
   );
