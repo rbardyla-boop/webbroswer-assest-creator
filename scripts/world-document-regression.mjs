@@ -2005,6 +2005,25 @@ assert.equal(mZero.reason, "zero-direction");
 // Determinism: identical ray → identical result object.
 assert.deepEqual(raycastVoxels(rg, { x: -10, y: 2.5, z: 2.5 }, { x: 1, y: 0, z: 0 }), hX);
 
+// Hardening (formal review): a non-finite ray direction is rejected cleanly up
+// front, not NaN-traversed to the step ceiling with a misleading reason.
+assert.equal(raycastVoxels(rg, { x: 0, y: 0, z: 0 }, { x: NaN, y: 0, z: -1 }).reason, "zero-direction");
+assert.equal(raycastVoxels(rg, { x: 0, y: 0, z: 0 }, { x: Infinity, y: 0, z: -1 }).reason, "zero-direction");
+// VoxelGrid is self-defending: non-finite bounds fail fast instead of silently
+// building a NaN-dimensioned zero-length grid.
+assert.throws(
+  () => new VoxelGrid({ min: new THREE.Vector3(NaN, 0, 0), max: new THREE.Vector3(1, 1, 1), resolution: 8 }),
+  /non-finite bounds/
+);
+// A non-multiple-of-3 vertex buffer floors its triangle count (no OOB read).
+const partialGeo = new THREE.BufferGeometry();
+partialGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(10 * 3), 3)); // 10 verts
+const partialMesh = new THREE.Mesh(partialGeo, new THREE.MeshBasicMaterial());
+partialMesh.position.set(5, 0, 0);
+partialMesh.updateMatrixWorld(true);
+const partialVox = voxelizeObjects([partialMesh], { resolution: 8 });
+assert.equal(partialVox.stats.triangles, 3, "non-multiple-of-3 buffer floors to whole triangles (no partial)");
+
 // --- Stage 17A: Visibility + Streaming Kernel --------------------------------
 
 // Config caps: bands clamp, unloadBand >= guardBand, garbage → defaults.

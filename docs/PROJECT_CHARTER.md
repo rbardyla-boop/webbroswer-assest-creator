@@ -295,6 +295,18 @@ voxelization determinism/caps + every ray edge case + the non-finite guard. Stag
 (Procedural Build System v1) can build on this for occupancy/placement validation.
 Combat/Skybreak stays blocked.
 
+**Formal review (before load-bearing for 17C).** A 3-dimension adversarial review
+(correctness / security-untrusted-bounds / SAT+Amanatides–Woo math), each finding
+independently verified in a fresh context: **0 critical / 0 high / 0 medium —
+load-bearing-ready.** Correctness + math dimensions APPROVE with zero findings; the
+security dimension found only defense-in-depth nits at API boundaries (none a hang/
+DoS — the budget/step caps hold; none UI-reachable). All four were hardened anyway,
+since 17C points these APIs at procedural geometry: (1) `raycastVoxels` rejects a
+non-finite direction up front; (2) the Voxelizer skips a non-finite (possibly
+pre-cached) per-mesh bounding box; (3) `triCount` is floored so a non-multiple-of-3
+buffer can't attempt an OOB read; (4) `VoxelGrid` fails fast on non-finite bounds.
+Regression assertions added for each.
+
 ## ADR-015 — Reverse-Z depth gate (Stage 15)
 
 **Decision.** Request a reversed-Z depth buffer for the main renderer (default on),

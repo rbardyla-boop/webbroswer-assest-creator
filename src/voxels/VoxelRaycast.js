@@ -16,6 +16,12 @@ const EPS = 1e-12;
 export function raycastVoxels(grid, origin, direction, opts = {}) {
   const maxDistance = Number.isFinite(opts.maxDistance) ? opts.maxDistance : Infinity;
 
+  // Reject a non-finite direction (NaN/Infinity) up front — otherwise the
+  // length guard below passes (NaN/Infinity are not < EPS) and the ray would
+  // traverse with NaN cells until the step ceiling, returning the wrong reason.
+  if (!Number.isFinite(direction.x) || !Number.isFinite(direction.y) || !Number.isFinite(direction.z)) {
+    return miss("zero-direction");
+  }
   // Normalize direction; a zero-length ray can't traverse.
   const dlen = Math.hypot(direction.x, direction.y, direction.z);
   if (dlen < EPS) return miss("zero-direction");

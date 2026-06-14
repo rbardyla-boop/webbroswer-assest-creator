@@ -40,6 +40,10 @@ export function voxelizeObjects(objects, configOverrides = {}) {
   for (const { mesh } of meshes) {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     tmpBox.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+    // Skip a non-finite (possibly pre-cached) bounding box so it can't poison the
+    // combined AABB; any NaN that slips past here is still inert in the per-
+    // triangle loop (NaN cell ranges iterate zero times).
+    if (tmpBox.isEmpty() || ![tmpBox.min.x, tmpBox.min.y, tmpBox.min.z, tmpBox.max.x, tmpBox.max.y, tmpBox.max.z].every(Number.isFinite)) continue;
     bounds.union(tmpBox);
   }
   if (bounds.isEmpty()) return empty;
@@ -69,7 +73,9 @@ export function voxelizeObjects(objects, configOverrides = {}) {
     const geom = mesh.geometry;
     const pos = geom.attributes.position;
     const idx = geom.index;
-    const triCount = idx ? idx.count / 3 : pos.count / 3;
+    // Floor so a malformed (non-multiple-of-3) buffer can't run a partial last
+    // triangle that reads past the end of the attribute (OOB read → NaN).
+    const triCount = Math.floor((idx ? idx.count : pos.count) / 3);
     const mw = mesh.matrixWorld;
 
     for (let t = 0; t < triCount; t++) {

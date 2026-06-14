@@ -14,6 +14,12 @@ const MIN_EXTENT = 1e-4; // pad degenerate (flat) AABBs so cellSize stays > 0
 
 export class VoxelGrid {
   constructor({ min, max, resolution }) {
+    // Self-defending: reject non-finite bounds (fail fast) rather than silently
+    // building a NaN-dimensioned, zero-length grid. The Voxelizer already guards
+    // its AABB upstream, so this only fires on a genuinely bad direct construction.
+    if (![min?.x, min?.y, min?.z, max?.x, max?.y, max?.z].every(Number.isFinite)) {
+      throw new Error("VoxelGrid: non-finite bounds");
+    }
     // Defense in depth: a non-finite resolution (if ever passed directly, bypassing
     // createVoxelConfig) falls back to the default rather than producing NaN dims.
     const safeRes = Number.isFinite(resolution) ? resolution : VOXEL_LIMITS.DEFAULT_RESOLUTION;
