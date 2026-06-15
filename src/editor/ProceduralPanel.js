@@ -1,14 +1,16 @@
-// Editor "Procedural" panel (Stage 17C / 18). A SYSTEM panel (like Grass/Bushes/
-// Terrain) — it applies directly, it is not a spatial-edit action. It drives a
-// generator instance through the host's WorldObjectManager: Generate / Regenerate
-// emit normal WorldDocument objects tagged with the instance id; Clear removes
-// them; Lock detaches them from the generator so they become permanent objects.
+// Editor "Procedural" panel (Stage 17C / 18 / 18B). A SYSTEM panel (like Grass/
+// Bushes/Terrain) — it applies directly, it is not a spatial-edit action. It drives
+// a generator instance through the host's WorldObjectManager: Generate / Regenerate
+// emit normal WorldDocument objects tagged with the instance id; Clear removes them;
+// Lock detaches them from the generator so they become permanent objects.
 //
-// Stage 18: the panel is data-driven off the GeneratorRegistry. A Type dropdown
-// picks city / camp / ruin / forest; the style options, the generic "amount" dial,
-// and the prefab source slots all reconfigure from the registry entry. Each type
-// has its own instance id (`gen-<type>`), so a city and a camp can coexist in one
-// world and be regenerated/cleared independently.
+// The panel is data-driven off the GeneratorRegistry. A Type dropdown picks the
+// generator; the style options, the generic "amount" dial, the origin inputs, and
+// the source slots all reconfigure from the registry entry. Cluster generators carry
+// an origin (so a city, a camp and a forest can be placed apart); the connector has
+// no origin — its two source slots are "anchor" kind, listing the other generator
+// instances to link, resolved to world points via landmarkAnchors. Each type owns
+// instance id `gen-<type>`, so generators coexist and regenerate/clear independently.
 //
 // The generator itself holds NO scene authority — everything flows through
 // addWorldObjects/removeWorldObjects, so generated content uses the same lighting,
@@ -16,6 +18,7 @@
 
 import { GENERATORS, GENERATOR_LIST, getGenerator, generateGeneratorObjects } from "../generators/GeneratorRegistry.js";
 import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
+import { resolveAnchorPoint, listAnchorInstances } from "../generators/landmarkAnchors.js";
 import { validatePlacement } from "../generators/PlacementValidator.js";
 
 export class ProceduralPanel {
@@ -112,8 +115,6 @@ export class ProceduralPanel {
   // Restore panel inputs from a loaded world's stored generator instances. Picks
   // the first stored instance's type; the user can switch types to reach others.
   setFromDocument(document) {
-    // Refresh prefab options first (user prefabs may have loaded with the world).
-    this._populatePrefabOptions();
     const instances = document?.generators?.instances ?? [];
     const inst = instances[0];
     const type = inst && Object.hasOwn(GENERATORS, inst.type) ? inst.type : "city";
@@ -122,8 +123,8 @@ export class ProceduralPanel {
 
   // --- internals --------------------------------------------------------------
 
-  // Reconfigure the style options, amount dial, and prefab source slots for the
-  // currently selected type. Does not touch the document.
+  // Reconfigure style options, amount dial, origin visibility, and source slots for
+  // the currently selected type. Does not touch the document.
   _applyType() {
     const g = getGenerator(this.typeSelect.value);
     this.activeType = g.type;
@@ -138,22 +139,33 @@ export class ProceduralPanel {
     this._amountField = g.amount.field;
     this._amountDefault = g.amount.default;
 
+    this._usesOrigin = g.usesOrigin !== false;
+    this.originRow.style.display = this._usesOrigin ? "" : "none";
+
+    this._usesDensity = g.usesDensity !== false;
+    this.densityRow.style.display = this._usesDensity ? "" : "none";
+
     for (let i = 0; i < this.slots.length; i++) {
       const src = g.sources[i] ?? null;
       const slot = this.slots[i];
       if (src) {
         slot.key = src.key;
+        slot.kind = src.kind ?? "prefab";
+        slot.pointKey = src.pointKey ?? null;
         slot.label.textContent = src.label;
         slot.row.style.display = "";
       } else {
         slot.key = null;
+        slot.kind = "prefab";
+        slot.pointKey = null;
         slot.row.style.display = "none";
       }
     }
+    this._populateSlotOptions();
   }
 
-  // Restore seed/style/amount/density/prefab fields for the active type's instance,
-  // or reset to defaults when the world has no instance of this type.
+  // Restore seed/style/amount/density/origin/slot fields for the active type's
+  // instance, or reset to defaults when the world has no instance of this type.
   _restoreInstanceFields() {
     const document = this.getDocument();
     // Prefer the canonical `gen-<type>` instance; fall back to the first instance of
@@ -167,6 +179,10 @@ export class ProceduralPanel {
       const amt = inst.config[this._amountField];
       if (Number.isFinite(amt)) this.blocksInput.value = amt;
       if (Number.isFinite(inst.config.density)) this.densityInput.value = inst.config.density;
+      if (this._usesOrigin && inst.config.origin) {
+        this.originXInput.value = Number.isFinite(inst.config.origin.x) ? inst.config.origin.x : 0;
+        this.originZInput.value = Number.isFinite(inst.config.origin.z) ? inst.config.origin.z : 0;
+      }
       for (const slot of this.slots) {
         if (!slot.key) continue;
         const value = inst.config[slot.key] ?? "";
@@ -174,6 +190,10 @@ export class ProceduralPanel {
       }
     } else {
       this.blocksInput.value = this._amountDefault;
+      if (this._usesOrigin) {
+        this.originXInput.value = 0;
+        this.originZInput.value = 0;
+      }
       for (const slot of this.slots) if (slot.key) slot.select.value = "";
     }
     const manager = this.getManager();
@@ -186,12 +206,22 @@ export class ProceduralPanel {
     const overrides = {
       seed: this.seedInput.value,
       style: this.styleSelect.value,
-      density: parseFloat(this.densityInput.value),
-      origin: { x: 0, z: 0 },
-      [this._amountField]: parseInt(this.blocksInput.value, 10),
+      [this._amountField]: parseFloat(this.blocksInput.value),
     };
+    if (this._usesDensity) overrides.density = parseFloat(this.densityInput.value);
+    if (this._usesOrigin) {
+      overrides.origin = { x: parseFloat(this.originXInput.value) || 0, z: parseFloat(this.originZInput.value) || 0 };
+    }
     for (const slot of this.slots) {
-      if (slot.key) overrides[slot.key] = slot.select.value || null;
+      if (!slot.key) continue;
+      const value = slot.select.value || null;
+      overrides[slot.key] = value;
+      // Anchor slots store a generator-instance id; resolve it to a world point so
+      // the connector (whose emitter is pure) gets concrete from/to coordinates.
+      if (slot.kind === "anchor" && slot.pointKey && value) {
+        const point = resolveAnchorPoint(this.getDocument(), value);
+        if (point) overrides[slot.pointKey] = point;
+      }
     }
     return g.createConfig(overrides);
   }
@@ -238,29 +268,34 @@ export class ProceduralPanel {
     this.styleSelect = this._select([]);
     this.blocksInput = this._number(4, 1, 1, 8);
     this.densityInput = this._number(0.6, 0.05, 0, 1);
+    this.originXInput = this._number(0, 1);
+    this.originZInput = this._number(0, 1);
 
-    // Two generic prefab source slots; labels + visibility come from the registry.
+    // Two generic source slots; labels, visibility, and kind come from the registry.
     this.buildingPrefabSelect = this._select([]);
     this.propPrefabSelect = this._select([]);
-    this._populatePrefabOptions();
 
     const typeRow = this._labeled("Type", this.typeSelect);
     const styleRow = this._labeled("Style", this.styleSelect);
     const amountRow = this._labeled("Blocks", this.blocksInput);
     const densityRow = this._labeled("Density", this.densityInput);
+    const originRow = this._twoInputRow("Origin x,z", this.originXInput, this.originZInput);
     const buildingRow = this._labeled("Buildings", this.buildingPrefabSelect);
     const propRow = this._labeled("Props", this.propPrefabSelect);
     this.amountLabel = amountRow.labelSpan;
+    this.densityRow = densityRow.wrap;
+    this.originRow = originRow.wrap;
 
     this.slots = [
-      { select: this.buildingPrefabSelect, row: buildingRow.wrap, label: buildingRow.labelSpan, key: "buildingPrefab" },
-      { select: this.propPrefabSelect, row: propRow.wrap, label: propRow.labelSpan, key: "propPrefab" },
+      { select: this.buildingPrefabSelect, row: buildingRow.wrap, label: buildingRow.labelSpan, key: "buildingPrefab", kind: "prefab", pointKey: null },
+      { select: this.propPrefabSelect, row: propRow.wrap, label: propRow.labelSpan, key: "propPrefab", kind: "prefab", pointKey: null },
     ];
 
     this.root.appendChild(typeRow.wrap);
     this.root.appendChild(styleRow.wrap);
     this.root.appendChild(amountRow.wrap);
     this.root.appendChild(densityRow.wrap);
+    this.root.appendChild(originRow.wrap);
     this.root.appendChild(buildingRow.wrap);
     this.root.appendChild(propRow.wrap);
 
@@ -282,21 +317,24 @@ export class ProceduralPanel {
     this.statusEl.textContent = text;
   }
 
-  // Fill the prefab source dropdowns with "Primitive" + the available prefabs,
-  // preserving the current selection.
-  _populatePrefabOptions() {
-    const prefabs = this.listPrefabs() ?? [];
-    const opts = [{ value: "", label: "Primitive" }, ...prefabs.map((p) => ({ value: p.id, label: p.name ?? p.id }))];
-    for (const select of [this.buildingPrefabSelect, this.propPrefabSelect]) {
-      const prev = select.value;
-      select.replaceChildren();
+  // Fill each source slot's dropdown based on its kind: a prefab slot lists
+  // "Primitive" + the prefab library; an anchor slot lists the other generator
+  // instances available to link. Preserves the current selection when still valid.
+  _populateSlotOptions() {
+    for (const slot of this.slots) {
+      const opts =
+        slot.kind === "anchor"
+          ? [{ value: "", label: "(pick)" }, ...listAnchorInstances(this.getDocument(), this.instanceId).map((a) => ({ value: a.id, label: a.label }))]
+          : [{ value: "", label: "Primitive" }, ...(this.listPrefabs() ?? []).map((p) => ({ value: p.id, label: p.name ?? p.id }))];
+      const prev = slot.select.value;
+      slot.select.replaceChildren();
       for (const { value, label } of opts) {
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
-        select.appendChild(option);
+        slot.select.appendChild(option);
       }
-      if (opts.some((o) => o.value === prev)) select.value = prev;
+      if (opts.some((o) => o.value === prev)) slot.select.value = prev;
     }
   }
 
@@ -365,6 +403,18 @@ export class ProceduralPanel {
     Object.assign(labelSpan.style, { color: "#8fa899", fontSize: "11px" });
     wrap.appendChild(labelSpan);
     wrap.appendChild(control);
+    return { wrap, labelSpan };
+  }
+
+  _twoInputRow(label, a, b) {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, { display: "grid", gridTemplateColumns: "74px 1fr 1fr", gap: "8px", alignItems: "center" });
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = label;
+    Object.assign(labelSpan.style, { color: "#8fa899", fontSize: "11px" });
+    wrap.appendChild(labelSpan);
+    wrap.appendChild(a);
+    wrap.appendChild(b);
     return { wrap, labelSpan };
   }
 

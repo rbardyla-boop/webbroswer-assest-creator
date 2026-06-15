@@ -700,3 +700,53 @@ errors) + Node regression + the full 15-proof sweep + qa:skills 32/0/0 all green
 **Untracked drop unchanged.** `threejs-runtime-city-generator/` remains reference-only
 (Stage 17B audit); nothing was imported from it. The local-GPU FPS validation is still
 owed as a non-blocking side report.
+
+## ADR-018B — Roads + Plazas + Layout Connectors (Stage 18B)
+
+**Decision.** Add the connective tissue that turns isolated generator islands into a
+navigable authored world. Three new generators — **road** (path network), **plaza**
+(paved hub with sign/spawn/trigger anchors), **connector** (a deterministic path
+between two clusters) — plus **landmark anchor helpers**. To make connection
+meaningful, the panel gains an **origin** so cluster generators can be placed apart
+(previously everything stamped at the world origin and overlapped).
+
+**Shape.** `GeneratorConfig` adds `createRoadConfig` / `createPlazaConfig` /
+`createConnectorConfig` and dispatches them by type. The connector config carries the
+resolved anchor points `from`/`to` plus the source instance ids `fromId`/`toId`
+(allowlisted); `clampPoint` bounds the points. `roadHelpers` (`roadSegment` /
+`emitRoadPath`, capped at `MAX_ROAD_SEGMENTS`, rejecting degenerate/NaN segments) is
+the canonical path→road-plane builder shared by road + connector. `landmarkAnchors`
+resolves a generator instance to its `config.origin` anchor — pure, reading only the
+document's generators block. Road width is derived from style (path/avenue/crossroad),
+so the whole road config surface is panel-reachable.
+
+**Panel.** Still data-driven off the registry, now with two new concepts: an `origin`
+row (shown when `usesOrigin`, hidden for the connector) and a source-slot `kind`. A
+`"prefab"` slot lists the prefab library; an `"anchor"` slot lists the other generator
+instances and resolves the picked id to a world point under `pointKey`. So the
+connector's two slots become From/To dropdowns of the clusters to link. The amount dial
+now parses as a float (the connector's amount is `width`), and `usesDensity` hides the
+density row where it would be inert. Back-compat property names are preserved, so the
+Stage 17C/18/19 proofs are unchanged.
+
+**Why it stayed additive.** A connector is a normal generator whose emitter is pure —
+the panel resolves anchor ids to points and the emitter just draws road segments
+between them. `WorldValidation` again needed **zero changes** (`sanitizeGenerators`
+routes road/plaza/connector through `createGeneratorInstance`), and the runtime needs
+none (plaza interaction anchors auto-wire). Determinism holds: the connector seeds its
+RNG with `seed+style+from+to`, so a fixed pair of clusters yields a fixed path. Every
+loop is hard-capped; `from`/`to`/`fromId`/`toId` are clamped/allowlisted; an anchor id
+is only ever an `Array.find(i => i.id === id)` key — never a path/eval/property sink.
+
+**Review.** Adversarial workflow (4 dimensions → fresh-context verify-each): **0
+CRITICAL / 0 HIGH.** Three confirmed LOW/INFO, all fixed: dropped the connector's
+ignored density dial (config + a `usesDensity:false` UI gate); made road width
+style-derived instead of an editor-unreachable knob; removed a no-op plaza
+trigger-radius clamp. `npm run test:connectors` (editor places a camp@-20 and a
+ruin@40 at distinct origins, the connector From/To dropdowns list them, its path runs
+between them at midX=10, plaza emits sign/spawn/trigger, lock detaches; runtime renders
+the connected world with zero console errors) + Node regression + the full 16-proof
+sweep + qa:skills 32/0/0 all green.
+
+**Generator catalog now:** city, camp, ruin, forest, road, plaza, connector. The
+local-GPU FPS validation remains the only outstanding (non-blocking) item.

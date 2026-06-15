@@ -6,17 +6,21 @@
 // Stage 17B audit required: "generator output → WorldDocument objects → systems").
 //
 // Stage 18 (Generator Library v1) adds camp / ruin / forest beside the original
-// city. Config creation dispatches on type here; each per-type layout + emitter
-// lives in its own module, wired together by GeneratorRegistry.
+// city. Stage 18B adds connective generators — road / plaza / connector — that link
+// generated clusters into navigable worlds. Config creation dispatches on type here;
+// each per-type layout + emitter lives in its own module, wired by GeneratorRegistry.
 //
 // Every field is clamped so an untrusted world document can't request a degenerate
 // or unbounded generation. The total emitted-object count is hard-capped.
 
-export const GENERATOR_TYPES = Object.freeze(["city", "camp", "ruin", "forest"]);
+export const GENERATOR_TYPES = Object.freeze(["city", "camp", "ruin", "forest", "road", "plaza", "connector"]);
 export const CITY_STYLES = Object.freeze(["town", "grid", "village"]);
 export const CAMP_STYLES = Object.freeze(["outpost", "camp", "watch"]);
 export const RUIN_STYLES = Object.freeze(["temple", "fort", "hamlet"]);
 export const FOREST_STYLES = Object.freeze(["grove", "dense", "sparse"]);
+export const ROAD_STYLES = Object.freeze(["path", "avenue", "crossroad"]);
+export const PLAZA_STYLES = Object.freeze(["square", "round", "market"]);
+export const CONNECTOR_STYLES = Object.freeze(["straight", "curved", "stepped"]);
 
 export const GENERATOR_LIMITS = Object.freeze({
   MIN_BLOCKS: 1,
@@ -35,6 +39,13 @@ export const GENERATOR_LIMITS = Object.freeze({
   MAX_TREES: 600,
   MAX_ROCKS: 120,
   MAX_INTERACTIONS: 64, // pickup objects from one camp (sign/spawn/trigger are singletons)
+  // Stage 18B connective-generator caps.
+  MAX_WAYPOINTS: 64, // points per generated path
+  MAX_ROAD_SEGMENTS: 400, // road-plane segments emitted by one road/connector
+  MAX_LAMPS: 64,
+  MAX_PLAZA_PROPS: 80,
+  MIN_WIDTH: 1.5,
+  MAX_WIDTH: 16, // road / path / connector width
   MAX_TOTAL_OBJECTS: 1500, // hard ceiling on objects a single generate can emit
 });
 
@@ -111,6 +122,53 @@ export function createForestConfig(overrides = {}) {
   };
 }
 
+// Road / path network (Stage 18B): a self-contained run of road-plane segments
+// (with optional lamps via propPrefab) stamped from the origin. Connective scenery.
+// Road width is derived from the style (path/avenue/crossroad) in the layout — there
+// is no separate width knob, so the whole config surface is reachable from the panel.
+export function createRoadConfig(overrides = {}) {
+  const src = overrides && typeof overrides === "object" ? overrides : {};
+  return {
+    seed: sanitizeSeed(src.seed),
+    style: ROAD_STYLES.includes(src.style) ? src.style : "path",
+    size: clampInt(src.size, GENERATOR_LIMITS.MIN_SIZE, GENERATOR_LIMITS.MAX_SIZE, 4), // segment-run length
+    density: clamp(num(src.density, 0.6), 0, 1),
+    origin: { x: clamp(num(src.origin?.x, 0), -5000, 5000), z: clamp(num(src.origin?.z, 0), -5000, 5000) },
+    propPrefab: sanitizePrefabRef(src.propPrefab), // lamps / markers
+  };
+}
+
+// Plaza / town square (Stage 18B): a paved hub with surrounding props (propPrefab)
+// and data-only sign / spawn / trigger anchors. A meeting/landmark node.
+export function createPlazaConfig(overrides = {}) {
+  const src = overrides && typeof overrides === "object" ? overrides : {};
+  return {
+    seed: sanitizeSeed(src.seed),
+    style: PLAZA_STYLES.includes(src.style) ? src.style : "square",
+    size: clampInt(src.size, GENERATOR_LIMITS.MIN_SIZE, GENERATOR_LIMITS.MAX_SIZE, 4),
+    density: clamp(num(src.density, 0.6), 0, 1),
+    origin: { x: clamp(num(src.origin?.x, 0), -5000, 5000), z: clamp(num(src.origin?.z, 0), -5000, 5000) },
+    propPrefab: sanitizePrefabRef(src.propPrefab), // benches / stalls
+  };
+}
+
+// Connector / path-between (Stage 18B): links two anchor points with a deterministic
+// road path. `from`/`to` are world points (typically resolved from two generator
+// instances' origins by the panel); fromId/toId keep the source instance ids for
+// reference/re-resolution. The emitter is pure — it uses only the resolved points.
+export function createConnectorConfig(overrides = {}) {
+  const src = overrides && typeof overrides === "object" ? overrides : {};
+  return {
+    seed: sanitizeSeed(src.seed),
+    style: CONNECTOR_STYLES.includes(src.style) ? src.style : "straight",
+    width: clamp(num(src.width, 3.5), GENERATOR_LIMITS.MIN_WIDTH, GENERATOR_LIMITS.MAX_WIDTH),
+    from: clampPoint(src.from, { x: 0, z: 0 }),
+    to: clampPoint(src.to, { x: 30, z: 0 }),
+    fromId: sanitizeId(src.fromId),
+    toId: sanitizeId(src.toId),
+  };
+}
+
 // Sanitize a prefab reference id. The result is ONLY ever used as a key into the
 // PrefabLibrary's Map (prefabLibrary.get(id)) — never as a filesystem path, URL, or
 // object property access — so the allowlist residue (e.g. dots from "../x", or a
@@ -130,6 +188,9 @@ const CONFIG_CREATORS = Object.freeze({
   camp: createCampConfig,
   ruin: createRuinConfig,
   forest: createForestConfig,
+  road: createRoadConfig,
+  plaza: createPlazaConfig,
+  connector: createConnectorConfig,
 });
 
 // A generator instance as stored in the WorldDocument `generators` block.
@@ -170,4 +231,12 @@ function num(value, fallback) {
 
 function clamp(value, lo, hi) {
   return Math.min(hi, Math.max(lo, value));
+}
+
+// Clamp an {x,z} world anchor point into the playable range (defense in depth).
+function clampPoint(value, fallback = { x: 0, z: 0 }) {
+  return {
+    x: clamp(num(value?.x, fallback.x), -5000, 5000),
+    z: clamp(num(value?.z, fallback.z), -5000, 5000),
+  };
 }

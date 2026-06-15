@@ -1,9 +1,12 @@
-// Generator registry (Stage 18). Maps each generator type to everything the host
-// needs to drive it: how to create/normalize a config, how to generate a layout,
-// how to emit objects, and how the editor panel should present it (style options,
-// the generic "amount" dial, and which prefab source slots apply). The
-// ProceduralPanel is data-driven off this table, so adding a generator is a single
-// entry plus its layout/emitter module — no panel surgery.
+// Generator registry (Stage 18 / 18B). Maps each generator type to everything the
+// host needs to drive it: how to create/normalize a config, generate a layout, emit
+// objects, and how the editor panel should present it — style options, the generic
+// "amount" dial, whether it has an origin (`usesOrigin`, default true), and its
+// source slots. A source slot is `kind: "prefab"` (default — lists the prefab
+// library) or `kind: "anchor"` (lists generator instances to link, and resolves the
+// picked id to a world point under `pointKey`). The ProceduralPanel is data-driven
+// off this table, so adding a generator is a single entry plus its layout/emitter
+// module — no panel surgery.
 //
 // Config-creation dispatch lives in GeneratorConfig (so the WorldDocument validator
 // can normalize instances without importing THREE-touching emitters); this registry
@@ -14,10 +17,16 @@ import {
   createCampConfig,
   createRuinConfig,
   createForestConfig,
+  createRoadConfig,
+  createPlazaConfig,
+  createConnectorConfig,
   CITY_STYLES,
   CAMP_STYLES,
   RUIN_STYLES,
   FOREST_STYLES,
+  ROAD_STYLES,
+  PLAZA_STYLES,
+  CONNECTOR_STYLES,
   GENERATOR_LIMITS,
 } from "./GeneratorConfig.js";
 import { generateCityLayout } from "./CityLayout.js";
@@ -25,8 +34,12 @@ import { cityLayoutToWorldObjects } from "./cityEmitter.js";
 import { generateCampLayout, campLayoutToWorldObjects } from "./CampGenerator.js";
 import { generateRuinLayout, ruinLayoutToWorldObjects } from "./RuinGenerator.js";
 import { generateForestLayout, forestLayoutToWorldObjects } from "./ForestGenerator.js";
+import { generateRoadLayout, roadLayoutToWorldObjects } from "./RoadGenerator.js";
+import { generatePlazaLayout, plazaLayoutToWorldObjects } from "./PlazaGenerator.js";
+import { generateConnectorLayout, connectorLayoutToWorldObjects } from "./ConnectorGenerator.js";
 
 const SIZE_DIAL = { field: "size", label: "Size", min: GENERATOR_LIMITS.MIN_SIZE, max: GENERATOR_LIMITS.MAX_SIZE, step: 1, default: 4 };
+const WIDTH_DIAL = { field: "width", label: "Width", min: GENERATOR_LIMITS.MIN_WIDTH, max: GENERATOR_LIMITS.MAX_WIDTH, step: 0.5, default: 3.5 };
 
 export const GENERATORS = Object.freeze({
   city: {
@@ -74,6 +87,44 @@ export const GENERATORS = Object.freeze({
     createConfig: createForestConfig,
     layout: generateForestLayout,
     emit: forestLayoutToWorldObjects,
+  },
+  road: {
+    type: "road",
+    label: "Road / Path",
+    styles: ROAD_STYLES,
+    amount: SIZE_DIAL,
+    sources: [{ key: "propPrefab", label: "Lamps" }],
+    createConfig: createRoadConfig,
+    layout: generateRoadLayout,
+    emit: roadLayoutToWorldObjects,
+  },
+  plaza: {
+    type: "plaza",
+    label: "Plaza / Square",
+    styles: PLAZA_STYLES,
+    amount: SIZE_DIAL,
+    sources: [{ key: "propPrefab", label: "Props" }],
+    createConfig: createPlazaConfig,
+    layout: generatePlazaLayout,
+    emit: plazaLayoutToWorldObjects,
+  },
+  connector: {
+    type: "connector",
+    label: "Connector / Path",
+    styles: CONNECTOR_STYLES,
+    amount: WIDTH_DIAL,
+    // No origin: a connector is defined by its two anchors, not a center. No density:
+    // its path shape comes from style + endpoints. Its source slots are "anchor" kind
+    // — they list generator instances to link, not prefabs.
+    usesOrigin: false,
+    usesDensity: false,
+    sources: [
+      { key: "fromId", pointKey: "from", label: "From", kind: "anchor" },
+      { key: "toId", pointKey: "to", label: "To", kind: "anchor" },
+    ],
+    createConfig: createConnectorConfig,
+    layout: generateConnectorLayout,
+    emit: connectorLayoutToWorldObjects,
   },
 });
 

@@ -74,6 +74,11 @@ import { generateGeneratorObjects, getGenerator } from "../src/generators/Genera
 import { generateCampLayout, campLayoutToWorldObjects } from "../src/generators/CampGenerator.js";
 import { generateRuinLayout, ruinLayoutToWorldObjects } from "../src/generators/RuinGenerator.js";
 import { generateForestLayout, forestLayoutToWorldObjects } from "../src/generators/ForestGenerator.js";
+import { createRoadConfig, createPlazaConfig, createConnectorConfig } from "../src/generators/GeneratorConfig.js";
+import { generateRoadLayout, roadLayoutToWorldObjects } from "../src/generators/RoadGenerator.js";
+import { generatePlazaLayout, plazaLayoutToWorldObjects } from "../src/generators/PlazaGenerator.js";
+import { generateConnectorLayout, connectorLayoutToWorldObjects } from "../src/generators/ConnectorGenerator.js";
+import { resolveAnchorPoint, listAnchorInstances } from "../src/generators/landmarkAnchors.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2443,5 +2448,122 @@ const s18Hostile = validateWorldDocument(createWorldDocument({
 }));
 assert.ok(s18Hostile.document.generators.instances.length <= 16, "generator instance count capped");
 assert.ok(s18Hostile.document.generators.instances.every((g) => g.config.size <= GENERATOR_LIMITS.MAX_SIZE), "hostile size clamped");
+
+// --- Stage 18B: connective generators (road / plaza / connector) --------------
+
+// Three connective types registered + config dispatch by type.
+for (const t of ["road", "plaza", "connector"]) assert.ok(GENERATOR_TYPES.includes(t), `connective type ${t} registered`);
+const s18bRoadInst = createGeneratorInstance({ type: "road", config: { width: 999, style: "nope", size: 9999 } });
+assert.equal(s18bRoadInst.type, "road");
+assert.equal("width" in s18bRoadInst.config, false, "road has no width knob (width is style-derived)");
+assert.equal(s18bRoadInst.config.style, "path");
+assert.equal(s18bRoadInst.config.size, GENERATOR_LIMITS.MAX_SIZE);
+const s18bConnInst = createGeneratorInstance({ type: "connector", config: { from: { x: 99999, z: -99999 }, fromId: "../../x", toId: "gen-ruin", width: 0.01 } });
+assert.equal(s18bConnInst.config.from.x, 5000, "connector from.x clamped");
+assert.equal(s18bConnInst.config.from.z, -5000);
+assert.equal(s18bConnInst.config.width, GENERATOR_LIMITS.MIN_WIDTH, "connector width clamped");
+assert.equal(s18bConnInst.config.fromId, "....x", "connector fromId path chars stripped");
+assert.equal(s18bConnInst.config.toId, "gen-ruin");
+assert.equal("origin" in s18bConnInst.config, false, "connector has no origin (anchors instead)");
+
+// Roads emit NORMAL WorldObjects; deterministic; crossroad = 2 paths; lamps present.
+const s18bRoadCfg = createRoadConfig({ seed: "main", style: "path", size: 5, width: 5, density: 0.8 });
+const s18bRoadA = generateRoadLayout(s18bRoadCfg);
+assert.deepEqual(s18bRoadA.paths, generateRoadLayout(s18bRoadCfg).paths, "road layout deterministic");
+const s18bRoadObjs = roadLayoutToWorldObjects(s18bRoadA, "gen-road");
+assert.ok(s18bRoadObjs.some((o) => o.name === "Road" && o.type === "primitive"), "road emits road-plane segments");
+assert.ok(s18bRoadObjs.every((o) => o.generatorId === "gen-road"));
+assert.ok(s18bRoadObjs.some((o) => o.name === "Lamp Post"));
+assert.equal(generateRoadLayout(createRoadConfig({ seed: "x", style: "crossroad", size: 4 })).paths.length, 2, "crossroad emits two paths");
+assert.ok(
+  roadLayoutToWorldObjects(generateRoadLayout(createRoadConfig({ seed: "f", style: "avenue", size: 99, width: 16 })), "g").length <= GENERATOR_LIMITS.MAX_TOTAL_OBJECTS,
+  "road total capped"
+);
+// Road lamps prefab-backed; primitive fallback when none.
+const s18bLampPrefab = createBuiltinPrefabs().find((p) => p.id === "builtin-signboard");
+assert.ok(roadLayoutToWorldObjects(s18bRoadA, "gen-road", { propPrefab: s18bLampPrefab }).some((o) => o.prefabRef === "builtin-signboard"), "road lamps expand from a prefab");
+assert.ok(roadLayoutToWorldObjects(s18bRoadA, "gen-road", { propPrefab: null }).some((o) => o.name === "Lamp Post" && o.type === "primitive"), "primitive lamp fallback");
+
+// Plaza emits NORMAL WorldObjects + paving + sign/spawn/trigger anchors; deterministic.
+const s18bPlazaCfg = createPlazaConfig({ seed: "town", style: "market", size: 5, density: 0.8 });
+const s18bPlazaLayout = generatePlazaLayout(s18bPlazaCfg);
+assert.deepEqual(s18bPlazaLayout.props, generatePlazaLayout(s18bPlazaCfg).props, "plaza layout deterministic");
+const s18bPlazaObjs = plazaLayoutToWorldObjects(s18bPlazaLayout, "gen-plaza");
+assert.ok(s18bPlazaObjs.some((o) => o.name === "Plaza Floor"), "plaza emits a paving surface");
+for (const role of ["spawn", "sign", "trigger"]) {
+  assert.ok(s18bPlazaObjs.find((o) => o.interaction?.role === role), `plaza includes a ${role} anchor`);
+}
+assert.ok(s18bPlazaObjs.every((o) => o.generatorId === "gen-plaza"));
+assert.ok(plazaLayoutToWorldObjects(s18bPlazaLayout, "gen-plaza", { propPrefab: s18Tree }).some((o) => o.prefabRef === "builtin-tree-cluster"), "plaza props expand from a prefab");
+
+// Connector LINKS TWO CLUSTERS deterministically: resolve two instances' origins to
+// anchor points, then emit a path between them.
+const s18bLinkDoc = createWorldDocument({
+  generators: { instances: [
+    createGeneratorInstance({ id: "gen-camp", type: "camp", config: { origin: { x: -20, z: 5 } } }),
+    createGeneratorInstance({ id: "gen-ruin", type: "ruin", config: { origin: { x: 40, z: -10 } } }),
+  ] },
+});
+assert.deepEqual(resolveAnchorPoint(s18bLinkDoc, "gen-camp"), { x: -20, z: 5 }, "anchor resolves to an instance origin");
+assert.deepEqual(resolveAnchorPoint(s18bLinkDoc, "gen-ruin"), { x: 40, z: -10 });
+assert.equal(resolveAnchorPoint(s18bLinkDoc, "missing"), null);
+assert.equal(listAnchorInstances(s18bLinkDoc).length, 2, "both clusters listed as anchors");
+const s18bConnCfg = createConnectorConfig({ seed: "link", style: "straight", from: resolveAnchorPoint(s18bLinkDoc, "gen-camp"), to: resolveAnchorPoint(s18bLinkDoc, "gen-ruin"), fromId: "gen-camp", toId: "gen-ruin" });
+const s18bConnLayout = generateConnectorLayout(s18bConnCfg);
+assert.deepEqual(s18bConnLayout.endpoints.from, { x: -20, z: 5 }, "connector path starts at the from-cluster");
+assert.deepEqual(s18bConnLayout.endpoints.to, { x: 40, z: -10 }, "connector path ends at the to-cluster");
+const s18bConnObjs = connectorLayoutToWorldObjects(s18bConnLayout, "gen-connector");
+assert.equal(s18bConnObjs.filter((o) => o.name === "Path").length, 1, "straight connector = 1 segment");
+assert.equal(s18bConnObjs.filter((o) => o.name === "Path Marker").length, 2, "connector emits endpoint markers");
+assert.equal(connectorLayoutToWorldObjects(generateConnectorLayout(s18bConnCfg), "gen-connector").length, s18bConnObjs.length, "connector deterministic");
+
+// Connector path shape by style; curved uses seeded jitter (deterministic, seed-varying).
+const conn = (style, seed = "c", from = { x: 0, z: 0 }, to = { x: 40, z: 0 }) =>
+  generateConnectorLayout(createConnectorConfig({ seed, style, from, to }));
+assert.equal(conn("stepped").counts.segments, 2, "stepped connector = L-shape (2 segments)");
+assert.ok(conn("curved").counts.segments >= 8, "curved connector = multi-segment bezier");
+assert.deepEqual(conn("curved", "c").points, conn("curved", "c").points, "curved deterministic for a seed");
+assert.notDeepEqual(conn("curved", "c").points, conn("curved", "c2").points, "different seed → different curve");
+
+// A connector instance is NOT itself an anchor (no origin).
+const s18bConnOnlyDoc = createWorldDocument({ generators: { instances: [createGeneratorInstance({ id: "gen-connector", type: "connector", config: {} })] } });
+assert.equal(resolveAnchorPoint(s18bConnOnlyDoc, "gen-connector"), null, "a connector exposes no anchor origin");
+assert.equal(listAnchorInstances(s18bConnOnlyDoc).length, 0);
+
+// Round-trip through the manager: plaza interaction anchors survive build→serialize.
+const s18bPlazaMgr = new WorldObjectManager(new THREE.Scene());
+await s18bPlazaMgr.addWorldObjects(s18bPlazaObjs);
+assert.equal(s18bPlazaMgr.objectsByGeneratorId("gen-plaza").length, s18bPlazaObjs.length);
+const s18bPlazaSer = s18bPlazaMgr.serializeWorldObjects();
+assert.equal(s18bPlazaSer.find((o) => o.interaction?.role === "spawn")?.interaction.name, "plaza-spawn", "plaza spawn round-trips");
+
+// Document + worldpack round-trip: a connected world (clusters + road + plaza +
+// connector) validates clean and the connector's from/to/anchors survive export.
+const s18bDoc = createWorldDocument({
+  metadata: { name: "Connected World" },
+  generators: { instances: [
+    { id: "gen-camp", type: "camp", config: { seed: "k", size: 3, origin: { x: -20, z: 0 } } },
+    { id: "gen-ruin", type: "ruin", config: { seed: "r", size: 3, origin: { x: 40, z: 0 } } },
+    { id: "gen-road", type: "road", config: { seed: "rd", style: "avenue", size: 4, width: 5, origin: { x: 0, z: 20 } } },
+    { id: "gen-plaza", type: "plaza", config: { seed: "pz", style: "square", size: 3, origin: { x: 0, z: -20 } } },
+    { id: "gen-connector", type: "connector", config: { seed: "cn", style: "stepped", from: { x: -20, z: 0 }, to: { x: 40, z: 0 }, fromId: "gen-camp", toId: "gen-ruin" } },
+  ] },
+});
+const s18bValidated = validateWorldDocument(s18bDoc);
+assert.equal(s18bValidated.warnings.length, 0, "connected world validates with no warnings");
+assert.equal(s18bValidated.document.generators.instances.length, 5);
+const s18bConnStored = s18bValidated.document.generators.instances.find((i) => i.type === "connector");
+assert.deepEqual(s18bConnStored.config.from, { x: -20, z: 0 }, "connector from preserved");
+assert.equal(s18bConnStored.config.fromId, "gen-camp", "connector anchor ids preserved");
+assert.equal(s18bConnStored.config.toId, "gen-ruin");
+assert.equal(s18bValidated.document.generators.instances.find((i) => i.type === "road").config.size, 4, "road config size preserved");
+const s18bPack = await buildWorldPack(s18bDoc, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(s18bPack.world.generators.instances.length, 5, "worldpack carries the connected-world generators");
+
+// Untrusted hardening: hostile connective instances flood-capped + normalized.
+const s18bHostile = validateWorldDocument(createWorldDocument({
+  generators: { instances: Array.from({ length: 30 }, (_, i) => ({ type: ["road", "plaza", "connector"][i % 3], config: { width: 9999, size: 9999 } })) },
+}));
+assert.ok(s18bHostile.document.generators.instances.length <= 16, "connective instance count capped");
 
 console.log("world document regression checks passed");
