@@ -5,6 +5,7 @@ import * as THREE from "three";
 
 import { createRenderer, getReverseDepthStatus } from "./core/renderer.js";
 import { VisibilityKernel } from "./visibility/VisibilityKernel.js";
+import { InstancedWorldObjectRenderer } from "./generators/InstancedWorldObjectRenderer.js";
 import { createScene } from "./core/scene.js";
 import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
@@ -104,6 +105,12 @@ if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = partic
 // and nothing pops on a fast turn. Absent in the editor (authoring shows all).
 const visibilityKernel = runtimeMode ? new VisibilityKernel() : null;
 if (visibilityKernel && import.meta.env.DEV) window.__VISIBILITY_DEBUG__ = () => visibilityKernel.debugSnapshot();
+// Runtime-only: batch repeated static primitive WorldObjects (e.g. a procedural
+// city) into instanced draw calls (Stage 17C-2). A render VIEW over the objects —
+// they stay in the manager (identity/collision intact); only their source mesh is
+// hidden. The editor never instances, so editor selection/identity is untouched.
+const instancedRenderer = runtimeMode ? new InstancedWorldObjectRenderer(scene) : null;
+if (instancedRenderer && import.meta.env.DEV) window.__INSTANCING_DEBUG__ = () => instancedRenderer.stats;
 // Dev/test-only: read the live applied lighting (sun/hemisphere/fog).
 if (import.meta.env.DEV) {
   window.__LIGHTING_DEBUG__ = () => ({
@@ -206,6 +213,8 @@ async function applyLoadedWorld(document) {
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
   syncVisibilityAgents(world.document);
+  // Batch repeated static primitive objects into instanced draws (runtime only).
+  instancedRenderer?.rebuild(objectManager.objects);
 
   const spawn = world.document.player.spawn;
   player.position.set(spawn.x, spawn.y, spawn.z);
@@ -300,6 +309,8 @@ async function boot() {
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
   syncVisibilityAgents(world.document);
+  // Batch repeated static primitive objects into instanced draws (runtime only).
+  instancedRenderer?.rebuild(objectManager.objects);
 
   // Start on open, fairly flat ground with a vista across the field.
   const spawn = world.document.player.spawn ?? findGoodSpawn();

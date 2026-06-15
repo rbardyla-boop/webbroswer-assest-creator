@@ -9,17 +9,25 @@ export const PRIMITIVE_ASSETS = {
   ramp: { label: "Ramp", color: 0xc69cff },
 };
 
+// The base (unit) geometry for a primitive kind. Shared by createPrimitiveMesh and
+// by the instanced renderer (Stage 17C-2), so an InstancedMesh of a kind uses the
+// SAME geometry every per-object Group's mesh uses — the per-object Group transform
+// (which carries the footprint scale) becomes the instance matrix.
+export function createPrimitiveGeometry(kind) {
+  if (kind === "sphere") return new THREE.SphereGeometry(1, 28, 18);
+  if (kind === "cylinder") return new THREE.CylinderGeometry(0.8, 0.8, 1.6, 28);
+  if (kind === "plane") {
+    const geometry = new THREE.PlaneGeometry(2.4, 2.4);
+    geometry.rotateX(-Math.PI / 2);
+    return geometry;
+  }
+  if (kind === "ramp") return createRampGeometry();
+  return new THREE.BoxGeometry(1.8, 1.8, 1.8);
+}
+
 export function createPrimitiveMesh(kind, color = null) {
   const info = PRIMITIVE_ASSETS[kind] ?? PRIMITIVE_ASSETS.cube;
-  let geometry;
-
-  if (kind === "sphere") geometry = new THREE.SphereGeometry(1, 28, 18);
-  else if (kind === "cylinder") geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.6, 28);
-  else if (kind === "plane") {
-    geometry = new THREE.PlaneGeometry(2.4, 2.4);
-    geometry.rotateX(-Math.PI / 2);
-  } else if (kind === "ramp") geometry = createRampGeometry();
-  else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
+  const geometry = createPrimitiveGeometry(kind);
 
   const material = new THREE.MeshStandardMaterial({
     color: color ?? info.color, // per-object tint (e.g. procedural buildings) or the kind default

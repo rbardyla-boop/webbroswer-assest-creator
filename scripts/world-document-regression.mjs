@@ -61,6 +61,8 @@ import { createVisibilityConfig, VISIBILITY_DEFAULTS } from "../src/visibility/V
 import { createCityConfig, GENERATOR_LIMITS } from "../src/generators/GeneratorConfig.js";
 import { generateCityLayout } from "../src/generators/CityLayout.js";
 import { cityLayoutToWorldObjects } from "../src/generators/cityEmitter.js";
+import { InstancedWorldObjectRenderer } from "../src/generators/InstancedWorldObjectRenderer.js";
+import { validatePlacement } from "../src/generators/PlacementValidator.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2194,5 +2196,60 @@ const badObjDoc = validateWorldDocument(
 );
 assert.equal(badObjDoc.document.objects[0].color, null, "invalid color → null");
 assert.ok(!badObjDoc.document.objects[0].generatorId.includes("/"), "generatorId path chars stripped");
+
+// --- Stage 17C-2: instanced rendering + placement validation ------------------
+
+const c2Scene = new THREE.Scene();
+const c2Mgr = new WorldObjectManager(c2Scene, {});
+const c2Layout = generateCityLayout(createCityConfig({ seed: "render", style: "town", blocks: 4, density: 0.8 }));
+const c2Descs = cityLayoutToWorldObjects(c2Layout, "gen-1");
+await c2Mgr.addWorldObjects(c2Descs);
+const c2Count = c2Mgr.objects.size;
+assert.ok(c2Count > 20, `city populated, got ${c2Count}`);
+
+// Instancing: repeated primitives batch into a few InstancedMeshes (one per class).
+const renderer = new InstancedWorldObjectRenderer(c2Scene);
+const iStats = renderer.rebuild(c2Mgr.objects);
+assert.ok(iStats.batches >= 1 && iStats.batches <= 5, `few batches, got ${iStats.batches}`);
+assert.ok(iStats.drawCalls < c2Count, `instancing cuts draw calls (${iStats.drawCalls} < ${c2Count})`);
+assert.equal(iStats.instances, iStats.hiddenSources, "every instanced object's source mesh is hidden");
+// Identity preserved: the WorldObjects are untouched in the manager.
+assert.equal(c2Mgr.objects.size, c2Count, "objects remain WorldObjects after instancing");
+// Shadow semantics preserved on the batches: street (plane) batch is receive-only.
+const planeBatch = renderer.batches.find((b) => b.kind === "plane");
+if (planeBatch) {
+  assert.equal(planeBatch.mesh.castShadow, false, "street batch does not cast shadows");
+  assert.equal(planeBatch.mesh.receiveShadow, true);
+}
+const cubeBatch = renderer.batches.find((b) => b.kind === "cube");
+assert.ok(cubeBatch && cubeBatch.mesh.castShadow === true, "building batch casts shadows");
+assert.ok(cubeBatch.mesh.instanceColor, "building batch carries per-instance color");
+// Reversible: clear restores every source mesh's visibility.
+renderer.clear();
+let restored = 0;
+for (const o of c2Mgr.objects.values()) o.traverse((c) => { if (c.isMesh && c.visible) restored++; });
+assert.equal(restored, c2Count, "clear restores all source meshes");
+assert.equal(renderer.stats.batches, 0, "no batches after clear");
+// Animated/interactive objects are never instanced (kept individual).
+const c2AnimObj = new THREE.Object3D();
+c2AnimObj.userData.asset = { type: "primitive", kind: "cube" };
+c2AnimObj.userData.animationClips = [{ name: "x" }];
+assert.equal(renderer._eligible(c2AnimObj), null, "animated primitive is not instanceable");
+
+// Placement validation: a normal city has NO building↔building overlaps; a planted
+// overlap is detected; flat streets (collider none) are excluded.
+const vCity = validatePlacement(c2Mgr.objects);
+assert.ok(vCity.solids > 0, "solids found");
+const buildingOverlaps = vCity.overlaps.filter((o) => o.aName === "Building" && o.bName === "Building");
+assert.equal(buildingOverlaps.length, 0, "lot-separated buildings do not overlap each other");
+assert.equal(vCity.invalid.length, 0, "no invalid placements in a clean city");
+
+const c2OverScene = new THREE.Scene();
+const c2OverMgr = new WorldObjectManager(c2OverScene, {});
+const mkCube = (x, z) => ({ type: "primitive", primitive: "cube", color: "#ff0000", transform: { position: { x, y: 5, z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 } }, collider: { type: "box", enabled: true }, exclusion: { grass: true, trees: true } });
+await c2OverMgr.addWorldObjects([mkCube(500, 500), mkCube(501, 501)]);
+const vOver = validatePlacement(c2OverMgr.objects);
+assert.equal(vOver.overlaps.length, 1, "planted overlapping pair is detected");
+assert.ok(vOver.overlaps[0].fraction > 0.25, `overlap fraction above tolerance, got ${vOver.overlaps[0].fraction}`);
 
 console.log("world document regression checks passed");

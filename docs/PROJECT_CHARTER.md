@@ -530,3 +530,60 @@ generator-driven exclusion-aware placement validation via the Stage 16 voxel too
 a multi-instance generator UI. The city generator drop stays the reference seed; no
 file from it was imported (this generator is host-authored from scratch). Runtime FPS
 on a large city stays MEDIUM-confidence until a local GPU smoke.
+
+## ADR-017C-2 — Procedural rendering optimization + placement validation (Stage 17C-2)
+
+**Decision.** Reduce generated-city draw cost WITHOUT touching editor identity, and
+add overlap/placement validation. Two new services under `src/generators/`:
+`InstancedWorldObjectRenderer` and `PlacementValidator`.
+
+**The load-bearing constraint: a render VIEW over WorldObjects, never a replacement.**
+`InstancedWorldObjectRenderer` runs in the RUNTIME ONLY (`runtimeMode` gate). After
+load it groups eligible static primitive objects by render class (primitive kind +
+cast/receive shadow flags; color is per-instance via `setColorAt`), builds ONE
+`InstancedMesh` per class, and hides each source child mesh (`mesh.visible=false`).
+The `WorldObject` Groups stay in the manager — selectable, serializable, collidable,
+lockable, regenerable. **The editor never instances**, so editor identity is wholly
+untouched; the runtime just renders the same data more cheaply. `createPrimitiveGeometry(kind)`
+was extracted from `PlacedObject` so the batch uses the SAME base geometry as the
+per-object mesh; the Group transform (footprint scale) becomes the instance matrix
+(`mesh.matrixWorld`). Eligibility excludes animated / interactive / particle objects
+(they need their live mesh). Shadows are preserved: the batch carries the class shadow
+flags, the hidden source no longer draws, and the instance casts/receives in its
+place (streets receive-only, buildings cast). `clear()` restores every hidden source +
+disposes the batches; `rebuild()` is idempotent.
+
+**Known tradeoff (documented):** one batch per class collapses per-object frustum
+culling to batch-level (the whole batch draws when any of it is on screen) — the
+accepted instancing tradeoff (one draw of N beats N culled draws); per-region batch
+partitioning is a later refinement.
+
+**`PlacementValidator`** detects overlaps + invalid placements using a Stage-16
+bounded `VoxelGrid` as a broad-phase spatial hash + AABB (Box3) narrow phase. Only
+SOLID objects (`collider != none`) are overlap-checked, so the street grid's
+intentional intersections aren't false positives; non-finite/empty bounds are
+reported as invalid (and filtered before the grid is built). Surfaced as a "Validate"
+button in the Procedural panel.
+
+**Identity is preserved everywhere.** Lock/regenerate/clear/select/serialize all
+operate on the individual `WorldObject`s (proven in the editor). Instancing is purely
+a runtime render layer; if it ever prevented selecting/locking/serializing a generated
+object it would be the wrong abstraction — it does not, because the editor never
+instances and the runtime keeps the objects in the manager.
+
+**Review.** Adversarial review (render-correctness/identity + system-interactions/
+validator, each finding fresh-context-verified): **0 confirmed findings,
+load-bearing-ready.** Both dimensions APPROVE with file:line evidence (render
+equivalence incl. the r169 white×instanceColor shader path; shadow correctness;
+kernel/instancer populations disjoint; collision/interaction unaffected by hiding;
+reverse-Z automatic; validator pre-filters NaN bounds). The one verified-low item (the
+culling tradeoff) was closed with a clarifying comment. `npm run test:instancing`
+(editor = individual selectable objects, no instancing; runtime = a city batched into
+a few instanced draws, identity preserved, zero console errors) + Node regression
+(grouping/shadow/identity/reversibility + validator overlap detection) + the full
+13-proof sweep + qa:skills 32/0/0 all green.
+
+**Deferred (17C-3+).** Per-region batch partitioning (restore per-region culling);
+an optional editor "instanced preview" mode (with selection-disabled caveat);
+instancing of non-generated repeated objects; validation surfaced at generate time
+(auto-warn). Large-city FPS stays MEDIUM-confidence until a local GPU smoke.

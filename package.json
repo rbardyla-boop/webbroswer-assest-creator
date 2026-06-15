@@ -25,6 +25,7 @@
     "test:voxel": "node scripts/browser-voxel-proof.mjs",
     "test:visibility": "node scripts/browser-visibility-proof.mjs",
     "test:procedural": "node scripts/browser-procedural-proof.mjs",
+    "test:instancing": "node scripts/browser-instancing-proof.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",
     "qa": "npm run qa:skills && npm run build && npm run qa:browser"

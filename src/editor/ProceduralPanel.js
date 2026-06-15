@@ -11,6 +11,7 @@
 import { createCityConfig, createGeneratorInstance, CITY_STYLES, GENERATOR_LIMITS } from "../generators/GeneratorConfig.js";
 import { generateCityLayout } from "../generators/CityLayout.js";
 import { cityLayoutToWorldObjects } from "../generators/cityEmitter.js";
+import { validatePlacement } from "../generators/PlacementValidator.js";
 
 const INSTANCE_ID = "gen-city";
 
@@ -68,6 +69,21 @@ export class ProceduralPanel {
     this._forgetInstance();
     this._setStatus(owned.length ? `Locked ${owned.length} objects — now permanent.` : "No generated objects to lock.");
     this.onChanged?.();
+  }
+
+  // Validate the generated objects' placement (Stage 17C-2): overlaps + invalid
+  // positions, via the Stage-16 bounds/voxel tools.
+  validate() {
+    const manager = this.getManager();
+    if (!manager) return null;
+    const owned = manager.objectsByGeneratorId(this.instanceId);
+    const target = owned.length ? owned : [...manager.objects.values()];
+    const result = validatePlacement(target);
+    const buildingOverlaps = result.overlaps.filter((o) => o.aName === "Building" && o.bName === "Building").length;
+    this._setStatus(
+      `Validated ${result.checked} objects · ${result.solids} solid · ${result.overlaps.length} overlaps (${buildingOverlaps} building↔building) · ${result.invalid.length} invalid.`
+    );
+    return result;
   }
 
   // Restore panel inputs from a loaded world's stored generator instance.
@@ -133,6 +149,7 @@ export class ProceduralPanel {
     buttons.appendChild(this._button("Regenerate", () => this.regenerate()));
     buttons.appendChild(this._button("Lock", () => this.lock()));
     buttons.appendChild(this._button("Clear", () => this.clear()));
+    buttons.appendChild(this._button("Validate", () => this.validate()));
     this.root.appendChild(buttons);
 
     this.statusEl = document.createElement("div");
