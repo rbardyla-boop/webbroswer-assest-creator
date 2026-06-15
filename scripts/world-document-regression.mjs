@@ -58,6 +58,9 @@ import { VoxelGrid } from "../src/voxels/VoxelGrid.js";
 import { VOXEL_LIMITS, createVoxelConfig, clampInt } from "../src/voxels/VoxelTypes.js";
 import { VisibilityKernel } from "../src/visibility/VisibilityKernel.js";
 import { createVisibilityConfig, VISIBILITY_DEFAULTS } from "../src/visibility/VisibilityConfig.js";
+import { createCityConfig, GENERATOR_LIMITS } from "../src/generators/GeneratorConfig.js";
+import { generateCityLayout } from "../src/generators/CityLayout.js";
+import { cityLayoutToWorldObjects } from "../src/generators/cityEmitter.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2106,5 +2109,90 @@ assert.equal(ar.debugSnapshot().objects[0].time, tAfterWake, "asleep mixer time 
 ar.update(0.5, () => true); // awake again → resumes
 assert.ok(ar.debugSnapshot().objects[0].time > tAfterWake, "mixer resumes after waking");
 ar.clear();
+
+// --- Stage 17C: Procedural Build System (city generator) ----------------------
+
+// Config caps: seed sanitized, blocks clamped, style fallback, garbage safe.
+assert.equal(createCityConfig({ blocks: 9999 }).blocks, GENERATOR_LIMITS.MAX_BLOCKS);
+assert.equal(createCityConfig({ blocks: -5 }).blocks, GENERATOR_LIMITS.MIN_BLOCKS);
+assert.equal(createCityConfig({ style: "nope" }).style, "town");
+assert.equal(createCityConfig({ seed: "a<script>b" }).seed, "ascriptb");
+assert.equal(createCityConfig(null).style, "town");
+
+// Generation is deterministic; a different seed varies the layout; counts capped.
+const cityCfg = createCityConfig({ seed: "harbor", style: "town", blocks: 4, density: 0.7 });
+const layoutA = generateCityLayout(cityCfg);
+const layoutB = generateCityLayout(cityCfg);
+assert.deepEqual(layoutA, layoutB, "same seed+config → identical layout");
+const layoutC = generateCityLayout(createCityConfig({ seed: "harbor2", style: "town", blocks: 4, density: 0.7 }));
+assert.notDeepEqual(layoutA.buildings, layoutC.buildings, "different seed varies the layout");
+assert.ok(layoutA.counts.buildings > 0, "town produced buildings");
+const floodLayout = generateCityLayout(createCityConfig({ seed: "x", blocks: 99, blockSize: 999, density: 1 }));
+assert.ok(floodLayout.counts.buildings <= GENERATOR_LIMITS.MAX_BUILDINGS, "buildings capped");
+
+// Emitter: valid host descriptors, hard total cap, correct shadow semantics.
+const cityDescs = cityLayoutToWorldObjects(layoutA, "gen-1");
+assert.equal(cityDescs.length, layoutA.counts.roads + layoutA.counts.buildings + layoutA.counts.props);
+assert.ok(cityLayoutToWorldObjects(floodLayout, "g").length <= GENERATOR_LIMITS.MAX_TOTAL_OBJECTS, "emitted total capped");
+assert.ok(cityDescs.every((d) => d.type === "primitive" && /^#[0-9a-f]{6}$/.test(d.color) && d.generatorId === "gen-1"));
+const aStreet = cityDescs.find((d) => d.name === "Street");
+const aBuilding = cityDescs.find((d) => d.name === "Building");
+assert.equal(aStreet.runtime.castShadow, false, "streets are receive-only (no cast)");
+assert.equal(aStreet.runtime.receiveShadow, true);
+assert.equal(aStreet.collider.type, "none");
+assert.equal(aStreet.exclusion.grass, true);
+assert.equal(aBuilding.runtime.castShadow, true, "buildings cast shadows");
+assert.equal(aBuilding.collider.type, "box");
+
+// Emitter → real WorldObjects → serialize: color / generatorId / shadow round-trip.
+const genScene = new THREE.Scene();
+const genMgr = new WorldObjectManager(genScene, {});
+const created = await genMgr.addWorldObjects(cityDescs);
+assert.equal(created.length, cityDescs.length, "all descriptors became live objects");
+assert.equal(genMgr.objectsByGeneratorId("gen-1").length, cityDescs.length, "owned by their generator instance");
+const serializedCity = genMgr.serializeWorldObjects();
+const sBuilding = serializedCity.find((o) => o.name === "Building");
+const sStreet = serializedCity.find((o) => o.name === "Street");
+assert.ok(/^#[0-9a-f]{6}$/.test(sBuilding.color), "building color round-trips through the manager");
+assert.equal(sBuilding.generatorId, "gen-1");
+assert.equal(sBuilding.runtime.castShadow, true);
+assert.equal(sStreet.runtime.castShadow, false, "street stays receive-only after build+serialize");
+assert.equal(sStreet.runtime.receiveShadow, true);
+// Bulk remove by instance.
+assert.equal(genMgr.removeWorldObjects(genMgr.objectsByGeneratorId("gen-1")), cityDescs.length);
+assert.equal(genMgr.objects.size, 0, "generator objects removed cleanly");
+
+// Document + worldpack round-trip: generators block (config) + emitted objects.
+const genDoc = validateWorldDocument(
+  createWorldDocument({
+    generators: { instances: [{ id: "gen-1", type: "city", config: { seed: "abc", style: "grid", blocks: 3 } }] },
+    objects: cityDescs,
+  })
+);
+assert.equal(genDoc.warnings.length, 0);
+assert.equal(genDoc.document.generators.instances.length, 1);
+assert.equal(genDoc.document.generators.instances[0].config.seed, "abc");
+assert.equal(genDoc.document.generators.instances[0].config.style, "grid");
+const vBuilding = genDoc.document.objects.find((o) => o.name === "Building");
+assert.ok(/^#[0-9a-f]{6}$/.test(vBuilding.color), "object color survives validation");
+assert.equal(vBuilding.generatorId, "gen-1");
+assert.equal(vBuilding.runtime.castShadow, true);
+const genPack = await buildWorldPack(genDoc.document, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(genPack.world.generators.instances[0].config.seed, "abc");
+assert.ok(genPack.world.objects.find((o) => o.name === "Building").color, "color rides the worldpack");
+
+// Untrusted hardening: instance count capped, hostile color/generatorId sanitized.
+const floodGen = validateWorldDocument(
+  createWorldDocument({ generators: { instances: Array.from({ length: 50 }, () => ({ type: "city", config: { blocks: 9999 } })) } })
+);
+assert.ok(floodGen.document.generators.instances.length <= 16, "instance count capped");
+assert.ok(floodGen.document.generators.instances[0].config.blocks <= GENERATOR_LIMITS.MAX_BLOCKS);
+const badObjDoc = validateWorldDocument(
+  createWorldDocument({
+    objects: [{ type: "primitive", primitive: "cube", color: "javascript:alert(1)", generatorId: "../../etc/passwd", transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } } }],
+  })
+);
+assert.equal(badObjDoc.document.objects[0].color, null, "invalid color → null");
+assert.ok(!badObjDoc.document.objects[0].generatorId.includes("/"), "generatorId path chars stripped");
 
 console.log("world document regression checks passed");

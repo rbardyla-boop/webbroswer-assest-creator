@@ -82,6 +82,9 @@ export function createWorldDocument(overrides = {}) {
     lighting: defaultLighting(),
     // Guard-banded visibility/streaming policy (Stage 17A).
     visibility: createVisibilityConfig(),
+    // Procedural generator instances (Stage 17C) — authoring intent (seed/config);
+    // the objects they emit live in `objects` like any other placed object.
+    generators: { instances: [] },
     objects: [],
     assets: {
       version: 1,

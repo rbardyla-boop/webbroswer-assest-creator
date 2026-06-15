@@ -23,6 +23,7 @@ import { ParticlePanel } from "./ParticlePanel.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { ParticleRuntime } from "../particles/ParticleRuntime.js";
 import { VoxelDebugPanel } from "../voxels/VoxelDebugPanel.js";
+import { ProceduralPanel } from "./ProceduralPanel.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -193,6 +194,8 @@ export class WorldEditor {
     this.prefabPanel?.refresh();
     // A reloaded world brings its own lighting — refresh the editor panel from it.
     this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
+    // Restore the procedural panel from the reloaded world's generator instances.
+    this.proceduralPanel?.setFromDocument(this.worldLoader?.document);
     // Rebuild the particle preview for the new world's emitters (if open).
     if (this.isOpen) this.particlePreview?.load(this.manager);
     this.treeSystem = treeSystem ?? this.treeSystem;
@@ -466,6 +469,15 @@ export class WorldEditor {
     });
     this.voxelLab = this.voxelPanel; // stable name for the __WORLD_EDITOR__ proof
     root.appendChild(this._section("Voxel Lab (debug)", this.voxelPanel.root));
+
+    // Procedural Build System (Stage 17C): a generator emits normal WorldDocument
+    // objects through the manager. System panel — applies directly, not undo-tracked.
+    this.proceduralPanel = new ProceduralPanel({
+      getManager: () => this.manager,
+      getDocument: () => this.worldLoader?.document,
+      onChanged: () => this._refreshPerf(),
+    });
+    root.appendChild(this._section("Procedural (city)", this.proceduralPanel.root));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });

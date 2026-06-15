@@ -471,3 +471,62 @@ shadows, roads/sidewalks/runways are receive-only, zone overlays neither — the
 `layoutToWorldObjects()` bridge should set per-object `castShadow`/`receiveShadow`
 accordingly. Runtime FPS confidence stays MEDIUM until a local (non-sandbox) GPU/
 browser smoke; build/static/determinism confidence is HIGH.
+
+## ADR-017C — Procedural Build System v1 (Stage 17C)
+
+**Decision.** Add a procedural generator framework under `src/generators/` whose
+output is NORMAL `WorldDocument` objects, placed through the existing
+`WorldObjectManager` — never a hidden custom scene graph. This satisfies the Stage
+17B boundary: **generator output → WorldDocument objects → existing runtime
+systems**. The city is the first generator *type*, not a separate runtime.
+
+**Shape.** `GeneratorConfig` (type registry + `createCityConfig`/
+`createGeneratorInstance` + `stringToSeed`, all clamped). `CityLayout`
+(`generateCityLayout` — pure, seeded `mulberry32`, deterministic; blocks → streets +
+building lots + parks/trees; per-category hard caps enforced at the push site).
+`cityEmitter` (`cityLayoutToWorldObjects` — maps each layout item to a host primitive
+descriptor: kind/transform-scaled-to-footprint, terrain-snapped Y via `getHeight`,
+collider, grass/tree exclusion, shadow flags, color, and a `generatorId`;
+`MAX_TOTAL_OBJECTS` ceiling). The generator holds **zero scene authority** — it
+returns data.
+
+**Editor workflow.** A "Procedural (city)" SYSTEM panel (like Grass/Terrain — applies
+directly, not undo-tracked): **Generate**/**Regenerate** emit objects via
+`addWorldObjects` tagged with the instance `generatorId`; **Clear** removes that
+instance's objects; **Lock** clears the tags so the objects become permanent,
+hand-editable, normal objects. The `generators` block (authoring config) round-trips
+through validation/worldpack; the emitted objects round-trip via `objects` (carrying
+`color`/`generatorId`/shadow flags).
+
+**Additive host extensions (backward-compatible).** `createPrimitiveMesh(kind,
+color?)` per-object tint (default unchanged); `serializeWorldObject` now emits
+`color`/`generatorId` and the REAL mesh shadow flags (existing objects keep
+`true/true`); `_buildPlacedFromDescriptor` applies `runtime.castShadow/receiveShadow`
++ `generatorId`; `addWorldObjects`/`removeWorldObjects` bulk ops fire ONE change
+notification for the whole batch (one grass/tree rebuild, not N). `WorldValidation`
+clamps the new fields (color to `#rrggbb` or null; `generatorId` allowlisted; generator
+instances capped at 16). Per-object color/shadow are general engine features, not
+city-specific.
+
+**Cost note.** Each generated object is a real `WorldObject` (its own draw call) — the
+price of the boundary vs the discarded InstancedMesh baker. Bounded by the caps;
+default cities are towns (tens–low-hundreds of objects). Instanced rendering of
+WorldObjects is a later optimization, not v1.
+
+**Review.** Adversarial review (boundary/correctness + security/untrusted, each
+finding fresh-context-verified): **0 confirmed findings, load-bearing-ready.** Two LOW
+candidates were refuted with code-path evidence (the building-cap break is harmless;
+the untrusted load paths bypass `addWorldObjects`). A forward-looking caveat — a
+*future* `addWorldObjects` caller wouldn't be guarded by the parse-time
+`MAX_PLACED_OBJECTS` cap — was closed by adding an internal live-object ceiling to
+`addWorldObjects`. `npm run test:procedural` (editor deterministic generate → real
+WorldObjects, streets receive-only, lock persists; runtime renders the city in real
+WebGL, zero console errors) + Node regression (determinism/caps/round-trip/
+sanitization) + the full 12-proof sweep + qa:skills 32/0/0 all green.
+
+**Deferred (17C-2+).** More generator types; richer asset/material mapping (real
+building/road meshes vs primitives); instanced rendering of generated WorldObjects;
+generator-driven exclusion-aware placement validation via the Stage 16 voxel tools;
+a multi-instance generator UI. The city generator drop stays the reference seed; no
+file from it was imported (this generator is host-authored from scratch). Runtime FPS
+on a large city stays MEDIUM-confidence until a local GPU smoke.

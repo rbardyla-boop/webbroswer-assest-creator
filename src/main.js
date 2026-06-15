@@ -136,6 +136,9 @@ if (import.meta.env.DEV) {
   });
   // Dev/test-only: read the live renderer's reverse-Z depth status (Stage 15).
   window.__RENDER_DEBUG__ = () => getReverseDepthStatus(renderer);
+  // Dev/test-only: live placed-object count (used by the procedural proof to
+  // confirm generated city objects loaded + rendered in the runtime).
+  window.__WORLD_DEBUG__ = () => ({ objects: objectManager?.objects.size ?? 0 });
   // Dev/test-only: read the live terrain material v2 (Stage 14C). Reports the
   // upgrade uniforms + that fog/shadow stayed wired (the onBeforeCompile pass
   // only edits diffuseColor, never the lighting/fog/shadow chunks).

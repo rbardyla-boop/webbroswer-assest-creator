@@ -9,7 +9,7 @@ export const PRIMITIVE_ASSETS = {
   ramp: { label: "Ramp", color: 0xc69cff },
 };
 
-export function createPrimitiveMesh(kind) {
+export function createPrimitiveMesh(kind, color = null) {
   const info = PRIMITIVE_ASSETS[kind] ?? PRIMITIVE_ASSETS.cube;
   let geometry;
 
@@ -22,7 +22,7 @@ export function createPrimitiveMesh(kind) {
   else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
 
   const material = new THREE.MeshStandardMaterial({
-    color: info.color,
+    color: color ?? info.color, // per-object tint (e.g. procedural buildings) or the kind default
     roughness: 0.82,
     metalness: 0.02,
     side: kind === "plane" ? THREE.DoubleSide : THREE.FrontSide,

@@ -7,6 +7,7 @@ import { ASSET_TYPES } from "../assets/AssetTypes.js";
 import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
+import { MAX_PLACED_OBJECTS } from "./WorldValidation.js";
 
 export class WorldObjectManager {
   constructor(scene, { colliderSystem, onChange, assetLibrary, animationRuntime = null } = {}) {
@@ -182,12 +183,15 @@ export class WorldObjectManager {
     const asset = serializeAsset(object.userData.asset);
     const collider = normalizeCollider(object.userData.collider);
     const primitive = asset.kind ?? object.userData.asset?.kind ?? "cube";
+    const shadow = readShadowFlags(object);
     return {
       id: object.userData.objectId,
       name: object.name,
       type: asset.type === "relief" || asset.type === "gltf" || asset.type === "image" ? asset.type : "primitive",
       assetRef: object.userData.assetRef ?? object.userData.asset?.id ?? null,
       primitive: asset.type === "primitive" ? primitive : null,
+      color: asset.type === "primitive" ? object.userData.asset?.color ?? null : null,
+      generatorId: object.userData.generatorId ?? null,
       asset: object.userData.assetRef ? null : asset,
       prefabRef: object.userData.prefabRef ?? null,
       transform: {
@@ -212,8 +216,8 @@ export class WorldObjectManager {
       runtime: {
         visible: object.visible,
         static: true,
-        castShadow: true,
-        receiveShadow: true,
+        castShadow: shadow.castShadow,
+        receiveShadow: shadow.receiveShadow,
       },
     };
   }
@@ -264,6 +268,50 @@ export class WorldObjectManager {
     return object;
   }
 
+  // Bulk-add many descriptors with a SINGLE change notification, so emitting a
+  // procedural batch (hundreds of objects) triggers one grass/tree rebuild rather
+  // than one per object. Returns the created objects (already attached + live).
+  async addWorldObjects(items = []) {
+    const created = [];
+    for (const item of items) {
+      // Self-defending live-object ceiling: the validation cap only guards the
+      // load path, so a (future) bulk caller that doesn't remove-before-add can't
+      // accumulate past the limit either.
+      if (this.objects.size >= MAX_PLACED_OBJECTS) {
+        console.warn(`addWorldObjects: live object cap (${MAX_PLACED_OBJECTS}) reached; remaining skipped.`);
+        break;
+      }
+      const object = await this._buildPlacedFromDescriptor(item, { id: null });
+      if (!object) continue;
+      this.root.add(object);
+      this.objects.set(object.userData.objectId, object);
+      created.push(object);
+    }
+    if (created.length) this._changed({ full: true });
+    return created;
+  }
+
+  // Bulk-remove + dispose many live objects with a single change notification.
+  removeWorldObjects(objects = []) {
+    let removed = 0;
+    for (const object of objects) {
+      if (!object || !this.objects.has(object.userData.objectId)) continue;
+      this.animationRuntime?.remove(object);
+      this.objects.delete(object.userData.objectId);
+      object.removeFromParent();
+      this.disposeObject(object);
+      removed++;
+    }
+    if (removed) this._changed({ full: true });
+    return removed;
+  }
+
+  // All live objects owned by a generator instance (Stage 17C).
+  objectsByGeneratorId(generatorId) {
+    if (!generatorId) return [];
+    return [...this.objects.values()].filter((o) => o.userData.generatorId === generatorId);
+  }
+
   // Shared builder for load + prefab placement. Resolves the asset (falling back
   // to a placeholder for missing assetRefs), applies transform/collider/
   // exclusion, and threads assetRef + prefabRef onto userData.
@@ -297,6 +345,12 @@ export class WorldObjectManager {
     this._attachAnimation(object, asset, item.animation);
     this._attachInteraction(object, item.interaction);
     this._attachParticles(object, item.particles);
+    // Procedural-generator ownership (Stage 17C): which generator instance, if any,
+    // emitted this object — so it can regenerate/clear exactly its own objects.
+    object.userData.generatorId = item.generatorId ?? null;
+    // Apply per-object shadow flags (default on) — lets a generator make flat
+    // ground surfaces receive-only without casting (e.g. roads/zone overlays).
+    applyShadowFlags(object, item.runtime);
     return object;
   }
 
@@ -351,7 +405,7 @@ export class WorldObjectManager {
   }
 
   async _buildObject3D(asset) {
-    if (asset.type === ASSET_TYPES.primitive) return createPrimitiveMesh(asset.kind);
+    if (asset.type === ASSET_TYPES.primitive) return createPrimitiveMesh(asset.kind, asset.color ?? null);
     if (asset.type === ASSET_TYPES.image && asset.texture) return createImageMesh(asset.texture);
     if (asset.type === ASSET_TYPES.relief && (asset.geometry || asset.geometryData)) {
       const geometry = asset.geometry
@@ -382,8 +436,36 @@ export class WorldObjectManager {
   }
 }
 
+// Apply per-mesh shadow flags from a descriptor's runtime block (default on).
+function applyShadowFlags(object, runtime) {
+  if (!runtime) return;
+  const cast = runtime.castShadow !== false;
+  const receive = runtime.receiveShadow !== false;
+  object.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = cast;
+      child.receiveShadow = receive;
+    }
+  });
+}
+
+// Read back the first mesh's shadow flags (default true if no mesh).
+function readShadowFlags(object) {
+  let castShadow = true;
+  let receiveShadow = true;
+  let found = false;
+  object.traverse((child) => {
+    if (!found && child.isMesh) {
+      castShadow = child.castShadow;
+      receiveShadow = child.receiveShadow;
+      found = true;
+    }
+  });
+  return { castShadow, receiveShadow };
+}
+
 function serializeAsset(asset) {
-  if (asset.type === "primitive") return { type: "primitive", kind: asset.kind, name: asset.name };
+  if (asset.type === "primitive") return { type: "primitive", kind: asset.kind, name: asset.name, color: asset.color ?? null };
   if (asset.type === "relief") {
     return {
       type: "relief",
@@ -404,9 +486,10 @@ function assetFromWorldObject(item) {
       type: "primitive",
       kind: item.primitive ?? "cube",
       name: item.name ?? item.primitive ?? "Primitive",
+      color: item.color ?? null,
     };
   }
-  return { type: "primitive", kind: "cube", name: item.name ?? "Cube" };
+  return { type: "primitive", kind: "cube", name: item.name ?? "Cube", color: item.color ?? null };
 }
 
 function vectorToObject(vector) {

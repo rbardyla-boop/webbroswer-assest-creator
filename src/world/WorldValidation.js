@@ -9,10 +9,11 @@ import { sanitizeLighting } from "../lighting/LightingValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
+import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
-const MAX_PLACED_OBJECTS = 20000;
+export const MAX_PLACED_OBJECTS = 20000;
 const PRIMITIVES = new Set(["cube", "sphere", "cylinder", "plane", "ramp"]);
 const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom", "gltf"]);
 const CAMERA_MODES = new Set(["first", "third"]);
@@ -48,6 +49,7 @@ export function validateWorldDocument(input) {
   if (!CAMERA_MODES.has(doc.player.cameraMode)) doc.player.cameraMode = "third";
   doc.lighting = sanitizeLighting(doc.lighting);
   doc.visibility = createVisibilityConfig(doc.visibility);
+  doc.generators = sanitizeGenerators(doc.generators);
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));
@@ -128,6 +130,23 @@ function legacyObjectToV2(item = {}) {
   };
 }
 
+function sanitizeObjectColor(value) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : null;
+}
+
+function sanitizeGeneratorId(value) {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 48);
+  return cleaned.length ? cleaned : null;
+}
+
+function sanitizeGenerators(generators) {
+  const src = generators && typeof generators === "object" ? generators : {};
+  const instances = Array.isArray(src.instances) ? src.instances : [];
+  // Cap the number of generator instances (defense in depth).
+  return { instances: instances.slice(0, 16).map((g) => createGeneratorInstance(g)) };
+}
+
 function sanitizeObjects(objects, warnings) {
   const safe = [];
   const list = objects ?? [];
@@ -150,6 +169,10 @@ function sanitizeObjects(objects, warnings) {
       assetRef: item?.assetRef ?? item?.asset?.id ?? null,
       prefabRef: typeof item?.prefabRef === "string" && item.prefabRef ? item.prefabRef : null,
       primitive: PRIMITIVES.has(primitive) ? primitive : "cube",
+      // Optional per-object primitive tint (#rrggbb) + the generator instance that
+      // emitted this object (Stage 17C). Both null for hand-placed objects.
+      color: sanitizeObjectColor(item?.color),
+      generatorId: sanitizeGeneratorId(item?.generatorId),
       asset: item?.asset ?? null,
       transform,
       collider,
