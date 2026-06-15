@@ -146,6 +146,81 @@ if (import.meta.env.DEV) {
   // Dev/test-only: live placed-object count (used by the procedural proof to
   // confirm generated city objects loaded + rendered in the runtime).
   window.__WORLD_DEBUG__ = () => ({ objects: objectManager?.objects.size ?? 0 });
+  // Dev/test-only: performance instrumentation for the local-GPU validation report
+  // (scripts/perf-report.mjs). snapshot() returns GPU-INDEPENDENT scene-complexity
+  // metrics (draw calls, triangles, memory, object/instance/patch counts, heap) plus
+  // the live WebGL renderer string. sample() times animation frames — under the
+  // SwiftShader software rasterizer that is a CPU signal, NOT a GPU FPS measurement.
+  window.__PERF__ = {
+    snapshot() {
+      const info = renderer.info;
+      let gpu = "unknown";
+      let vendor = "unknown";
+      try {
+        const gl = renderer.getContext();
+        const ext = gl.getExtension("WEBGL_debug_renderer_info");
+        if (ext) {
+          gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+          vendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+        }
+      } catch (_) {
+        /* renderer string unavailable */
+      }
+      const heap = performance.memory
+        ? {
+            usedMB: +(performance.memory.usedJSHeapSize / 1048576).toFixed(1),
+            totalMB: +(performance.memory.totalJSHeapSize / 1048576).toFixed(1),
+          }
+        : null;
+      return {
+        renderer: { gpu, vendor },
+        draw: { calls: info.render.calls, triangles: info.render.triangles, points: info.render.points, lines: info.render.lines },
+        memory: { geometries: info.memory.geometries, textures: info.memory.textures, programs: info.programs?.length ?? null },
+        heap,
+        objects: objectManager?.objects.size ?? 0,
+        instancing: instancedRenderer?.stats ?? null,
+        grass: grass?.stats ? { visiblePatches: grass.stats.visiblePatches, activePatches: grass.stats.activePatches, visibleBlades: grass.stats.visibleBlades ?? null } : null,
+        trees: trees?.stats ? { visiblePatches: trees.stats.visiblePatches, activePatches: trees.stats.activePatches, drawCalls: trees.stats.drawCalls ?? null } : null,
+        bushes: bushes?.stats ? { visiblePatches: bushes.stats.visiblePatches, activePatches: bushes.stats.activePatches, drawCalls: bushes.stats.drawCalls ?? null } : null,
+        visibility: visibilityKernel?.stats ?? null,
+      };
+    },
+    // Time animation frames; `turn` forces a continuous camera pan to catch
+    // worst-case streaming/visibility spikes. Stops at `frames` OR `maxMs` wall-clock
+    // (so a very slow scene — e.g. dense grass under software raster — is still
+    // bounded). softwareApproxFps is CPU-raster only, never a GPU FPS claim.
+    async sample({ frames = 60, turn = false, turnRate = 0.04, maxMs = 8000 } = {}) {
+      const times = [];
+      let prev = performance.now();
+      const start = prev;
+      await new Promise((resolve) => {
+        let i = 0;
+        const tick = (now) => {
+          times.push(now - prev);
+          prev = now;
+          if (turn) cameraController.yaw += turnRate;
+          if (++i >= frames || now - start >= maxMs) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      if (times.length > 1) times.shift(); // drop the first interval (warm-up)
+      const sorted = times.slice().sort((a, b) => a - b);
+      const sum = times.reduce((a, b) => a + b, 0);
+      const at = (p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(p * sorted.length)))];
+      return {
+        frames: times.length,
+        avgMs: +(sum / times.length).toFixed(2),
+        medianMs: +at(0.5).toFixed(2),
+        p95Ms: +at(0.95).toFixed(2),
+        worstMs: +Math.max(...times).toFixed(2),
+        softwareApproxFps: +(1000 / (sum / times.length)).toFixed(1),
+      };
+    },
+  };
   // Dev/test-only: read the live terrain material v2 (Stage 14C). Reports the
   // upgrade uniforms + that fog/shadow stayed wired (the onBeforeCompile pass
   // only edits diffuseColor, never the lighting/fog/shadow chunks).

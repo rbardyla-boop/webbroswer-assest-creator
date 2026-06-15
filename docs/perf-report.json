@@ -1,0 +1,805 @@
+{
+  "generatedAt": "2026-06-15T12:09:02.906Z",
+  "platform": "linux",
+  "node": "v22.22.3",
+  "renderer": {
+    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "vendor": "Google Inc. (Google)"
+  },
+  "settleMs": 1400,
+  "scenes": [
+    {
+      "id": "baseline",
+      "label": "Empty terrain (no vegetation, no objects)",
+      "summary": {
+        "objects": 0
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 3,
+          "triangles": 116264,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 3,
+          "textures": 1,
+          "programs": 3
+        },
+        "heap": {
+          "usedMB": 13.9,
+          "totalMB": 29.9
+        },
+        "objects": 0,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 0,
+          "activePatches": 0,
+          "visibleBlades": 0
+        },
+        "trees": {
+          "visiblePatches": 0,
+          "activePatches": 0,
+          "drawCalls": 0
+        },
+        "bushes": {
+          "visiblePatches": 0,
+          "activePatches": 90,
+          "drawCalls": 0
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 3,
+          "triangles": 116264,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 3,
+          "textures": 1,
+          "programs": 3
+        },
+        "heap": {
+          "usedMB": 13.3,
+          "totalMB": 30.2
+        },
+        "objects": 0,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 0,
+          "activePatches": 0,
+          "visibleBlades": 0
+        },
+        "trees": {
+          "visiblePatches": 0,
+          "activePatches": 0,
+          "drawCalls": 0
+        },
+        "bushes": {
+          "visiblePatches": 0,
+          "activePatches": 90,
+          "drawCalls": 0
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 59,
+        "avgMs": 52.54,
+        "medianMs": 50,
+        "p95Ms": 100,
+        "worstMs": 100.1,
+        "softwareApproxFps": 19
+      },
+      "turn": {
+        "frames": 59,
+        "avgMs": 55.08,
+        "medianMs": 50,
+        "p95Ms": 116.6,
+        "worstMs": 116.7,
+        "softwareApproxFps": 18.2
+      },
+      "consoleErrors": []
+    },
+    {
+      "id": "vegetation",
+      "label": "Vegetation-heavy (dense grass + trees + bushes)",
+      "summary": {
+        "objects": 0
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 76,
+          "triangles": 929880,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 45,
+          "textures": 1,
+          "programs": 8
+        },
+        "heap": {
+          "usedMB": 51.9,
+          "totalMB": 72.8
+        },
+        "objects": 0,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 33,
+          "activePatches": 89,
+          "visibleBlades": 48774
+        },
+        "trees": {
+          "visiblePatches": 3,
+          "activePatches": 3,
+          "drawCalls": 6
+        },
+        "bushes": {
+          "visiblePatches": 22,
+          "activePatches": 80,
+          "drawCalls": 22
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 102,
+          "triangles": 871930,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 49,
+          "textures": 1,
+          "programs": 8
+        },
+        "heap": {
+          "usedMB": 45.3,
+          "totalMB": 73.8
+        },
+        "objects": 0,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 32,
+          "activePatches": 117,
+          "visibleBlades": 43389
+        },
+        "trees": {
+          "visiblePatches": 9,
+          "activePatches": 20,
+          "drawCalls": 18
+        },
+        "bushes": {
+          "visiblePatches": 21,
+          "activePatches": 80,
+          "drawCalls": 21
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 7,
+        "avgMs": 1007.1,
+        "medianMs": 999.9,
+        "p95Ms": 1066.7,
+        "worstMs": 1066.7,
+        "softwareApproxFps": 1
+      },
+      "turn": {
+        "frames": 7,
+        "avgMs": 873.77,
+        "medianMs": 1016.6,
+        "p95Ms": 1050,
+        "worstMs": 1050,
+        "softwareApproxFps": 1.1
+      },
+      "consoleErrors": []
+    },
+    {
+      "id": "connected",
+      "label": "Connected world (city + camp + ruin + forest + road + plaza + connector)",
+      "summary": {
+        "objects": 139
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 85,
+          "triangles": 430588,
+          "points": 240,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 51,
+          "textures": 1,
+          "programs": 11
+        },
+        "heap": {
+          "usedMB": 49.8,
+          "totalMB": 91.5
+        },
+        "objects": 139,
+        "instancing": {
+          "batches": 5,
+          "instances": 126,
+          "hiddenSources": 126,
+          "eligible": 129,
+          "drawCalls": 5
+        },
+        "grass": {
+          "visiblePatches": 33,
+          "activePatches": 89,
+          "visibleBlades": 38581
+        },
+        "trees": {
+          "visiblePatches": 3,
+          "activePatches": 3,
+          "drawCalls": 6
+        },
+        "bushes": {
+          "visiblePatches": 26,
+          "activePatches": 90,
+          "drawCalls": 26
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 130,
+          "triangles": 469592,
+          "points": 240,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 72,
+          "textures": 1,
+          "programs": 11
+        },
+        "heap": {
+          "usedMB": 42.4,
+          "totalMB": 98.9
+        },
+        "objects": 139,
+        "instancing": {
+          "batches": 5,
+          "instances": 126,
+          "hiddenSources": 126,
+          "eligible": 129,
+          "drawCalls": 5
+        },
+        "grass": {
+          "visiblePatches": 49,
+          "activePatches": 146,
+          "visibleBlades": 49011
+        },
+        "trees": {
+          "visiblePatches": 10,
+          "activePatches": 22,
+          "drawCalls": 20
+        },
+        "bushes": {
+          "visiblePatches": 25,
+          "activePatches": 90,
+          "drawCalls": 25
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 8,
+        "avgMs": 939.54,
+        "medianMs": 949.9,
+        "p95Ms": 1300,
+        "worstMs": 1300,
+        "softwareApproxFps": 1.1
+      },
+      "turn": {
+        "frames": 7,
+        "avgMs": 1104.71,
+        "medianMs": 1033.3,
+        "p95Ms": 1533.2,
+        "worstMs": 1533.2,
+        "softwareApproxFps": 0.9
+      },
+      "consoleErrors": []
+    },
+    {
+      "id": "largecity",
+      "label": "Large generated city (stress: 8×8 blocks, full density)",
+      "summary": {
+        "objects": 293
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 83,
+          "triangles": 324134,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 48,
+          "textures": 1,
+          "programs": 10
+        },
+        "heap": {
+          "usedMB": 45.4,
+          "totalMB": 90.8
+        },
+        "objects": 293,
+        "instancing": {
+          "batches": 3,
+          "instances": 293,
+          "hiddenSources": 293,
+          "eligible": 293,
+          "drawCalls": 3
+        },
+        "grass": {
+          "visiblePatches": 33,
+          "activePatches": 89,
+          "visibleBlades": 24211
+        },
+        "trees": {
+          "visiblePatches": 3,
+          "activePatches": 3,
+          "drawCalls": 6
+        },
+        "bushes": {
+          "visiblePatches": 26,
+          "activePatches": 90,
+          "drawCalls": 26
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 124,
+          "triangles": 325526,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 70,
+          "textures": 1,
+          "programs": 10
+        },
+        "heap": {
+          "usedMB": 52,
+          "totalMB": 100.1
+        },
+        "objects": 293,
+        "instancing": {
+          "batches": 3,
+          "instances": 293,
+          "hiddenSources": 293,
+          "eligible": 293,
+          "drawCalls": 3
+        },
+        "grass": {
+          "visiblePatches": 47,
+          "activePatches": 149,
+          "visibleBlades": 27599
+        },
+        "trees": {
+          "visiblePatches": 10,
+          "activePatches": 23,
+          "drawCalls": 20
+        },
+        "bushes": {
+          "visiblePatches": 23,
+          "activePatches": 90,
+          "drawCalls": 23
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 8,
+        "avgMs": 960.38,
+        "medianMs": 1016.6,
+        "p95Ms": 1116.7,
+        "worstMs": 1116.7,
+        "softwareApproxFps": 1
+      },
+      "turn": {
+        "frames": 7,
+        "avgMs": 1095.2,
+        "medianMs": 1016.7,
+        "p95Ms": 1416.7,
+        "worstMs": 1416.7,
+        "softwareApproxFps": 0.9
+      },
+      "consoleErrors": []
+    },
+    {
+      "id": "particles",
+      "label": "Particles + lights + generated props (camp fire + smoke stacks)",
+      "summary": {
+        "objects": 43
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 112,
+          "triangles": 324272,
+          "points": 2040,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 71,
+          "textures": 1,
+          "programs": 10
+        },
+        "heap": {
+          "usedMB": 46.5,
+          "totalMB": 63.7
+        },
+        "objects": 43,
+        "instancing": {
+          "batches": 1,
+          "instances": 24,
+          "hiddenSources": 24,
+          "eligible": 24,
+          "drawCalls": 1
+        },
+        "grass": {
+          "visiblePatches": 34,
+          "activePatches": 92,
+          "visibleBlades": 24220
+        },
+        "trees": {
+          "visiblePatches": 4,
+          "activePatches": 4,
+          "drawCalls": 8
+        },
+        "bushes": {
+          "visiblePatches": 26,
+          "activePatches": 90,
+          "drawCalls": 26
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 159,
+          "triangles": 325696,
+          "points": 2040,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 104,
+          "textures": 1,
+          "programs": 10
+        },
+        "heap": {
+          "usedMB": 39.4,
+          "totalMB": 61.8
+        },
+        "objects": 43,
+        "instancing": {
+          "batches": 1,
+          "instances": 24,
+          "hiddenSources": 24,
+          "eligible": 24,
+          "drawCalls": 1
+        },
+        "grass": {
+          "visiblePatches": 49,
+          "activePatches": 182,
+          "visibleBlades": 26722
+        },
+        "trees": {
+          "visiblePatches": 17,
+          "activePatches": 43,
+          "drawCalls": 34
+        },
+        "bushes": {
+          "visiblePatches": 23,
+          "activePatches": 90,
+          "drawCalls": 23
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 0,
+          "visible": 0,
+          "warm": 0,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 18,
+        "avgMs": 408.32,
+        "medianMs": 416.6,
+        "p95Ms": 500,
+        "worstMs": 500,
+        "softwareApproxFps": 2.4
+      },
+      "turn": {
+        "frames": 18,
+        "avgMs": 414.79,
+        "medianMs": 416.6,
+        "p95Ms": 799.9,
+        "worstMs": 799.9,
+        "softwareApproxFps": 2.4
+      },
+      "consoleErrors": []
+    },
+    {
+      "id": "animation",
+      "label": "Animation fixture scene (24 rigged GLB instances)",
+      "summary": {
+        "objects": 24,
+        "asset": "gltf-anim-fixture-a6578898"
+      },
+      "snapshot": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 111,
+          "triangles": 284618,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 48,
+          "textures": 25,
+          "programs": 11
+        },
+        "heap": {
+          "usedMB": 34.9,
+          "totalMB": 46
+        },
+        "objects": 24,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 34,
+          "activePatches": 92,
+          "visibleBlades": 18501
+        },
+        "trees": {
+          "visiblePatches": 4,
+          "activePatches": 4,
+          "drawCalls": 8
+        },
+        "bushes": {
+          "visiblePatches": 26,
+          "activePatches": 90,
+          "drawCalls": 26
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 24,
+          "visible": 12,
+          "warm": 12,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "afterTurn": {
+        "renderer": {
+          "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Google Inc. (Google)"
+        },
+        "draw": {
+          "calls": 146,
+          "triangles": 296086,
+          "points": 0,
+          "lines": 0
+        },
+        "memory": {
+          "geometries": 83,
+          "textures": 25,
+          "programs": 11
+        },
+        "heap": {
+          "usedMB": 34.1,
+          "totalMB": 58.5
+        },
+        "objects": 24,
+        "instancing": {
+          "batches": 0,
+          "instances": 0,
+          "hiddenSources": 0,
+          "eligible": 0,
+          "drawCalls": 0
+        },
+        "grass": {
+          "visiblePatches": 51,
+          "activePatches": 182,
+          "visibleBlades": 21141
+        },
+        "trees": {
+          "visiblePatches": 18,
+          "activePatches": 43,
+          "drawCalls": 36
+        },
+        "bushes": {
+          "visiblePatches": 24,
+          "activePatches": 90,
+          "drawCalls": 24
+        },
+        "visibility": {
+          "enabled": true,
+          "total": 24,
+          "visible": 0,
+          "warm": 24,
+          "sleeping": 0,
+          "unloaded": 0,
+          "wakes": 0,
+          "sleeps": 0
+        }
+      },
+      "steady": {
+        "frames": 17,
+        "avgMs": 419.59,
+        "medianMs": 399.9,
+        "p95Ms": 883.2,
+        "worstMs": 883.2,
+        "softwareApproxFps": 2.4
+      },
+      "turn": {
+        "frames": 19,
+        "avgMs": 367.53,
+        "medianMs": 333.4,
+        "p95Ms": 766.6,
+        "worstMs": 766.6,
+        "softwareApproxFps": 2.7
+      },
+      "consoleErrors": []
+    }
+  ]
+}
