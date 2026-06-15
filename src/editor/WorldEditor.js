@@ -475,6 +475,8 @@ export class WorldEditor {
     this.proceduralPanel = new ProceduralPanel({
       getManager: () => this.manager,
       getDocument: () => this.worldLoader?.document,
+      getPrefab: (id) => this.prefabLibrary?.get(id) ?? null,
+      listPrefabs: () => this.prefabLibrary?.list() ?? [],
       onChanged: () => this._refreshPerf(),
     });
     root.appendChild(this._section("Procedural (city)", this.proceduralPanel.root));

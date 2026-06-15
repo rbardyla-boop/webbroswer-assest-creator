@@ -43,7 +43,22 @@ export function createCityConfig(overrides = {}) {
       x: clamp(num(src.origin?.x, 0), -5000, 5000),
       z: clamp(num(src.origin?.z, 0), -5000, 5000),
     },
+    // Optional prefab/asset backing per category (Stage 19): a prefab id to expand
+    // for each building/prop, or null to emit a primitive (the default + fallback).
+    buildingPrefab: sanitizePrefabRef(src.buildingPrefab),
+    propPrefab: sanitizePrefabRef(src.propPrefab),
   };
+}
+
+// Sanitize a prefab reference id. The result is ONLY ever used as a key into the
+// PrefabLibrary's Map (prefabLibrary.get(id)) — never as a filesystem path, URL, or
+// object property access — so the allowlist residue (e.g. dots from "../x", or a
+// literal "__proto__") is inert: Map.get is isolated from the prototype chain and a
+// missing key resolves to null → primitive fallback.
+export function sanitizePrefabRef(value) {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 64);
+  return cleaned.length ? cleaned : null;
 }
 
 // A generator instance as stored in the WorldDocument `generators` block.

@@ -1,31 +1,44 @@
-// City emitter (Stage 17C): turns a deterministic CityLayout into NORMAL
-// WorldDocument object descriptors — primitives placed through the host's
-// WorldObjectManager like any hand-placed object. This is the bridge the Stage
-// 17B audit required: the generator never owns a scene graph; its output becomes
-// plain data that flows through the existing placement / lighting / material /
-// collision / visibility systems.
-//
-// Each descriptor carries the full host metadata (primitive kind, color, transform,
-// collider, exclusion, shadow flags, and a generatorId so a generator instance can
-// regenerate/clear exactly the objects it owns).
+// City emitter (Stage 17C / 19): turns a deterministic CityLayout into NORMAL
+// WorldDocument object descriptors. Each item is either a host primitive (default)
+// or — when a resolved prefab definition is supplied for its category (Stage 19) —
+// the EXPANSION of that prefab via worldObjectsFromPrefab. Either way the output is
+// plain WorldDocument data placed through the manager; the generator owns no scene
+// graph. Prefab-backed objects carry prefabRef (and any asset deps of the prefab
+// parts), so worldpack/build asset collection picks them up automatically.
 
 import { getHeight } from "../terrain/terrainSampling.js";
+import { worldObjectsFromPrefab } from "../prefabs/PrefabSerializer.js";
 import { GENERATOR_LIMITS } from "./GeneratorConfig.js";
 
-// Base dimensions of the host primitives (createPrimitiveMesh), so we can scale to
-// real-world footprints: cube 1.8³, plane 2.4×2.4 (flat XZ), cylinder r0.8 / h1.6.
+// Base dimensions of the host primitives (createPrimitiveMesh).
 const CUBE = 1.8;
 const PLANE = 2.4;
 const CYL_R = 0.8;
 const CYL_H = 1.6;
 const STREET_COLOR = "#3a3d42";
 const TREE_COLOR = "#3f7a3a";
-const STREET_LIFT = 0.04; // tiny lift so streets don't z-fight the terrain
+const STREET_LIFT = 0.04;
 
-export function cityLayoutToWorldObjects(layout, generatorId = "gen-city") {
+/**
+ * @param {object} layout            from generateCityLayout
+ * @param {string} generatorId       owning generator instance id
+ * @param {object} [sources]         { buildingPrefab, propPrefab } RESOLVED prefab
+ *                                   definitions (or null → primitive fallback)
+ */
+export function cityLayoutToWorldObjects(layout, generatorId = "gen-city", { buildingPrefab = null, propPrefab = null } = {}) {
   const out = [];
   const push = (desc) => {
     if (out.length < GENERATOR_LIMITS.MAX_TOTAL_OBJECTS) out.push(desc);
+  };
+  // Expand a prefab atomically (never a partial prefab past the cap).
+  const pushPrefab = (prefab, position, yaw, scale) => {
+    const children = worldObjectsFromPrefab(prefab, { position, yaw, scale });
+    if (!children.length || out.length + children.length > GENERATOR_LIMITS.MAX_TOTAL_OBJECTS) return false;
+    for (const child of children) {
+      child.generatorId = generatorId;
+      out.push(child);
+    }
+    return true;
   };
 
   for (const r of layout?.roads ?? []) {
@@ -36,7 +49,7 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city") {
         rot: [0, r.yaw ?? 0, 0],
         scale: [(r.w ?? PLANE) / PLANE, 1, (r.d ?? PLANE) / PLANE],
         collider: "none",
-        castShadow: false, // flat ground surface — receive only
+        castShadow: false,
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
@@ -46,6 +59,10 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city") {
 
   for (const b of layout?.buildings ?? []) {
     const base = getHeight(b.x, b.z);
+    // Prefab-backed building, or primitive fallback when no/invalid prefab.
+    if (buildingPrefab && pushPrefab(buildingPrefab, { x: b.x, y: base, z: b.z }, b.yaw ?? 0, prefabFitScale(buildingPrefab, b.w, b.d))) {
+      continue;
+    }
     push(
       primitive("cube", "Building", b.tint, generatorId, {
         pos: [b.x, base + b.h / 2, b.z],
@@ -62,6 +79,9 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city") {
 
   for (const p of layout?.props ?? []) {
     const base = getHeight(p.x, p.z);
+    if (propPrefab && pushPrefab(propPrefab, { x: p.x, y: base, z: p.z }, 0, prefabFitScale(propPrefab, p.r * 2, p.r * 2))) {
+      continue;
+    }
     push(
       primitive("cylinder", "Tree", TREE_COLOR, generatorId, {
         pos: [p.x, base + p.h / 2, p.z],
@@ -77,6 +97,15 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city") {
   }
 
   return out;
+}
+
+// Uniform scale that fits a prefab's horizontal footprint to a target lot size.
+function prefabFitScale(prefab, targetW, targetD) {
+  const bounds = prefab?.metadata?.bounds;
+  if (!bounds?.min || !bounds?.max) return 1;
+  const ext = Math.max(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z);
+  if (!(ext > 0.01)) return 1;
+  return Math.min(6, Math.max(0.3, Math.min(targetW, targetD) / ext));
 }
 
 function primitive(kind, name, color, generatorId, t) {

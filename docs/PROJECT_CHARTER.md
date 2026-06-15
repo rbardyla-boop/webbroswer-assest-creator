@@ -587,3 +587,60 @@ a few instanced draws, identity preserved, zero console errors) + Node regressio
 an optional editor "instanced preview" mode (with selection-disabled caveat);
 instancing of non-generated repeated objects; validation surfaced at generate time
 (auto-warn). Large-city FPS stays MEDIUM-confidence until a local GPU smoke.
+
+## ADR-019 — Asset/Prefab Generator Integration v1 (Stage 19)
+
+**Decision.** Let procedural generators emit PREFAB-backed content (not only
+primitive boxes), so every later generator can place proper prefabs/assets — while
+keeping the boundary (generator output → WorldDocument objects → existing systems)
+and editor identity. The generator output MODEL is upgraded before the generator
+LIBRARY is multiplied (Stage 18).
+
+**Shape.** `createCityConfig` gains `buildingPrefab` / `propPrefab` (a prefab id, or
+null = primitive — the default + fallback), sanitized by `sanitizePrefabRef` (allow-
+list, 64-cap). The emitter `cityLayoutToWorldObjects(layout, generatorId,
+{ buildingPrefab, propPrefab })` takes RESOLVED prefab definitions: for a category
+with a prefab it expands it via the existing pure `worldObjectsFromPrefab(prefab,
+{ position: terrain-snapped, yaw, scale: prefabFitScale })`, tags each child with the
+`generatorId`, and pushes ATOMICALLY (never a partial prefab past `MAX_TOTAL_OBJECTS`);
+otherwise it emits a primitive. The editor `ProceduralPanel` adds Building/Props
+dropdowns (Primitive + the prefab library's list), resolves the id via
+`getPrefab(id)` at generate time (missing → null → primitive fallback), and stores
+the ids in the generator instance (round-tripped).
+
+**Why it needed almost no new plumbing.** A prefab-expanded object is just a normal
+`WorldObject` carrying `prefabRef` + per-part `assetRef` + `generatorId`. So:
+selection / lock / regenerate / clear / serialize all work UNCHANGED (they operate on
+`objectsByGeneratorId` over the full N-part expansion); **asset-dependency collection
+is automatic** (`collectUsedAssetRefs` already scans `document.objects`' external
+assetRefs — a prefab wrapping a GLB is collected with no new code); and Stage 17C-2
+instancing still batches the expanded PRIMITIVE parts (a gltf-backed part is
+non-primitive → individual). Builtin prefabs (hut, tree-cluster) are primitive-based,
+so the city looks like a city out of the box; an asset-backed prefab brings real
+asset deps along for the build.
+
+**Safety.** `sanitizePrefabRef`'s output is ONLY ever a `Map.get` key into the prefab
+library — never a path/URL/eval/`obj[key]` sink — so allowlist residue (`..`,
+`__proto__`) is inert (Map.get is prototype-isolated; a missing key → null →
+primitive). The runtime never re-resolves generator refs (it loads already-expanded
+`document.objects`). Expansion is hard-capped (atomic prefab skip + the per-category
+caps + the `addWorldObjects` live-object ceiling).
+
+**Review.** Two independent reviewers (boundary/correctness + security/untrusted):
+**0 CRITICAL / 0 HIGH / 0 MEDIUM — APPROVE.** Verified the expanded-set identity
+(lock/regenerate over all N parts), the atomic cap, the fallback, the round-trip, the
+automatic asset collection, the instancing interplay, and the no-injection prefab-id
+path. The only items were LOW documentation nits (the Map-only invariant), closed
+with a clarifying comment. `npm run test:prefabgen` (editor: prefab-backed buildings
+that are selectable/lockable + missing-prefab fallback; runtime renders, zero console
+errors) + Node regression (expansion/generatorId/fallback/asset-dep collection/round-
+trip) + the full 14-proof sweep + qa:skills 32/0/0 all green.
+
+**Expected behavior (not a defect).** Asset deps are collected from the EXPANDED
+objects, so a worldpack exported with a generator configured but never generated has
+no objects (and no deps) to collect — config is authoring intent; objects are content.
+
+**Deferred (Stage 18 now stands on a strong output model).** Generator Library v1
+(roads/ruins/camps/forests/plazas, spawn/trigger-aware layouts, prefab-backed props/
+buildings); a mix of prefab + primitive per generate; per-category multiple prefab
+choices; non-uniform prefab fit to lot footprints.

@@ -9,7 +9,7 @@ import { normalizeAssetMetadata } from "../src/assets/AssetValidation.js";
 import { AssetLibrary } from "../src/assets/AssetLibrary.js";
 import { PrefabLibrary } from "../src/prefabs/PrefabLibrary.js";
 import { PrefabInstancer } from "../src/prefabs/PrefabInstancer.js";
-import { worldObjectsFromPrefab } from "../src/prefabs/PrefabSerializer.js";
+import { worldObjectsFromPrefab, prefabFromWorldObjects } from "../src/prefabs/PrefabSerializer.js";
 import { validatePrefabDocument } from "../src/prefabs/PrefabValidation.js";
 import { createBuiltinPrefabs, isBuiltinPrefab } from "../src/prefabs/BuiltinKits.js";
 import { buildVerticalSliceV1 } from "../src/world/samples/verticalSliceV1.js";
@@ -2251,5 +2251,54 @@ await c2OverMgr.addWorldObjects([mkCube(500, 500), mkCube(501, 501)]);
 const vOver = validatePlacement(c2OverMgr.objects);
 assert.equal(vOver.overlaps.length, 1, "planted overlapping pair is detected");
 assert.ok(vOver.overlaps[0].fraction > 0.25, `overlap fraction above tolerance, got ${vOver.overlaps[0].fraction}`);
+
+// --- Stage 19: asset/prefab generator integration ----------------------------
+
+// Config: prefab refs sanitized + round-trip through validation/worldpack.
+assert.equal(createCityConfig({ buildingPrefab: "builtin-hut", propPrefab: "../evil" }).buildingPrefab, "builtin-hut");
+assert.equal(createCityConfig({ buildingPrefab: "../../etc" }).buildingPrefab, "....etc"); // path chars stripped, no slashes
+assert.equal(createCityConfig({}).buildingPrefab, null);
+const prefDoc = validateWorldDocument(createWorldDocument({ generators: { instances: [{ id: "gen-city", type: "city", config: { seed: "p", buildingPrefab: "builtin-hut", propPrefab: "builtin-tree-cluster" } }] } }));
+assert.equal(prefDoc.document.generators.instances[0].config.buildingPrefab, "builtin-hut");
+assert.equal(prefDoc.document.generators.instances[0].config.propPrefab, "builtin-tree-cluster");
+const prefPack = await buildWorldPack(prefDoc.document, assetLibrary, { exportedAt: "2026-06-15T00:00:00.000Z" });
+assert.equal(prefPack.world.generators.instances[0].config.buildingPrefab, "builtin-hut");
+
+// Emitter: a resolved prefab expands each building into prefab-tagged objects;
+// null prefab falls back to a primitive; expansion grows the object count.
+const s19Layout = generateCityLayout(createCityConfig({ seed: "p19", style: "town", blocks: 3, density: 0.8 }));
+const hutPrefab = createBuiltinPrefabs().find((p) => p.id === "builtin-hut");
+const s19Prim = cityLayoutToWorldObjects(s19Layout, "gen-1");
+const s19Pref = cityLayoutToWorldObjects(s19Layout, "gen-1", { buildingPrefab: hutPrefab });
+assert.ok(s19Prim.filter((o) => o.name === "Building").every((o) => !o.prefabRef), "primitive buildings carry no prefabRef");
+const hutParts = s19Pref.filter((o) => o.prefabRef === "builtin-hut");
+assert.ok(hutParts.length > 0, "prefab-backed buildings expand to prefab parts");
+assert.ok(hutParts.every((o) => o.generatorId === "gen-1"), "expanded prefab parts carry the generatorId");
+assert.ok(s19Pref.length > s19Prim.length, "prefab expansion grows the object count");
+assert.equal(s19Pref.filter((o) => o.name === "Building" && o.type === "primitive").length, 0, "no primitive building when a prefab is used");
+// Safe fallback: a null/absent prefab definition yields primitives.
+assert.ok(cityLayoutToWorldObjects(s19Layout, "gen-1", { buildingPrefab: null }).some((o) => o.name === "Building" && o.type === "primitive"));
+
+// Asset-dependency collection: a prefab wrapping an external (gltf) asset →
+// generated objects carry that assetRef → the build collector includes it.
+const glbPart = {
+  name: "House", type: "gltf", assetRef: "asset-house-glb", primitive: null, asset: null,
+  transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+  collider: { type: "box", enabled: true }, exclusion: { grass: true, trees: true }, runtime: { visible: true },
+};
+const glbPrefab = prefabFromWorldObjects([glbPart], { name: "GLB House", id: "prefab-glb-house" });
+const s19Asset = cityLayoutToWorldObjects(s19Layout, "gen-1", { buildingPrefab: glbPrefab });
+assert.ok(s19Asset.some((o) => o.assetRef === "asset-house-glb"), "generated prefab objects carry the prefab's asset dependency");
+assert.ok(collectUsedAssetRefs({ objects: s19Asset }).includes("asset-house-glb"), "build collector picks up the generated asset dependency");
+
+// Expanded prefab objects round-trip through the manager (prefabRef + generatorId).
+const s19Scene = new THREE.Scene();
+const s19Mgr = new WorldObjectManager(s19Scene, {});
+await s19Mgr.addWorldObjects(s19Pref);
+const s19Ser = s19Mgr.serializeWorldObjects();
+const serHut = s19Ser.find((o) => o.prefabRef === "builtin-hut");
+assert.ok(serHut, "prefab-backed object serializes with prefabRef");
+assert.equal(serHut.generatorId, "gen-1", "and keeps its generatorId");
+assert.equal(s19Mgr.objectsByGeneratorId("gen-1").length, s19Pref.length, "all expanded objects owned by the instance");
 
 console.log("world document regression checks passed");

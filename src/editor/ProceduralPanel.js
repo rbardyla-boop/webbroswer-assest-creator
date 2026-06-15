@@ -16,9 +16,11 @@ import { validatePlacement } from "../generators/PlacementValidator.js";
 const INSTANCE_ID = "gen-city";
 
 export class ProceduralPanel {
-  constructor({ getManager, getDocument, onChanged } = {}) {
+  constructor({ getManager, getDocument, getPrefab, listPrefabs, onChanged } = {}) {
     this.getManager = typeof getManager === "function" ? getManager : () => null;
     this.getDocument = typeof getDocument === "function" ? getDocument : () => null;
+    this.getPrefab = typeof getPrefab === "function" ? getPrefab : () => null;
+    this.listPrefabs = typeof listPrefabs === "function" ? listPrefabs : () => [];
     this.onChanged = onChanged;
     this.instanceId = INSTANCE_ID;
     this._buildDOM();
@@ -34,11 +36,18 @@ export class ProceduralPanel {
 
     const config = this._readConfig();
     const layout = generateCityLayout(config);
-    const descriptors = cityLayoutToWorldObjects(layout, this.instanceId);
+    // Resolve prefab backings; a missing prefab safely falls back to a primitive.
+    const buildingPrefab = config.buildingPrefab ? this.getPrefab(config.buildingPrefab) : null;
+    const propPrefab = config.propPrefab ? this.getPrefab(config.propPrefab) : null;
+    const descriptors = cityLayoutToWorldObjects(layout, this.instanceId, { buildingPrefab, propPrefab });
     await manager.addWorldObjects(descriptors);
 
     this._recordInstance(config);
-    this._setStatus(`Generated ${descriptors.length} objects · ${layout.counts.buildings} buildings, ${layout.counts.roads} streets, ${layout.counts.props} trees.`);
+    const missing = [];
+    if (config.buildingPrefab && !buildingPrefab) missing.push("building");
+    if (config.propPrefab && !propPrefab) missing.push("prop");
+    const fallbackNote = missing.length ? ` · ${missing.join("+")} prefab missing → primitive` : "";
+    this._setStatus(`Generated ${descriptors.length} objects · ${layout.counts.buildings} buildings, ${layout.counts.roads} streets, ${layout.counts.props} trees${fallbackNote}.`);
     this.onChanged?.();
   }
 
@@ -88,6 +97,8 @@ export class ProceduralPanel {
 
   // Restore panel inputs from a loaded world's stored generator instance.
   setFromDocument(document) {
+    // Refresh prefab options first (user prefabs may have loaded with the world).
+    this._populatePrefabOptions();
     const instances = document?.generators?.instances ?? [];
     const inst = instances.find((i) => i.id === this.instanceId) ?? instances.find((i) => i.type === "city");
     if (inst?.config) {
@@ -96,6 +107,8 @@ export class ProceduralPanel {
       this.styleSelect.value = inst.config.style;
       this.blocksInput.value = inst.config.blocks;
       this.densityInput.value = inst.config.density;
+      this.buildingPrefabSelect.value = inst.config.buildingPrefab ?? "";
+      this.propPrefabSelect.value = inst.config.propPrefab ?? "";
     }
     const manager = this.getManager();
     const owned = manager ? manager.objectsByGeneratorId(this.instanceId).length : 0;
@@ -111,6 +124,8 @@ export class ProceduralPanel {
       blocks: parseInt(this.blocksInput.value, 10),
       density: parseFloat(this.densityInput.value),
       origin: { x: 0, z: 0 },
+      buildingPrefab: this.buildingPrefabSelect.value || null,
+      propPrefab: this.propPrefabSelect.value || null,
     });
   }
 
@@ -138,10 +153,17 @@ export class ProceduralPanel {
     this.blocksInput = this._number(4, 1, GENERATOR_LIMITS.MIN_BLOCKS, GENERATOR_LIMITS.MAX_BLOCKS);
     this.densityInput = this._number(0.6, 0.05, 0, 1);
 
+    // Per-category source: "Primitive" (default) or a prefab to expand (Stage 19).
+    this.buildingPrefabSelect = this._select([]);
+    this.propPrefabSelect = this._select([]);
+    this._populatePrefabOptions();
+
     this.root.appendChild(this._labeled("Seed", this.seedInput));
     this.root.appendChild(this._labeled("Style", this.styleSelect));
     this.root.appendChild(this._labeled("Blocks", this.blocksInput));
     this.root.appendChild(this._labeled("Density", this.densityInput));
+    this.root.appendChild(this._labeled("Buildings", this.buildingPrefabSelect));
+    this.root.appendChild(this._labeled("Props", this.propPrefabSelect));
 
     const buttons = document.createElement("div");
     Object.assign(buttons.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" });
@@ -160,6 +182,25 @@ export class ProceduralPanel {
 
   _setStatus(text) {
     this.statusEl.textContent = text;
+  }
+
+  // Fill the Building/Props dropdowns with "Primitive" + the available prefabs,
+  // preserving the current selection.
+  _populatePrefabOptions() {
+    const prefabs = this.listPrefabs() ?? [];
+    const opts = [{ value: "", label: "Primitive" }, ...prefabs.map((p) => ({ value: p.id, label: p.name ?? p.id }))];
+    for (const select of [this.buildingPrefabSelect, this.propPrefabSelect]) {
+      const prev = select.value;
+      select.replaceChildren();
+      for (const { value, label } of opts) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      // Keep the prior selection if it still exists.
+      if (opts.some((o) => o.value === prev)) select.value = prev;
+    }
   }
 
   // --- DOM helpers ------------------------------------------------------------
