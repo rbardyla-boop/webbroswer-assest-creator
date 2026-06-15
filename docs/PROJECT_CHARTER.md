@@ -750,3 +750,62 @@ sweep + qa:skills 32/0/0 all green.
 
 **Generator catalog now:** city, camp, ruin, forest, road, plaza, connector. The
 local-GPU FPS validation remains the only outstanding (non-blocking) item.
+
+## Performance Validation Side Report (not a stage)
+
+**Decision.** Before adding more optimization features, measure. Added a DEV-only
+`window.__PERF__` runtime hook (`snapshot()` = renderer.info draw/triangles/points +
+memory + heap + object/instance/patch counts + UNMASKED WebGL renderer string;
+`sample()` = time-budgeted frame timing) and `npm run perf:report` (scripts/
+perf-report.mjs), which authors a 6-scene matrix and writes docs/perf-report.json +
+docs/PERFORMANCE_REPORT.md.
+
+**Honesty boundary.** The headless harness renders with **SwiftShader (software
+rasterizer, no GPU)**. The report records the UNMASKED renderer string proving it, and
+splits metrics accordingly: STRUCTURAL metrics (draw calls, triangles, memory,
+object/instance/patch counts, heap) are GPU-independent and authoritative; frame-time/
+FPS are software-raster CPU signals only, **never a GPU claim**. A "reproduce on real
+hardware" section documents how to fill the GPU rows. No public performance claim is
+made. **Measured headline:** runtime instancing keeps draw calls flat (293 objects → 3
+batches → 83 calls); vegetation dominates triangles (930k); JS heap 14–52 MB.
+
+## ADR-020A — Performance Budget Harness (Stage 20A)
+
+**Decision.** Promote the measured metrics into a **live red/yellow/green budget HUD**
+so budget pressure is visible while authoring, not just in an offline report. Pure
+classification lives in `src/perf/PerformanceBudget.js` (`PERFORMANCE_BUDGETS` frozen
+defaults + `classify` / `evaluateBudget`); the overlay lives in `src/debug/BudgetHUD.js`;
+main.js wires it into both frame branches behind `import.meta.env.DEV`.
+
+**What it surfaces (the measured story made unmissable).** Budgets: draw calls
+(120/180/240), triangles (500k/900k/1.4M), heap MB (80/140/220), generated objects
+(300/600/1000), instanced batches (40/80/120), visible vegetation patches
+(120/220/320). On the measured scenes this reads exactly as the report found: a
+connected generated world is **green**; a dense-vegetation scene goes **red on
+triangles** (the real pressure point) while draw calls stay green; a 293-object stress
+city stays green on draw calls + batches because instancing collapses it (293 → 3
+batches → ~69–83 calls); animation reports **rig/update pressure separately** from draw
+calls (its own row, no draw-call cost). Thresholds are documented as **conservative
+defaults, not universal truths** — they are structural (GPU-independent), not an FPS
+claim.
+
+**Discipline.** Collection is THROTTLED (4 Hz), reads only already-computed counters
+into a REUSED scratch object (no per-frame allocation; the 60 Hz path early-returns
+below the throttle), reads renderer.info AFTER render, and renders DOM only when
+visible (but still collects while hidden so the `__BUDGET__` test hook works in
+runtime). DEV-gated: the production bundle is verified clean of `__BUDGET__` /
+`__PERF__` / the HUD (grep). `npm run perf:report` still works.
+
+**Review.** Adversarial workflow — the perf-discipline dimension passed with a single
+INFO finding (throttle reset-to-0 → minor sample drift), fixed by subtracting the
+interval; the other dimensions were cut short by a session token limit but are covered
+by deterministic checks: Node regression (classification boundaries, frozen defaults,
+unknown-never-worsens), `test:budget` (HUD visible while authoring, collects while
+hidden, per-scene statuses, rig separation), the production dist grep, build, and the
+full 16-proof sweep + qa:skills 32/0/0 — all green.
+
+**Next (optimization ladder):** 20B regional instancing/batching (split batches
+spatially to recover frustum culling; candidate BatchedMesh for mixed-geometry static
+props), 20D fake volumetric lighting + height fog (god-rays/height-fog, bounded +
+toggleable), 20C KTX2/DRACO texture pipeline, 20E per-frame allocation audit, then a
+WebGPU/TSL research branch only (r169/WebGL stays production).

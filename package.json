@@ -29,6 +29,7 @@
     "test:prefabgen": "node scripts/browser-prefab-gen-proof.mjs",
     "test:genlib": "node scripts/browser-genlib-proof.mjs",
     "test:connectors": "node scripts/browser-connectors-proof.mjs",
+    "test:budget": "node scripts/browser-budget-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",

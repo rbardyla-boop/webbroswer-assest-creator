@@ -20,6 +20,7 @@ import { PlayerController } from "./player/PlayerController.js";
 import { PlayerCameraController } from "./player/PlayerCameraController.js";
 
 import { DebugPanel } from "./debug/DebugPanel.js";
+import { BudgetHUD } from "./debug/BudgetHUD.js";
 import { createWorldDocument } from "./world/WorldDocument.js";
 import { WorldRuntimeLoader } from "./world/WorldRuntimeLoader.js";
 import { WorldSerializer } from "./world/WorldSerializer.js";
@@ -320,6 +321,37 @@ function setCameraMode(mode) {
 // --- ui ----------------------------------------------------------------------
 
 const debug = new DebugPanel({ visible: !runtimeMode });
+// Live performance budget HUD (Stage 20A) — DEV-only authoring aid (stripped from
+// production builds). Collects already-computed counters into a reused scratch on a
+// throttle; surfaces red/yellow/green budget status while building a world.
+const budgetHUD = import.meta.env.DEV
+  ? new BudgetHUD({
+      visible: !runtimeMode, // shown by default while authoring; toggle with KeyB in runtime
+      collect: (m) => {
+        const r = renderer.info.render;
+        m.drawCalls = r.calls;
+        m.triangles = r.triangles;
+        m.generatedObjects = countGeneratedObjects(objectManager);
+        m.instancedBatches = instancedRenderer?.stats?.batches ?? 0;
+        m.visibleVegetationPatches =
+          (grass?.stats?.visiblePatches ?? 0) + (trees?.stats?.visiblePatches ?? 0) + (bushes?.stats?.visiblePatches ?? 0);
+        m.heapMB = performance.memory ? performance.memory.usedJSHeapSize / 1048576 : null;
+        m.rigs = animationRuntime?.count ?? 0;
+      },
+    })
+  : null;
+if (budgetHUD) window.__BUDGET__ = () => budgetHUD.snapshot();
+
+// Count placed objects emitted by a generator (they carry a generatorId) — the
+// budget's "generated objects" metric. Runs at the HUD's throttle, not per frame.
+function countGeneratedObjects(manager) {
+  if (!manager) return 0;
+  let n = 0;
+  for (const object of manager.objects.values()) {
+    if (object.userData.generatorId) n++;
+  }
+  return n;
+}
 let editor = null;
 
 async function boot() {
@@ -488,6 +520,7 @@ function frame(now) {
     trees.update(camera);
     bushes?.update(camera);
     renderer.render(scene, camera);
+    budgetHUD?.update(dt);
     markWorldReady();
     crosshairEl.style.display = "none";
     return;
@@ -497,6 +530,7 @@ function frame(now) {
 
   // Global toggles.
   if (input.wasPressed("KeyH")) debug.toggle();
+  if (input.wasPressed("KeyB")) budgetHUD?.toggle();
 
   // Update order: camera (yaw/pitch + mode) → movement → grass streaming.
   cameraController.update(dt);
@@ -529,6 +563,7 @@ function frame(now) {
     depth: reverseDepthStatus,
     visibility: visibilityKernel?.stats,
   });
+  budgetHUD?.update(dt);
 }
 
 boot().catch((error) => {

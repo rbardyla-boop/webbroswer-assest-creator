@@ -79,6 +79,7 @@ import { generateRoadLayout, roadLayoutToWorldObjects } from "../src/generators/
 import { generatePlazaLayout, plazaLayoutToWorldObjects } from "../src/generators/PlazaGenerator.js";
 import { generateConnectorLayout, connectorLayoutToWorldObjects } from "../src/generators/ConnectorGenerator.js";
 import { resolveAnchorPoint, listAnchorInstances } from "../src/generators/landmarkAnchors.js";
+import { PERFORMANCE_BUDGETS, classify, evaluateBudget } from "../src/perf/PerformanceBudget.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2565,5 +2566,56 @@ const s18bHostile = validateWorldDocument(createWorldDocument({
   generators: { instances: Array.from({ length: 30 }, (_, i) => ({ type: ["road", "plaza", "connector"][i % 3], config: { width: 9999, size: 9999 } })) },
 }));
 assert.ok(s18bHostile.document.generators.instances.length <= 16, "connective instance count capped");
+
+// --- Stage 20A: performance budget classifier ---------------------------------
+
+// Frozen defaults (untrusted-safe: the budget config can't be mutated at runtime).
+assert.ok(Object.isFrozen(PERFORMANCE_BUDGETS), "budget defaults are frozen");
+assert.ok(Object.isFrozen(PERFORMANCE_BUDGETS.drawCalls), "per-metric levels frozen");
+
+// classify: value ≤ green → green; ≤ yellow → yellow; else red. Boundaries inclusive.
+const dc = PERFORMANCE_BUDGETS.drawCalls;
+assert.equal(classify(0, dc), "green");
+assert.equal(classify(dc.green, dc), "green", "green threshold inclusive");
+assert.equal(classify(dc.green + 1, dc), "yellow");
+assert.equal(classify(dc.yellow, dc), "yellow", "yellow threshold inclusive");
+assert.equal(classify(dc.yellow + 1, dc), "red");
+assert.equal(classify(99999, dc), "red");
+// Missing / non-finite (e.g. heap when performance.memory is absent) → unknown.
+assert.equal(classify(null, dc), "unknown");
+assert.equal(classify(NaN, dc), "unknown");
+assert.equal(classify(5, null), "unknown");
+
+// Triangle budget matches the measured report: generated worlds green, dense
+// vegetation red (the real pressure point).
+const tri = PERFORMANCE_BUDGETS.triangles;
+assert.equal(classify(324134, tri), "green", "large-city triangles are green");
+assert.equal(classify(430588, tri), "green", "connected-world triangles are green");
+assert.equal(classify(929880, tri), "red", "dense-vegetation triangles are red (pressure surfaced)");
+
+// evaluateBudget: a connected-generated-world snapshot is all-green overall.
+const greenWorld = evaluateBudget({ drawCalls: 85, triangles: 430588, heapMB: 49.8, generatedObjects: 139, instancedBatches: 5, visibleVegetationPatches: 62 });
+assert.equal(greenWorld.overall, "green");
+assert.equal(greenWorld.drawCalls.status, "green");
+assert.equal(greenWorld.generatedObjects.status, "green");
+
+// A vegetation-heavy snapshot goes red overall via triangles, even though draw
+// calls / objects / batches stay green.
+const vegWorld = evaluateBudget({ drawCalls: 76, triangles: 929880, heapMB: 51.9, generatedObjects: 0, instancedBatches: 0, visibleVegetationPatches: 58 });
+assert.equal(vegWorld.triangles.status, "red");
+assert.equal(vegWorld.drawCalls.status, "green");
+assert.equal(vegWorld.overall, "red");
+
+// The large-city stress snapshot: flat draw calls + few batches stay green even at
+// hundreds of objects (instancing working).
+const cityWorld = evaluateBudget({ drawCalls: 83, triangles: 324134, heapMB: 45.4, generatedObjects: 293, instancedBatches: 3, visibleVegetationPatches: 60 });
+assert.equal(cityWorld.drawCalls.status, "green");
+assert.equal(cityWorld.instancedBatches.status, "green");
+assert.equal(cityWorld.generatedObjects.status, "green");
+
+// "unknown" metrics (missing heap) never worsen the overall status.
+const noHeap = evaluateBudget({ drawCalls: 10, triangles: 1000, heapMB: null, generatedObjects: 0, instancedBatches: 0, visibleVegetationPatches: 0 });
+assert.equal(noHeap.heapMB.status, "unknown");
+assert.equal(noHeap.overall, "green");
 
 console.log("world document regression checks passed");
