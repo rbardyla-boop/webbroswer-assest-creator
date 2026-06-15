@@ -27,6 +27,7 @@
     "test:procedural": "node scripts/browser-procedural-proof.mjs",
     "test:instancing": "node scripts/browser-instancing-proof.mjs",
     "test:prefabgen": "node scripts/browser-prefab-gen-proof.mjs",
+    "test:genlib": "node scripts/browser-genlib-proof.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",
     "qa": "npm run qa:skills && npm run build && npm run qa:browser"

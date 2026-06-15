@@ -644,3 +644,59 @@ no objects (and no deps) to collect — config is authoring intent; objects are 
 (roads/ruins/camps/forests/plazas, spawn/trigger-aware layouts, prefab-backed props/
 buildings); a mix of prefab + primitive per generate; per-category multiple prefab
 choices; non-uniform prefab fit to lot footprints.
+
+## ADR-018 — Generator Library v1 (Stage 18)
+
+**Decision.** Multiply the generator catalog beside the original city — adding
+**camp / ruin / forest** — now that the Stage 19 output model can emit prefab-backed
+content. Each new generator follows the same boundary the city does (generator output
+→ WorldDocument objects → existing systems); none owns a Three.js scene graph. The
+flagship is the camp: it proves the engine is becoming a *game*-builder, not just
+scenery, by emitting DATA-ONLY gameplay objects (a sign, a named spawn point, an
+entrance trigger volume, optional pickups) via the Stage-12 interaction schema.
+
+**Shape.** `GeneratorConfig` gains `createCampConfig` / `createRuinConfig` /
+`createForestConfig` (each clamps its own fields) and a type-dispatching
+`createGeneratorInstance` (a `CONFIG_CREATORS` map; unknown type → city). Per-type
+**layout + emitter** live in `CampGenerator.js` / `RuinGenerator.js` /
+`ForestGenerator.js` (pure, seeded `mulberry32` only, every loop hard-capped). A new
+`GeneratorRegistry` maps each type to `{ styles, amount/source UI metadata,
+createConfig, layout, emit }`, and the `ProceduralPanel` is rewritten to be
+data-driven off it: a Type dropdown reconfigures the style options, the generic
+"amount" dial, and the prefab source slots. Each type owns instance id `gen-<type>`,
+so a city and a camp coexist in one world and regenerate/clear independently.
+
+**Reuse over adapters.** The primitive-descriptor builder, terrain-fit prefab scale,
+and the capped/atomic emitter buffer were extracted into `emitHelpers.js` and the
+city emitter was refactored onto them (behavior-identical — the existing
+`test:procedural` / `test:prefabgen` / `test:instancing` proofs are the guard). So all
+four generators share one canonical emit path. `WorldValidation` needed **zero
+changes**: `sanitizeGenerators` already routes every instance through
+`createGeneratorInstance`, which now dispatches config by type — so camp/ruin/forest
+instances validate, round-trip, and export in a worldpack for free. The runtime needs
+no change either: generated interaction objects and the fire-pit's `spark` particle
+emitter are normal `WorldObject` data, so the existing `InteractionRuntime` /
+`ParticleRuntime` wire them automatically.
+
+**Safety / bounded.** Every config field is clamped; every layout loop is hard-capped
+(incl. the forest rejection sampler, which is also attempt-bounded so it always
+terminates); the emitter caps the grand total at `MAX_TOTAL_OBJECTS`; prefab expansion
+is atomic (never a partial prefab past the cap). Generated interaction objects are
+strictly the declarative Stage-12 schema (no executable keys), and a prefab id is only
+ever a `Map.get` key into the library. `getGenerator` uses an `Object.hasOwn` check so
+a prototype key (e.g. `constructor`) can never resolve to a non-generator.
+
+**Review.** Adversarial workflow (4 dimensions → fresh-context verify-each-finding):
+**0 CRITICAL / 0 HIGH.** Three confirmed LOW/INFO + one uncertain were all fixed:
+a forest rock cap promoted to a named `GENERATOR_LIMITS.MAX_ROCKS`; a dead return
+dropped from the shared emitter; the `MAX_INTERACTIONS` comment corrected (it caps
+pickups — sign/spawn/trigger are singletons); the panel's id-then-type restore
+fallback restored (so an externally-authored instance still rehydrates); and the
+truthy registry lookups hardened to `Object.hasOwn`. `npm run test:genlib` (camp emits
+sign/spawn/trigger/pickup + spark particles + prefab tents; ruin+camp coexist; forest
+deterministic prefab+primitive; runtime renders + wires interaction with zero console
+errors) + Node regression + the full 15-proof sweep + qa:skills 32/0/0 all green.
+
+**Untracked drop unchanged.** `threejs-runtime-city-generator/` remains reference-only
+(Stage 17B audit); nothing was imported from it. The local-GPU FPS validation is still
+owed as a non-blocking side report.

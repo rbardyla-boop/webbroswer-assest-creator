@@ -479,7 +479,7 @@ export class WorldEditor {
       listPrefabs: () => this.prefabLibrary?.list() ?? [],
       onChanged: () => this._refreshPerf(),
     });
-    root.appendChild(this._section("Procedural (city)", this.proceduralPanel.root));
+    root.appendChild(this._section("Procedural (city / camp / ruin / forest)", this.proceduralPanel.root));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });

@@ -63,6 +63,17 @@ import { generateCityLayout } from "../src/generators/CityLayout.js";
 import { cityLayoutToWorldObjects } from "../src/generators/cityEmitter.js";
 import { InstancedWorldObjectRenderer } from "../src/generators/InstancedWorldObjectRenderer.js";
 import { validatePlacement } from "../src/generators/PlacementValidator.js";
+import {
+  createCampConfig,
+  createRuinConfig,
+  createForestConfig,
+  createGeneratorInstance,
+  GENERATOR_TYPES,
+} from "../src/generators/GeneratorConfig.js";
+import { generateGeneratorObjects, getGenerator } from "../src/generators/GeneratorRegistry.js";
+import { generateCampLayout, campLayoutToWorldObjects } from "../src/generators/CampGenerator.js";
+import { generateRuinLayout, ruinLayoutToWorldObjects } from "../src/generators/RuinGenerator.js";
+import { generateForestLayout, forestLayoutToWorldObjects } from "../src/generators/ForestGenerator.js";
 
 class MemoryPrefabStore {
   constructor() {
@@ -2300,5 +2311,137 @@ const serHut = s19Ser.find((o) => o.prefabRef === "builtin-hut");
 assert.ok(serHut, "prefab-backed object serializes with prefabRef");
 assert.equal(serHut.generatorId, "gen-1", "and keeps its generatorId");
 assert.equal(s19Mgr.objectsByGeneratorId("gen-1").length, s19Pref.length, "all expanded objects owned by the instance");
+
+// --- Stage 18: Generator Library v1 (camp / ruin / forest) --------------------
+
+// At least three new generator types beside city.
+for (const t of ["camp", "ruin", "forest"]) assert.ok(GENERATOR_TYPES.includes(t), `generator type ${t} registered`);
+assert.ok(GENERATOR_TYPES.length >= 4);
+
+// Per-type config dispatch: createGeneratorInstance routes config creation by type.
+const s18Camp = createGeneratorInstance({ type: "camp", config: { seed: "cmp", style: "watch", size: 9999, density: 2 } });
+assert.equal(s18Camp.type, "camp");
+assert.equal(s18Camp.id, "gen-camp");
+assert.equal(s18Camp.config.size, GENERATOR_LIMITS.MAX_SIZE, "camp size clamped");
+assert.equal(s18Camp.config.style, "watch");
+assert.equal(s18Camp.config.density, 1, "density clamped to [0,1]");
+assert.equal(createGeneratorInstance({ type: "ruin" }).config.style, "temple");
+assert.equal(createGeneratorInstance({ type: "forest" }).config.style, "grove");
+assert.equal(createGeneratorInstance({ type: "wizardtower" }).type, "city", "unknown generator type → city");
+assert.equal(createCampConfig({ style: "nope" }).style, "outpost");
+assert.equal(createCampConfig({ buildingPrefab: "../../etc" }).buildingPrefab, "....etc"); // path chars stripped, no slashes
+assert.equal(createForestConfig({ propPrefab: "builtin-tree-cluster" }).propPrefab, "builtin-tree-cluster");
+
+// Determinism: same seed+config → identical layout; different seed → different.
+const s18CampCfg = createCampConfig({ seed: "harbor", style: "outpost", size: 4, density: 0.7 });
+const s18CampA = generateCampLayout(s18CampCfg);
+assert.deepEqual(s18CampA.tents, generateCampLayout(s18CampCfg).tents, "camp layout deterministic");
+assert.notDeepEqual(
+  s18CampA.tents,
+  generateCampLayout(createCampConfig({ seed: "harbor2", style: "outpost", size: 4, density: 0.7 })).tents,
+  "different seed → different layout"
+);
+const s18RuinCfg = createRuinConfig({ seed: "temple-x", style: "temple", size: 5, density: 0.6 });
+assert.deepEqual(generateRuinLayout(s18RuinCfg).columns, generateRuinLayout(s18RuinCfg).columns, "ruin layout deterministic");
+const s18ForestCfg = createForestConfig({ seed: "woods", style: "grove", size: 5, density: 0.6 });
+assert.deepEqual(generateForestLayout(s18ForestCfg).trees, generateForestLayout(s18ForestCfg).trees, "forest layout deterministic");
+
+// Every generator emits NORMAL WorldObject descriptors tagged with the generator id.
+const s18CampDescs = campLayoutToWorldObjects(s18CampA, "gen-camp");
+assert.ok(s18CampDescs.length > 0 && s18CampDescs.every((d) => d.type === "primitive" && d.generatorId === "gen-camp"));
+const s18RuinDescs = ruinLayoutToWorldObjects(generateRuinLayout(s18RuinCfg), "gen-ruin");
+const s18ForestDescs = forestLayoutToWorldObjects(generateForestLayout(s18ForestCfg), "gen-forest");
+assert.ok(s18RuinDescs.length > 0 && s18RuinDescs.every((d) => d.generatorId === "gen-ruin"));
+assert.ok(s18ForestDescs.some((d) => d.name === "Trunk") && s18ForestDescs.some((d) => d.name === "Canopy"), "forest emits trunk+canopy trees");
+
+// Camp emits DATA-ONLY gameplay objects (spawn / trigger / sign / pickup) + a fire
+// pit with ember particles. size/density chosen so pickups appear.
+const s18Rich = campLayoutToWorldObjects(generateCampLayout(createCampConfig({ seed: "rich", size: 6, density: 1 })), "gen-camp");
+const s18Spawn = s18Rich.find((d) => d.interaction?.role === "spawn");
+const s18Trigger = s18Rich.find((d) => d.interaction?.role === "trigger");
+const s18Sign = s18Rich.find((d) => d.interaction?.role === "sign");
+const s18Pickup = s18Rich.find((d) => d.interaction?.role === "pickup");
+const s18Fire = s18Rich.find((d) => d.particles?.kind === "spark");
+assert.ok(s18Spawn && s18Trigger && s18Sign && s18Pickup, "camp emits spawn/trigger/sign/pickup interactions");
+assert.equal(s18Spawn.interaction.name, "camp-spawn");
+assert.deepEqual(s18Trigger.interaction.emitOnEnter, ["camp-enter"]);
+assert.equal(s18Spawn.runtime.visible, false, "spawn marker is invisible");
+assert.equal(s18Trigger.collider.type, "none", "trigger volume is non-colliding");
+assert.ok(s18Fire, "camp emits a fire pit with spark particles");
+
+// Hard cap holds for a flood config.
+assert.ok(
+  campLayoutToWorldObjects(generateCampLayout(createCampConfig({ seed: "x", size: 99, density: 1 })), "g").length <= GENERATOR_LIMITS.MAX_TOTAL_OBJECTS,
+  "camp emitted total capped"
+);
+
+// Prefab-backed output: camp tents from the built-in hut expand to normal objects
+// carrying prefabRef + generatorId; primitive fallback when no prefab. Forest trees
+// can be prefab-backed too.
+const s18Builtins = createBuiltinPrefabs();
+const s18Hut = s18Builtins.find((p) => p.id === "builtin-hut");
+const s18Tree = s18Builtins.find((p) => p.id === "builtin-tree-cluster");
+const s18CampPref = campLayoutToWorldObjects(s18CampA, "gen-camp", { buildingPrefab: s18Hut });
+const s18CampHutParts = s18CampPref.filter((o) => o.prefabRef === "builtin-hut");
+assert.ok(s18CampHutParts.length > 0, "camp tents expand from a prefab");
+assert.ok(s18CampHutParts.every((o) => o.generatorId === "gen-camp"), "expanded parts carry the camp generatorId");
+assert.ok(
+  campLayoutToWorldObjects(s18CampA, "gen-camp", { buildingPrefab: null }).some((d) => d.name === "Tent" && d.type === "primitive"),
+  "primitive tent fallback"
+);
+assert.ok(
+  forestLayoutToWorldObjects(generateForestLayout(s18ForestCfg), "gen-forest", { propPrefab: s18Tree }).some((o) => o.prefabRef === "builtin-tree-cluster"),
+  "forest trees expand from a prefab"
+);
+
+// Registry dispatch returns objects tagged with the generator id for each type.
+for (const type of ["camp", "ruin", "forest"]) {
+  const g = getGenerator(type);
+  const { objects } = generateGeneratorObjects(type, g.createConfig({ seed: `reg-${type}`, size: 3 }), `gen-${type}`, {});
+  assert.ok(objects.length > 0 && objects.every((o) => o.generatorId === `gen-${type}`), `${type} registry generate emits owned objects`);
+}
+
+// Round-trip through the manager: build → serialize preserves interaction /
+// particles / color / generatorId / prefabRef; objectsByGeneratorId owns them.
+const s18Mgr = new WorldObjectManager(new THREE.Scene());
+await s18Mgr.addWorldObjects(s18CampPref);
+assert.equal(s18Mgr.objectsByGeneratorId("gen-camp").length, s18CampPref.length, "all camp objects owned by the instance");
+const s18Ser = s18Mgr.serializeWorldObjects();
+const s18SerSpawn = s18Ser.find((o) => o.interaction?.role === "spawn");
+const s18SerFire = s18Ser.find((o) => o.particles?.kind === "spark");
+const s18SerHut = s18Ser.find((o) => o.prefabRef === "builtin-hut");
+assert.ok(s18SerSpawn && s18SerSpawn.interaction.name === "camp-spawn", "spawn interaction round-trips");
+assert.ok(s18SerFire && s18SerFire.particles.kind === "spark" && s18SerFire.particles.rate > 0, "fire particles round-trip with preset fields");
+assert.ok(s18SerHut && s18SerHut.generatorId === "gen-camp", "prefab tent round-trips with generatorId");
+
+// Document + worldpack round-trip: a multi-generator world (city + camp + ruin +
+// forest) validates clean and the generators block survives export with type-
+// specific config fields intact (camp keeps `size`, not coerced to `blocks`).
+const s18Doc = createWorldDocument({
+  metadata: { name: "Generator Library World" },
+  generators: { instances: [
+    { id: "gen-city", type: "city", config: { seed: "c", style: "grid", blocks: 3 } },
+    { id: "gen-camp", type: "camp", config: { seed: "k", style: "watch", size: 3, buildingPrefab: "builtin-hut" } },
+    { id: "gen-ruin", type: "ruin", config: { seed: "r", style: "temple", size: 3 } },
+    { id: "gen-forest", type: "forest", config: { seed: "f", style: "dense", size: 3, propPrefab: "builtin-tree-cluster" } },
+  ] },
+  objects: s18CampPref,
+});
+const s18Validated = validateWorldDocument(s18Doc);
+assert.equal(s18Validated.warnings.length, 0, "multi-generator world validates with no warnings");
+assert.equal(s18Validated.document.generators.instances.length, 4);
+const s18StoredCamp = s18Validated.document.generators.instances.find((i) => i.type === "camp");
+assert.equal(s18StoredCamp.config.size, 3, "camp config keeps size (type-specific, not blocks)");
+assert.equal(s18StoredCamp.config.buildingPrefab, "builtin-hut");
+assert.equal(s18Validated.document.generators.instances.find((i) => i.type === "ruin").config.style, "temple");
+const s18Pack = await buildWorldPack(s18Doc, assetLibrary, { exportedAt: "2026-06-14T00:00:00.000Z" });
+assert.equal(s18Pack.world.generators.instances.length, 4, "worldpack carries all generator instances");
+
+// Untrusted hardening: hostile instances flood-capped + normalized by type.
+const s18Hostile = validateWorldDocument(createWorldDocument({
+  generators: { instances: Array.from({ length: 40 }, (_, i) => ({ type: i % 2 ? "camp" : "forest", config: { size: 9999 } })) },
+}));
+assert.ok(s18Hostile.document.generators.instances.length <= 16, "generator instance count capped");
+assert.ok(s18Hostile.document.generators.instances.every((g) => g.config.size <= GENERATOR_LIMITS.MAX_SIZE), "hostile size clamped");
 
 console.log("world document regression checks passed");
