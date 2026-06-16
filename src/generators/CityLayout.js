@@ -78,17 +78,27 @@ export function generateCityLayout(config) {
         }
       }
 
-      // Occasional street tree.
+      // Occasional street tree in the block's road-side gutter — the pad strip between
+      // the street and the building lots, so the tree never overlaps a building.
       if (props.length < GENERATOR_LIMITS.MAX_PROPS && rng() < 0.4 * density) {
-        props.push(tree(bxMin + rng() * inner, bzMin + rng() * inner, rng));
+        props.push(tree(bxMin - pad * (0.3 + rng() * 0.4), bzMin - pad * (0.3 + rng() * 0.4), rng));
       }
     }
   }
+
+  // Central landmark point (Stage 18C): the road crossing nearest the origin. Snapping
+  // to a block boundary keeps it off building lots (which are padded inward) for any
+  // block count — so a town monument placed here never overlaps a building.
+  const landmark = {
+    x: x0 + Math.round((origin.x - x0) / blockSize) * blockSize,
+    z: z0 + Math.round((origin.z - z0) / blockSize) * blockSize,
+  };
 
   return {
     roads,
     buildings,
     props,
+    landmark,
     bounds: { minX: x0 - roadWidth, maxX: x0 + span + roadWidth, minZ: z0 - roadWidth, maxZ: z0 + span + roadWidth },
     counts: { roads: roads.length, buildings: buildings.length, props: props.length },
   };

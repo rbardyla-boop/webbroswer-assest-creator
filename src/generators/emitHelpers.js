@@ -23,7 +23,11 @@ export const PRIMITIVE_BASE = Object.freeze({
  *   pos:[x,y,z], rot:[x,y,z], scale:[x,y,z],
  *   collider: collider type string ("none" → non-colliding),
  *   castShadow, receiveShadow, excludeGrass, excludeTrees, visible (default true),
- *   interaction (data-only role block | null), particles ({kind,...} | null).
+ *   interaction (data-only role block | null), particles ({kind,...} | null),
+ *   layoutRole (settlement role: "building" | "path" | "prop" | "landmark" |
+ *     "marker" | "vegetation" | "edge"; null when unset). Stage 18C — declarative
+ *     classification so the layout QA gate judges structure from data, not display
+ *     names. Sanitized again on load; round-trips like generatorId.
  */
 export function primitiveDescriptor(kind, name, color, generatorId, t) {
   return {
@@ -33,6 +37,7 @@ export function primitiveDescriptor(kind, name, color, generatorId, t) {
     name,
     color,
     generatorId,
+    layoutRole: t.layoutRole ?? null,
     transform: {
       position: { x: t.pos[0], y: t.pos[1], z: t.pos[2] },
       rotation: { x: t.rot[0], y: t.rot[1], z: t.rot[2] },
@@ -75,11 +80,14 @@ export function createEmitter(generatorId, cap) {
   const push = (desc) => {
     if (out.length < cap) out.push(desc);
   };
-  const pushPrefab = (prefab, position, yaw, scale) => {
+  const pushPrefab = (prefab, position, yaw, scale, layoutRole = null) => {
     const children = worldObjectsFromPrefab(prefab, { position, yaw, scale });
     if (!children.length || out.length + children.length > cap) return false;
     for (const child of children) {
       child.generatorId = generatorId;
+      // Tag prefab-expanded children with the caller's settlement role (Stage 18C),
+      // alongside generator ownership, so a prefab-backed building still classifies.
+      child.layoutRole = layoutRole;
       out.push(child);
     }
     return true;

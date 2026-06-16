@@ -54,14 +54,18 @@ export function generateCampLayout(config) {
     tents.push({ x, z, yaw, w: 2.4 + rng() * 1.1, d: 2.8 + rng() * 1.3, h: 1.9 + rng() * 0.9 });
   }
 
-  // Crates clustered beside random tents.
+  // Crates beside tents, round-robined across tents (so two crates don't pile up) and
+  // pushed OUTWARD from the camp center past the tent's rotated footprint — the hypot
+  // clearance covers the worst-case diagonal AABB, so a crate sits in open ground next
+  // to its tent instead of overlapping it (readable spacing; passes the overlap gate).
   const crateCount = Math.min(GENERATOR_LIMITS.MAX_CRATES, Math.round(size * density * 2.5));
   const crates = [];
-  for (let i = 0; i < crateCount; i++) {
-    const t = tents[Math.floor(rng() * tents.length)] ?? { x: cx, z: cz };
-    const a = rng() * TAU;
-    const off = 1.2 + rng() * 1.6;
-    crates.push({ x: t.x + Math.cos(a) * off, z: t.z + Math.sin(a) * off, s: 0.7 + rng() * 0.6, yaw: rng() * TAU });
+  for (let i = 0; i < crateCount && tents.length; i++) {
+    const t = tents[i % tents.length];
+    const s = 0.7 + rng() * 0.6;
+    const outAng = Math.atan2(t.z - cz, t.x - cx) + (rng() - 0.5) * 0.8;
+    const off = Math.hypot(t.w, t.d) * 0.5 + s * 0.7 + 0.8 + rng() * 0.6;
+    crates.push({ x: t.x + Math.cos(outAng) * off, z: t.z + Math.sin(outAng) * off, s, yaw: rng() * TAU });
   }
 
   const fire = { x: cx, z: cz, r: 0.9 + size * 0.08 };
@@ -108,7 +112,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
 
   for (const t of layout?.tents ?? []) {
     const base = getHeight(t.x, t.z);
-    if (buildingPrefab && pushPrefab(buildingPrefab, { x: t.x, y: base, z: t.z }, t.yaw, prefabFitScale(buildingPrefab, t.w, t.d))) {
+    if (buildingPrefab && pushPrefab(buildingPrefab, { x: t.x, y: base, z: t.z }, t.yaw, prefabFitScale(buildingPrefab, t.w, t.d), "building")) {
       continue;
     }
     push(
@@ -121,13 +125,14 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "building",
       })
     );
   }
 
   for (const c of layout?.crates ?? []) {
     const base = getHeight(c.x, c.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: c.x, y: base, z: c.z }, c.yaw, prefabFitScale(propPrefab, c.s, c.s))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: c.x, y: base, z: c.z }, c.yaw, prefabFitScale(propPrefab, c.s, c.s), "prop")) {
       continue;
     }
     push(
@@ -140,6 +145,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }
@@ -159,6 +165,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         excludeGrass: true,
         excludeTrees: true,
         particles: { kind: "spark" },
+        layoutRole: "landmark",
       })
     );
   }
@@ -178,6 +185,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "sign", text: s.text, showRadius: 6 },
+        layoutRole: "marker",
       })
     );
   }
@@ -198,6 +206,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "spawn", name: sp.name },
+        layoutRole: "marker",
       })
     );
   }
@@ -218,6 +227,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "trigger", shape: "sphere", radius: tr.radius, channel: "default", emitOnEnter: [tr.event], emitOnExit: [], once: false },
+        layoutRole: "marker",
       })
     );
   }
@@ -235,6 +245,7 @@ export function campLayoutToWorldObjects(layout, generatorId = "gen-camp", { bui
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "pickup", channel: "default", emitOnCollect: [pk.event], radius: 1.5, respawn: false },
+        layoutRole: "marker",
       })
     );
   }

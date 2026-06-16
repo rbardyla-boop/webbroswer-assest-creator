@@ -192,6 +192,7 @@ export class WorldObjectManager {
       primitive: asset.type === "primitive" ? primitive : null,
       color: asset.type === "primitive" ? object.userData.asset?.color ?? null : null,
       generatorId: object.userData.generatorId ?? null,
+      layoutRole: object.userData.layoutRole ?? null,
       asset: object.userData.assetRef ? null : asset,
       prefabRef: object.userData.prefabRef ?? null,
       transform: {
@@ -348,6 +349,9 @@ export class WorldObjectManager {
     // Procedural-generator ownership (Stage 17C): which generator instance, if any,
     // emitted this object — so it can regenerate/clear exactly its own objects.
     object.userData.generatorId = item.generatorId ?? null;
+    // Settlement layout role (Stage 18C): declarative class (building/path/landmark/
+    // marker/…) used by the layout QA gate + __LAYOUT_DEBUG__. null for hand-placed.
+    object.userData.layoutRole = item.layoutRole ?? null;
     // Apply per-object shadow flags (default on) — lets a generator make flat
     // ground surfaces receive-only without casting (e.g. roads/zone overlays).
     applyShadowFlags(object, item.runtime);

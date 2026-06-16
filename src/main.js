@@ -147,6 +147,30 @@ if (import.meta.env.DEV) {
   // Dev/test-only: live placed-object count (used by the procedural proof to
   // confirm generated city objects loaded + rendered in the runtime).
   window.__WORLD_DEBUG__ = () => ({ objects: objectManager?.objects.size ?? 0 });
+  // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
+  // Scans the live objects once for their declarative layoutRole + interaction role —
+  // the player's spawn position, landmark world positions (for a readability proxy),
+  // per-role counts, and the active instanced-batch count. Read-only; no allocation in
+  // the frame loop (called only by the proof).
+  window.__LAYOUT_DEBUG__ = () => {
+    const counts = { path: 0, building: 0, prop: 0, landmark: 0, marker: 0, vegetation: 0, edge: 0 };
+    const markers = { spawn: 0, sign: 0, trigger: 0, pickup: 0, door: 0 };
+    const landmarks = [];
+    for (const o of objectManager?.objects.values() ?? []) {
+      const role = o.userData.layoutRole;
+      if (role && role in counts) counts[role]++;
+      if (role === "landmark") landmarks.push({ id: o.userData.objectId ?? null, position: { x: o.position.x, y: o.position.y, z: o.position.z } });
+      const ir = o.userData.interaction?.role;
+      if (ir && ir in markers) markers[ir]++;
+    }
+    return {
+      spawn: { x: player.position.x, y: player.position.y, z: player.position.z },
+      landmarks,
+      counts,
+      markers,
+      instancedBatches: instancedRenderer?.stats?.batches ?? 0,
+    };
+  };
   // Dev/test-only: performance instrumentation for the local-GPU validation report
   // (scripts/perf-report.mjs). snapshot() returns GPU-INDEPENDENT scene-complexity
   // metrics (draw calls, triangles, memory, object/instance/patch counts, heap) plus

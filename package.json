@@ -30,10 +30,12 @@
     "test:genlib": "node scripts/browser-genlib-proof.mjs",
     "test:connectors": "node scripts/browser-connectors-proof.mjs",
     "test:budget": "node scripts/browser-budget-proof.mjs",
+    "test:settlement-layout": "node scripts/browser-settlement-layout-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
+    "qa:layout": "node scripts/layout-gates.mjs",
     "qa:browser": "node scripts/browser-smoke.mjs",
-    "qa": "npm run qa:skills && npm run build && npm run qa:browser"
+    "qa": "npm run qa:skills && npm run qa:layout && npm run build && npm run qa:browser"
   },
   "dependencies": {
     "three": "^0.169.0"

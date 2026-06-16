@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpine Glacial Valley at Sunrise</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050b14;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px;
+            box-sizing: border-box;
+            color: rgba(255, 255, 255, 0.85);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+            transition: opacity 1s ease;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .title-area h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #fff4e0;
+        }
+
+        .title-area p {
+            margin: 5px 0 0 0;
+            font-size: 12px;
+            letter-spacing: 2px;
+            opacity: 0.7;
+        }
+
+        .hud-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .controls-guide {
+            background: rgba(10, 20, 30, 0.4);
+            padding: 15px 20px;
+            border-radius: 4px;
+            backdrop-filter: blur(4px);
+            border-left: 3px solid #e2b07e;
+            font-size: 12px;
+            line-height: 1.6;
+            max-width: 300px;
+        }
+
+        .controls-guide td {
+            padding: 2px 8px;
+        }
+
+        .key {
+            background: rgba(255,255,255,0.2);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 14px;
+            text-align: center;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #pointer-lock-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 10, 15, 0.75);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            cursor: pointer;
+            transition: opacity 0.5s ease;
+        }
+
+        .prompt-box {
+            text-align: center;
+            max-width: 500px;
+            padding: 40px;
+            border: 1px solid rgba(255, 244, 224, 0.2);
+            background: rgba(10, 15, 25, 0.8);
+            border-radius: 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .prompt-box h2 {
+            margin-top: 0;
+            color: #fff4e0;
+            font-weight: 300;
+            letter-spacing: 3px;
+        }
+
+        .prompt-box p {
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 20px 0 30px 0;
+        }
+
+        .btn-enter {
+            background: #e2b07e;
+            color: #111822;
+            border: none;
+            padding: 12px 30px;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(226, 176, 126, 0.3);
+        }
+
+        .btn-enter:hover {
+            background: #fff4e0;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(226, 176, 126, 0.5);
+        }
+
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #090e14;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            color: #fff;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(226, 176, 126, 0.2);
+            border-radius: 50%;
+            border-top-color: #e2b07e;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #loading-text {
+            margin-top: 20px;
+            font-size: 12px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #e2b07e;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <div id="loading-text">Synthesizing Glacial Landscape...</div>
+    </div>
+
+    <div id="pointer-lock-screen" style="display: none;">
+        <div class="prompt-box">
+            <h2>Alps of Sunrise</h2>
+            <p>Step into an endlessly generated, real-time procedural alpine sanctuary. Wade through braided glacial streams, watch alpine meadows catch the low rays, and feel the thin mountain air.</p>
+            <button class="btn-enter">Explore Valley</button>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="crosshair"></div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="title-area">
+                <h1>Val d'Aosta Procedural</h1>
+                <p>Real-Time Math-Generated Glacial Simulation</p>
+            </div>
+        </div>
+        <div class="hud-bottom">
+            <div class="controls-guide">
+                <table>
+                    <tr><td><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></td><td>Move Across Valley</td></tr>
+                    <tr><td><span class="key">Shift</span></td><td>Sprint Through Meadows</td></tr>
+                    <tr><td><span class="key">Space</span></td><td>Leap / Jump</td></tr>
+                    <tr><td><span class="key">Mouse</span></td><td>Look Around (Adaptive Exp.)</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const WORLD_SIZE = 1000;
+        const WATER_LEVEL = 15.0;
+        const GRAVITY = 32.0;
+        const PLAYER_HEIGHT = 1.8;
+
+        // --- PROCEDURAL ENGINE NOISE GENERATOR ---
+        // Seedable/Deterministic Pseudo-Random & Perlin/Simplex approximations entirely from math formulas
+        const MathNoise = {
+            // Hash function for pseudo-random data
+            hash: function(x, y) {
+                let h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123;
+                return h - Math.floor(h);
+            },
+            
+            // 2D Bilinear Noise
+            noise2D: function(x, y) {
+                let ix = Math.floor(x);
+                let iy = Math.floor(y);
+                let fx = x - ix;
+                let fy = y - iy;
+
+                // Smoothstep interpolation curve
+                let ux = fx * fx * (3.0 - 2.0 * fx);
+                let uy = fy * fy * (3.0 - 2.0 * fy);
+
+                let a = this.hash(ix, iy);
+                let b = this.hash(ix + 1, iy);
+                let c = this.hash(ix, iy + 1);
+                let d = this.hash(ix + 1, iy + 1);
+
+                return a * (1.0 - ux) * (1.0 - uy) +
+                       b * ux * (1.0 - uy) +
+                       c * (1.0 - ux) * uy +
+                       d * ux * uy;
+            },
+
+            // Fractional Brownian Motion for complex landscapes
+            fbm: function(x, y, octaves = 6) {
+                let value = 0.0;
+                let amplitude = 0.6;
+                let frequency = 0.005;
+                let lacunarity = 2.1;
+                let gain = 0.45;
+
+                for (let i = 0; i < octaves; i++) {
+                    value += amplitude * this.noise2D(x * frequency, y * frequency);
+                    frequency *= lacunarity;
+                    amplitude *= gain;
+                }
+                return value;
+            }
+        };
+
+        // --- CORE APPLICATION ARCHITECTURE ---
+        class GlacialValleyApp {
+            constructor() {
+                this.container = document.getElementById('canvas-container');
+                this.clock = new THREE.Clock();
+                
+                // State flags
+                this.assetsLoaded = false;
+                this.controlsEnabled = false;
+
+                // Environment systems
+                this.instancedGrass = null;
+                this.instancedRocks = null;
+                this.waterSystem = null;
+                this.particleSystems = [];
+                this.fishRings = [];
+
+                // Player physics/movement state
+                this.player = {
+                    pos: new THREE.Vector3(0, 40, 120), // Initial vantage overlooking the braids
+                    velocity: new THREE.Vector3(),
+                    isGrounded: false,
+                    speed: 7.0,
+                    sprintMultiplier: 2.2,
+                    jumpForce: 11.0,
+                    yaw: -0.4,
+                    pitch: -0.15
+                };
+
+                this.input = { forward: 0, backward: 0, left: 0, right: 0, sprint: false };
+                this.targetExposure = 1.0;
+                this.currentExposure = 1.0;
+
+                this.initGraphics();
+                this.generateProceduralWorld();
+                this.setupInputHandlers();
+                this.animate();
+
+                // Clear loading screen
+                setTimeout(() => {
+                    document.getElementById('loading-screen').style.display = 'none';
+                    document.getElementById('pointer-lock-screen').style.display = 'flex';
+                    this.assetsLoaded = true;
+                }, 1200);
+            }
+
+            initGraphics() {
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color('#0b1424');
+                
+                // Fog parameterizing deep atmospheric scatter of sunrise
+                this.scene.fog = new THREE.FogExp2('#e8ccb0', 0.0065);
+
+                // Camera Setup
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
+                this.camera.rotation.order = 'YXZ';
+                this.scene.add(this.camera);
+
+                // WebGL Renderer Setup
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.0;
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.container.appendChild(this.renderer.domElement);
+
+                // Cinematic Lighting: Low alpine sun casting immense shadows
+                this.ambientLight = new THREE.AmbientLight('#2a3d54', 0.6);
+                this.scene.add(this.ambientLight);
+
+                this.sunLight = new THREE.DirectionalLight('#ffebd0', 3.5);
+                this.sunLight.position.set(350, 95, -250); // Angle aligned with low horizon
+                this.sunLight.castShadow = true;
+                this.sunLight.shadow.mapSize.width = 2048;
+                this.sunLight.shadow.mapSize.height = 2048;
+                this.sunLight.shadow.camera.near = 0.5;
+                this.sunLight.shadow.camera.far = 1000;
+                
+                let d = 250;
+                this.sunLight.shadow.camera.left = -d;
+                this.sunLight.shadow.camera.right = d;
+                this.sunLight.shadow.camera.top = d;
+                this.sunLight.shadow.camera.bottom = -d;
+                this.sunLight.shadow.bias = -0.0005;
+                this.scene.add(this.sunLight);
+
+                // Secondary soft bounce light from valley sky
+                this.skyLight = new THREE.DirectionalLight('#86a5cc', 0.8);
+                this.skyLight.position.set(-1, 1, 1).normalize();
+                this.scene.add(this.skyLight);
+
+                // Handle resize events
+                window.addEventListener('resize', () => this.onWindowResize(), false);
+            }
+
+            // High-fidelity algorithmic generation of world vectors & meshes
+            generateProceduralWorld() {
+                // 1. TERRAIN SYSTEM (Braided Valley Floor + Cascading Lateral Slopes)
+                const terrainGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 300, 300);
+                terrainGeo.rotateX(-Math.PI / 2); // Orient horizontal
+
+                const posAttr = terrainGeo.attributes.position;
+                const colorAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3);
+                
+                this.terrainHeights = new Float32Array(posAttr.count);
+
+                for (let i = 0; i < posAttr.count; i++) {
+                    let x = posAttr.getX(i);
+                    let z = posAttr.getZ(i);
+
+                    // Compute complex cross-cutting alpine valleys via math combinations
+                    let baseValley = Math.abs(x) * 0.18; // V-shaped structural fault line
+                    let floorWidth = 140.0;
+                    
+                    // Create wide, meandering braided river trough
+                    let riverChannel = MathNoise.noise2D(x * 0.005, z * 0.008) * 12.0;
+                    if (Math.abs(x) < floorWidth) {
+                        let t = Math.abs(x) / floorWidth;
+                        // Smooth blend between structural mountain flanks and river bed flatlands
+                        baseValley = THREE.MathUtils.lerp(riverChannel, baseValley, t * t);
+                    }
+
+                    // Add rugged ridge networks using fractal brownian motion
+                    let peaks = MathNoise.fbm(x, z, 7) * 140.0;
+                    let finalY = baseValley + peaks;
+
+                    // Ensure realistic adjustments for the glacial braided network paths near floor lines
+                    if (Math.abs(x) < floorWidth * 0.8) {
+                        let braidNoise = MathNoise.noise2D(x * 0.04, z * 0.015) * 4.5;
+                        finalY += braidNoise - 3.0;
+                    }
+
+                    posAttr.setY(i, finalY);
+                    this.terrainHeights[i] = finalY;
+
+                    // Algorithmic Procedural Texturing via Vertex Colors
+                    let color = new THREE.Color();
+                    let slope = 0.0; // Calculated during shading approximation
+                    
+                    // Approximate macro slope from heights
+                    if(i > 301) {
+                        let prevY = posAttr.getY(i - 1);
+                        slope = Math.abs(finalY - prevY);
+                    }
+
+                    if (finalY > 95.0 || (slope > 2.8 && finalY > 40.0)) {
+                        // High Alpine Glacial Firn / Crisp Sunlit Snow
+                        color.setHSL(0.08, 0.2, 0.95 - (Math.random() * 0.05));
+                    } else if (finalY < WATER_LEVEL + 1.2 && Math.abs(x) < floorWidth) {
+                        // Alluvial Glacial silt, fine gravel bars
+                        color.setHSL(0.06, 0.18, 0.45 - (Math.random() * 0.1));
+                    } else if (slope > 3.5) {
+                        // Exposed ancient vertical crags / Granite
+                        color.setHSL(0.55, 0.05, 0.3 + (Math.random() * 0.08));
+                    } else {
+                        // High altitude tundra grass/moss mixtures
+                        let variation = MathNoise.noise2D(x * 0.1, z * 0.1) * 0.15;
+                        color.setHSL(0.28 + variation, 0.35, 0.38 - (Math.random() * 0.05));
+                    }
+
+                    colorAttr.setXYZ(i, color.r, color.g, color.b);
+                }
+
+                terrainGeo.setAttribute('color', colorAttr);
+                terrainGeo.computeVertexNormals();
+
+                const terrainMat = new THREE.MeshStandardMaterial({
+                    vertexColors: true,
+                    roughness: 0.85,
+                    metalness: 0.04,
+                    flatShading: true
+                });
+
+                this.terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+                this.terrainMesh.receiveShadow = true;
+                this.terrainMesh.castShadow = true;
+                this.scene.add(this.terrainMesh);
+
+                // 2. PROCEDURAL BRAIDED WATER SURFACE
+                // Custom shader material implementation representing sediment-rich glacial runoff (Turquoise)
+                const waterGeo = new THREE.PlaneGeometry(WORLD_SIZE * 0.4, WORLD_SIZE, 100, 100);
+                this.waterMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uSunPos: { value: this.sunLight.position },
+                        uFogColor: { value: new THREE.Color('#e8ccb0') },
+                        uFogDensity: { value: 0.0065 }
+                    },
+                    vertexShader: `
+                        uniform float uTime;
+                        varying vec3 vWorldPos;
+                        varying vec3 vNormal;
+                        
+                        // Simple sine wave displacement for river currents
+                        float getWaterWave(vec2 p) {
+                            float wave = sin(p.x * 0.15 + uTime * 1.8) * 0.12;
+                            wave += cos(p.y * 0.08 + uTime * 2.2) * 0.15;
+                            wave += sin((p.x + p.y) * 0.4 + uTime * 3.0) * 0.04;
+                            return wave;
+                        }
+
+                        void main() {
+                            vec3 p = position;
+                            p.z += getWaterWave(p.xy);
+                            vec4 worldPos = modelMatrix * vec4(p, 1.0);
+                            vWorldPos = worldPos.xyz;
+                            
+                            // Approximate dynamic normal vector
+                            float delta = 0.5;
+                            float wL = getWaterWave(p.xy - vec2(delta, 0.0));
+                            float wR = getWaterWave(p.xy + vec2(delta, 0.0));
+                            float wB = getWaterWave(p.xy - vec2(0.0, delta));
+                            float wF = getWaterWave(p.xy + vec2(0.0, delta));
+                            vNormal = normalize(vec3(wL - wR, 2.0 * delta, wB - wF));
+
+                            gl_Position = projectionMatrix * viewMatrix * worldPos;
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float uTime;
+                        uniform vec3 uSunPos;
+                        uniform vec3 uFogColor;
+                        uniform float uFogDensity;
+                        varying vec3 vWorldPos;
+                        varying vec3 vNormal;
+
+                        void main() {
+                            vec3 viewDir = normalize(cameraPosition - vWorldPos);
+                            vec3 norm = normalize(vNormal);
+                            
+                            // Signature milky turquoise color caused by suspended rock flour/glacial silt
+                            vec3 baseWaterColor = vec3(0.24, 0.63, 0.69);
+                            vec3 deepWaterColor = vec3(0.08, 0.34, 0.41);
+                            
+                            // Fresnel Term calculation for reflection vs refraction transparency
+                            float fresnel = pow(1.0 - max(dot(norm, viewDir), 0.0), 4.5);
+                            
+                            // Algorithmic Whitecaps/Foam based on surface disruption & vector heights
+                            float foamNoise = sin(vWorldPos.x * 1.2 + uTime * 4.0) * cos(vWorldPos.z * 0.8 - uTime * 3.5);
+                            float foam = smoothstep(0.45, 0.9, foamNoise * norm.y);
+                            
+                            // Sun Specular Sparkle (Specular Highlights)
+                            vec3 sunDir = normalize(uSunPos);
+                            vec3 halfDir = normalize(sunDir + viewDir);
+                            float spec = pow(max(dot(norm, halfDir), 0.0), 120.0) * 4.0;
+                            
+                            vec3 finalColor = mix(deepWaterColor, baseWaterColor, fresnel);
+                            finalColor += vec3(0.95, 0.98, 1.0) * foam * 0.6; // Layer river rapids foam
+                            finalColor += vec3(1.0, 0.92, 0.8) * spec;        // Layer brilliant sun glint
+                            
+                            // Exponential Fog blending inside customs fragment code
+                            float depth = gl_FragCoord.z / gl_FragCoord.w;
+                            float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * depth * depth);
+                            finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+                            gl_FragColor = vec4(finalColor, 0.88);
+                        }
+                    `,
+                    transparent: true
+                });
+
+                this.waterMesh = new THREE.Mesh(waterGeo, this.waterMaterial);
+                this.waterMesh.position.y = WATER_LEVEL;
+                this.waterMesh.rotateX(-Math.PI / 2);
+                this.scene.add(this.waterMesh);
+
+                // 3. VEGETATION SYSTEM (Instanced Procedural Tundra Grass and Wildflowers)
+                this.generateInstancedGrass();
+
+                // 4. ATMOSPHERIC PARTICLES (Mist, Pollen, Mountain Insects)
+                this.createAtmosphereParticles();
+
+                // 5. SKY DOME (Procedural Sunrise Canvas Gradient)
+                this.createProceduralSky();
+            }
+
+            getTerrainHeight(x, z) {
+                // Return exact architectural height map calculation used during terrain compilation
+                let baseValley = Math.abs(x) * 0.18;
+                let floorWidth = 140.0;
+                let riverChannel = MathNoise.noise2D(x * 0.005, z * 0.008) * 12.0;
+                
+                if (Math.abs(x) < floorWidth) {
+                    let t = Math.abs(x) / floorWidth;
+                    baseValley = THREE.MathUtils.lerp(riverChannel, baseValley, t * t);
+                }
+                
+                let peaks = MathNoise.fbm(x, z, 7) * 140.0;
+                let finalY = baseValley + peaks;
+
+                if (Math.abs(x) < floorWidth * 0.8) {
+                    let braidNoise = MathNoise.noise2D(x * 0.04, z * 0.015) * 4.5;
+                    finalY += braidNoise - 3.0;
+                }
+                return finalY;
+            }
+
+            generateInstancedGrass() {
+                const count = 45000;
+                // Simple structural geometry representing blades of alpine meadow fescue
+                const grassGeo = new THREE.ConeGeometry(0.12, 1.1, 3);
+                grassGeo.translate(0, 0.55, 0); // Offset base pivot point
+
+                // High speed Custom shader allowing instanced vertex animation for realistic mountain wind gusts
+                const grassMat = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uSunPos: { value: this.sunLight.position }
+                    },
+                    vertexShader: `
+                        uniform float uTime;
+                        varying vec3 vColor;
+                        varying float vLight;
+
+                        void main() {
+                            vColor = instanceColor;
+                            
+                            // Retrieve world matrix transformation positions from buffer array instance
+                            vec4 worldPos = instanceMatrix * vec4(position, 1.0);
+                            
+                            // Wind modeling using compound trigonometric functions over space coord positions
+                            float wind = sin(uTime * 2.5 + worldPos.x * 0.4 + worldPos.z * 0.2) * 0.18;
+                            wind += cos(uTime * 4.0 + worldPos.z * 0.8) * 0.06;
+                            
+                            // Only apply bend along upper vertical spans of geometries
+                            float bendFactor = position.y; 
+                            worldPos.x += wind * bendFactor;
+                            
+                            // Approximate lighting calculations across instanced sets
+                            vLight = max(0.4, dot(vec3(0.0, 1.0, 0.0), vec3(0.2, 0.9, 0.1)));
+
+                            gl_Position = projectionMatrix * viewMatrix * worldPos;
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vColor;
+                        varying float vLight;
+                        void main() {
+                            gl_FragColor = vec4(vColor * vLight, 1.0);
+                        }
+                    `,
+                    flatShading: true
+                });
+
+                this.instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, count);
+                
+                const dummy = new THREE.Object3D();
+                const color = new THREE.Color();
+
+                let i = 0;
+                while(i < count) {
+                    // Spread across main habitable meadow zones inside the valley basin
+                    let x = (Math.random() - 0.5) * 320;
+                    let z = (Math.random() - 0.5) * 600;
+                    let y = this.getTerrainHeight(x, z);
+
+                    // Restrict growth to regions clear of river flow and steep rocky slopes
+                    if (y > WATER_LEVEL + 0.8 && y < 75.0 && Math.abs(x) > 30.0) {
+                        dummy.position.set(x, y - 0.1, z);
+                        dummy.rotation.set(
+                            (Math.random() - 0.5) * 0.2,
+                            Math.random() * Math.PI,
+                            (Math.random() - 0.5) * 0.2
+                        );
+                        
+                        // Randomize sizing factors to evoke wild nature
+                        let scaleY = 0.6 + Math.random() * 0.8;
+                        dummy.scale.set(1, scaleY, 1);
+                        dummy.updateMatrix();
+                        this.instancedGrass.setMatrixAt(i, dummy.matrix);
+
+                        // Colors ranging from deep tundra moss to bright morning-lit stalks, peppered with alpine flora (yellow/pink)
+                        let r = Math.random();
+                        if (r > 0.94) {
+                            color.setHEX(0xffdf7a); // Alpine Avens (Yellow Flower)
+                        } else if (r > 0.90) {
+                            color.setHEX(0xe08baf); // Moss Campion (Pink Alpine Flower)
+                        } else {
+                            color.setHSL(0.25 + Math.random() * 0.08, 0.4, 0.3 + Math.random() * 0.15);
+                        }
+
+                        this.instancedGrass.setColorAt(i, color);
+                        i++;
+                    }
+                }
+
+                this.instancedGrass.instanceMatrix.needsUpdate = true;
+                if(this.instancedGrass.instanceColor) this.instancedGrass.instanceColor.needsUpdate = true;
+                this.scene.add(this.instancedGrass);
+            }
+
+            createAtmosphereParticles() {
+                // Combined system modeling low valley dew-mist, floating macro-pollen, and mid-air insects
+                const particleCount = 2000;
+                const geo = new THREE.BufferGeometry();
+                const positions = new Float32Array(particleCount * 3);
+                const types = new Float32Array(particleCount); // 0: Mist, 1: Pollen/Insects
+
+                for(let i=0; i < particleCount * 3; i+=3) {
+                    positions[i] = (Math.random() - 0.5) * 400;
+                    positions[i+1] = WATER_LEVEL + (Math.random() * 35);
+                    positions[i+2] = (Math.random() - 0.5) * 600;
+                    types[i/3] = Math.random() > 0.85 ? 1.0 : 0.0;
+                }
+
+                geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geo.setAttribute('pType', new THREE.BufferAttribute(types, 1));
+
+                const mat = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uCameraPos: { value: new THREE.Vector3() }
+                    },
+                    vertexShader: `
+                        uniform float uTime;
+                        uniform vec3 uCameraPos;
+                        attribute float pType;
+                        varying float vType;
+                        varying float vAlpha;
+
+                        void main() {
+                            vType = pType;
+                            vec3 p = position;
+                            
+                            if (pType > 0.5) {
+                                // Dynamic orbital floating path calculations for insects / pollen clouds
+                                p.x += sin(uTime * 1.5 + p.z) * 1.5;
+                                p.y += cos(uTime * 2.0 + p.x) * 0.8;
+                                p.z += sin(uTime * 0.9) * 1.2;
+                            } else {
+                                // Drifting river canyon morning fog layer
+                                p.x += uTime * 0.4;
+                                if (p.x > 200.0) p.x = -200.0;
+                            }
+
+                            vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+                            
+                            // Distance sizing to simulate volumetric depth
+                            gl_PointSize = (pType > 0.5) ? (4.0 + sin(uTime * 5.0) * 2.0) : 45.0;
+                            gl_PointSize *= (300.0 / -mvPosition.z);
+                            
+                            // Fade based on extreme distances
+                            vAlpha = smoothstep(350.0, 50.0, length(p - uCameraPos));
+
+                            gl_Position = projectionMatrix * mvPosition;
+                        }
+                    `,
+                    fragmentShader: `
+                        varying float vType;
+                        varying float vAlpha;
+                        void main() {
+                            // High performance procedural circle generation inside standard fragments
+                            vec2 coord = gl_PointCoord - vec2(0.5);
+                            if(length(coord) > 0.5) discard;
+
+                            if (vType > 0.5) {
+                                // Brilliant gold sunlit glowing pollen specks
+                                gl_FragColor = vec4(1.0, 0.91, 0.65, vAlpha * 0.9);
+                            } else {
+                                // Soft, completely diffused ambient morning mist
+                                float edgeFade = 1.0 - (length(coord) * 2.0);
+                                gl_FragColor = vec4(0.92, 0.94, 0.98, edgeFade * 0.06 * vAlpha);
+                            }
+                        }
+                    `,
+                    transparent: true,
+                    depthWrite: false
+                });
+
+                const system = new THREE.Points(geo, mat);
+                this.scene.add(system);
+                this.particleSystems.push(system);
+            }
+
+            createProceduralSky() {
+                // Mathematical skydome producing a dramatic glowing sunrise gradient backdrop
+                const skyGeo = new THREE.SphereGeometry(850, 32, 15);
+                const skyMat = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uSunPos: { value: this.sunLight.position }
+                    },
+                    vertexShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vViewDir;
+                        void main() {
+                            vNormal = normalize(normal);
+                            vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                            vViewDir = normalize(worldPos.xyz);
+                            gl_Position = projectionMatrix * viewMatrix * worldPos;
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vViewDir;
+                        uniform vec3 uSunPos;
+
+                        void main() {
+                            vec3 sunDir = normalize(uSunPos);
+                            float sunGlow = max(0.0, dot(vViewDir, sunDir));
+                            
+                            // Baseline high atmospheric clear dawn sky gradient color definitions
+                            vec3 zenithColor = vec3(0.05, 0.12, 0.24);  // Deep indigo overhead
+                            vec3 horizonColor = vec3(0.92, 0.62, 0.41); // Soft amber sunrise flare line
+                            
+                            // Blend sky structure by calculation height factor vectors
+                            float h = max(0.0, vNormal.y);
+                            vec3 skyColor = mix(horizonColor, zenithColor, pow(h, 0.6));
+                            
+                            // Inject procedural sun flare disk overlay directly into atmosphere colors
+                            vec3 sunColor = vec3(1.0, 0.94, 0.82);
+                            skyColor += sunColor * pow(sunGlow, 4.0) * 0.4;
+                            skyColor += sunColor * pow(sunGlow, 180.0) * 3.5; // Blinding inner core disk
+
+                            gl_FragColor = vec4(skyColor, 1.0);
+                        }
+                    `,
+                    side: THREE.BackSide
+                });
+
+                const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+                this.scene.add(skyMesh);
+            }
+
+            setupInputHandlers() {
+                // Pointer Lock Activation Sequence
+                const lockScreen = document.getElementById('pointer-lock-screen');
+                lockScreen.addEventListener('click', () => {
+                    if(this.assetsLoaded) {
+                        this.container.requestPointerLock();
+                    }
+                });
+
+                document.addEventListener('pointerlockchange', () => {
+                    if (document.pointerLockElement === this.container) {
+                        lockScreen.style.opacity = '0';
+                        setTimeout(() => lockScreen.style.display = 'none', 500);
+                        this.controlsEnabled = true;
+                    } else {
+                        lockScreen.style.display = 'flex';
+                        setTimeout(() => lockScreen.style.opacity = '1', 10);
+                        this.controlsEnabled = false;
+                    }
+                });
+
+                // Mouse Camera Control Accumulation
+                document.addEventListener('mousemove', (e) => {
+                    if (!this.controlsEnabled) return;
+                    
+                    this.player.yaw -= e.movementX * 0.0022;
+                    this.player.pitch -= e.movementY * 0.0022;
+                    
+                    // Clamp looking pitch vectors directly vertically to safeguard rotation bounds
+                    this.player.pitch = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, this.player.pitch));
+                    
+                    this.camera.rotation.set(this.player.pitch, this.player.yaw, 0);
+                });
+
+                // Keyboard Action State Handlers
+                const onKey = (val) => (e) => {
+                    if (!this.controlsEnabled) return;
+                    switch(e.code) {
+                        case 'KeyW': this.input.forward = val; break;
+                        case 'KeyS': this.input.backward = val; break;
+                        case 'KeyA': this.input.left = val; break;
+                        case 'KeyD': this.input.right = val; break;
+                        case 'ShiftLeft':
+                        case 'ShiftRight': this.input.sprint = !!val; break;
+                        case 'Space': if(val && this.player.isGrounded) { 
+                            this.player.velocity.y = this.player.jumpForce; 
+                            this.player.isGrounded = false;
+                        } break;
+                    }
+                };
+
+                document.addEventListener('keydown', onKey(1));
+                document.addEventListener('keyup', onKey(0));
+            }
+
+            // Real-time calculation simulating dynamic lens exposure adjustments looking directly into sun rays
+            updateAdaptiveExposure() {
+                const camDir = new THREE.Vector3();
+                this.camera.getWorldDirection(camDir);
+                
+                const sunDir = new THREE.Vector3().copy(this.sunLight.position).normalize();
+                const alignment = camDir.dot(sunDir); // Matrix dot alignment value across looking fields
+
+                if (alignment > 0) {
+                    // Instantly dim exposure value parameters when gazing deep towards blinding sunrise horizons
+                    this.targetExposure = 0.38 + (1.0 - alignment) * 0.62;
+                } else {
+                    // Increase aperture performance visibility indoors/shadow profiles
+                    this.targetExposure = 1.0;
+                }
+
+                // Smooth linear interpolation of camera lens iris dilation
+                this.currentExposure = THREE.MathUtils.lerp(this.currentExposure, this.targetExposure, 0.04);
+                this.renderer.toneMappingExposure = this.currentExposure;
+            }
+
+            updatePhysics(delta) {
+                if (!this.controlsEnabled) return;
+
+                // Process vector components for standard FPS movement loops
+                const frontVec = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+                const sideVec = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+                
+                // Keep movement parallel to valley floor plane
+                frontVec.y = 0; frontVec.normalize();
+                sideVec.y = 0; sideVec.normalize();
+
+                const moveDir = new THREE.Vector3();
+                moveDir.addScaledVector(frontVec, this.input.forward - this.input.backward);
+                moveDir.addScaledVector(sideVec, this.input.right - this.input.left);
+                if(moveDir.lengthSq() > 1.0) moveDir.normalize();
+
+                // Compute exact running vs crawling dynamics across environmental paths
+                let currentMaxSpeed = this.player.speed * (this.input.sprint ? this.player.sprintMultiplier : 1.0);
+                
+                // Add water resistance wading friction drag coefficient parameter models
+                if (this.player.pos.y < WATER_LEVEL + 0.4) {
+                    currentMaxSpeed *= 0.45; // Significantly cut speed walking deep across the river channels
+                }
+
+                this.player.velocity.x = moveDir.x * currentMaxSpeed;
+                this.player.velocity.z = moveDir.z * currentMaxSpeed;
+
+                // Apply world gravity vectors
+                this.player.velocity.y -= GRAVITY * delta;
+
+                // Translate position vectors
+                this.player.pos.addScaledVector(this.player.velocity, delta);
+
+                // Basic geographic collision constraints checking terrain parameters
+                let groundY = this.getTerrainHeight(this.player.pos.x, this.player.pos.z);
+                
+                if (this.player.pos.y <= groundY + PLAYER_HEIGHT) {
+                    this.player.pos.y = groundY + PLAYER_HEIGHT;
+                    this.player.velocity.y = 0;
+                    this.player.isGrounded = true;
+                }
+
+                // Bind boundary limits to prevent mapping over infinity parameters
+                this.player.pos.x = THREE.MathUtils.clamp(this.player.pos.x, -WORLD_SIZE/2 + 10, WORLD_SIZE/2 - 10);
+                this.player.pos.z = THREE.MathUtils.clamp(this.player.pos.z, -WORLD_SIZE/2 + 10, WORLD_SIZE/2 - 10);
+
+                // Align master camera rigs inside player positioning capsules
+                this.camera.position.copy(this.player.pos);
+                
+                // Subtle breathing / head bobbing tracking simulation logic
+                if (this.player.isGrounded && moveDir.lengthSq() > 0.01) {
+                    let timer = this.clock.getElapsedTime() * (this.input.sprint ? 12.0 : 7.0);
+                    this.camera.position.y += Math.sin(timer) * (this.input.sprint ? 0.08 : 0.04);
+                }
+            }
+
+            // Procedural ecosystem simulation updates
+            updateEcosystem(time, delta) {
+                // Animate Water Material Uniform Timers
+                if(this.waterMaterial) this.waterMaterial.uniforms.uTime.value = time;
+                if(this.instancedGrass) this.instancedGrass.material.uniforms.uTime.value = time;
+                
+                // Track update states across structural system arrays
+                this.particleSystems.forEach(sys => {
+                    sys.material.uniforms.uTime.value = time;
+                    sys.material.uniforms.uCameraPos.value.copy(this.camera.position);
+                });
+
+                // Periodically spawn mathematical expanding ripples representing mountain trout surface rings
+                if (Math.random() < 0.015 && this.fishRings.length < 8) {
+                    this.spawnFishRing();
+                }
+                this.animateFishRings(delta);
+            }
+
+            spawnFishRing() {
+                // Pick a point in the river visible within common valley sections
+                let rx = (Math.random() - 0.5) * 80;
+                let rz = (Math.random() - 0.5) * 400;
+                
+                const ringGeo = new THREE.RingGeometry(0.1, 0.2, 16);
+                ringGeo.rotateX(-Math.PI/2);
+                
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xdff5f7,
+                    transparent: true,
+                    opacity: 0.6,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+                
+                const mesh = new THREE.Mesh(ringGeo, ringMat);
+                mesh.position.set(rx, WATER_LEVEL + 0.02, rz);
+                this.scene.add(mesh);
+                
+                this.fishRings.push({ mesh: mesh, radius: 0.1, maxRadius: 3.5 + Math.random()*4, opacity: 0.6 });
+            }
+
+            animateFishRings(delta) {
+                for (let i = this.fishRings.length - 1; i >= 0; i--) {
+                    let r = this.fishRings[i];
+                    r.radius += delta * 1.8;
+                    r.opacity -= delta * 0.18;
+                    
+                    // Re-scale ring geometries procedurally using radial math parameters
+                    r.mesh.geometry.dispose();
+                    r.mesh.geometry = new THREE.RingGeometry(r.radius - 0.08, r.radius, 16);
+                    r.mesh.geometry.rotateX(-Math.PI/2);
+                    r.mesh.material.opacity = r.opacity;
+
+                    if (r.radius >= r.maxRadius || r.opacity <= 0) {
+                        this.scene.remove(r.mesh);
+                        r.mesh.geometry.dispose();
+                        r.mesh.material.dispose();
+                        this.fishRings.splice(i, 1);
+                    }
+                }
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+
+                const time = this.clock.getElapsedTime();
+                const delta = Math.min(this.clock.getDelta(), 0.1); // Guard against multi-frame hangs
+
+                this.updatePhysics(delta);
+                this.updateAdaptiveExposure();
+                this.updateEcosystem(time, delta);
+
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Initialize App on DOM Completion
+        window.addEventListener('DOMContentLoaded', () => {
+            new GlacialValleyApp();
+        });
+    </script>
+</body>
+</html>

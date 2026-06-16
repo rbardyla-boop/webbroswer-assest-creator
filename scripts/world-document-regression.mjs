@@ -2151,7 +2151,10 @@ assert.ok(floodLayout.counts.buildings <= GENERATOR_LIMITS.MAX_BUILDINGS, "build
 
 // Emitter: valid host descriptors, hard total cap, correct shadow semantics.
 const cityDescs = cityLayoutToWorldObjects(layoutA, "gen-1");
-assert.equal(cityDescs.length, layoutA.counts.roads + layoutA.counts.buildings + layoutA.counts.props);
+// roads + buildings + props + 1 central Town Monument landmark (Stage 18C).
+assert.equal(cityDescs.length, layoutA.counts.roads + layoutA.counts.buildings + layoutA.counts.props + 1);
+const aMonument = cityDescs.find((d) => d.name === "Town Monument");
+assert.ok(aMonument && aMonument.layoutRole === "landmark", "city emits a Town Monument landmark");
 assert.ok(cityLayoutToWorldObjects(floodLayout, "g").length <= GENERATOR_LIMITS.MAX_TOTAL_OBJECTS, "emitted total capped");
 assert.ok(cityDescs.every((d) => d.type === "primitive" && /^#[0-9a-f]{6}$/.test(d.color) && d.generatorId === "gen-1"));
 const aStreet = cityDescs.find((d) => d.name === "Street");
@@ -2617,5 +2620,46 @@ assert.equal(cityWorld.generatedObjects.status, "green");
 const noHeap = evaluateBudget({ drawCalls: 10, triangles: 1000, heapMB: null, generatedObjects: 0, instancedBatches: 0, visibleVegetationPatches: 0 });
 assert.equal(noHeap.heapMB.status, "unknown");
 assert.equal(noHeap.overall, "green");
+
+// --- Stage 18C: settlement layout role (classification data boundary) ---------
+// A valid layoutRole survives validation; a hostile/unknown value degrades to null
+// (never trusted as a class); hand-placed objects default to null.
+const s18cDoc = validateWorldDocument({
+  ...createWorldDocument({ metadata: { name: "s18c" } }),
+  objects: [
+    { type: "primitive", primitive: "cube", name: "B", transform: { position: { x: 0, y: 0, z: 0 } }, layoutRole: "building" },
+    { type: "primitive", primitive: "cube", name: "Bad", transform: { position: { x: 2, y: 0, z: 0 } }, layoutRole: "__proto__" },
+    { type: "primitive", primitive: "cube", name: "Hand", transform: { position: { x: 4, y: 0, z: 0 } } },
+  ],
+}).document;
+assert.equal(s18cDoc.objects[0].layoutRole, "building", "valid layoutRole survives");
+assert.equal(s18cDoc.objects[1].layoutRole, null, "hostile layoutRole → null");
+assert.equal(s18cDoc.objects[2].layoutRole, null, "hand-placed object → null layoutRole");
+
+// The layoutRole round-trips through a built object back to a serialized descriptor.
+const s18cScene = new THREE.Scene();
+const s18cMgr = new WorldObjectManager(s18cScene);
+const s18cBuilt = await s18cMgr.addWorldObjects(s18cDoc.objects);
+assert.equal(s18cBuilt[0].userData.layoutRole, "building", "layoutRole lands on userData");
+assert.equal(s18cMgr.serializeWorldObject(s18cBuilt[0]).layoutRole, "building", "layoutRole serializes back");
+
+// A connected settlement (camp + plaza + city) exposes ≥1 landmark and a focal object
+// near each cluster origin — the cheap structural floor; the full matrix is qa:layout.
+const s18cInstances = [
+  { id: "g-camp", type: "camp", config: createCampConfig({ seed: "r-camp", size: 4, origin: { x: -120, z: 0 } }) },
+  { id: "g-plaza", type: "plaza", config: createPlazaConfig({ seed: "r-plaza", size: 4, origin: { x: 0, z: 0 } }) },
+  { id: "g-city", type: "city", config: createCityConfig({ seed: "r-city", blocks: 4, density: 0.6, origin: { x: 140, z: 0 } }) },
+];
+const s18cObjects = s18cInstances.flatMap((i) => generateGeneratorObjects(i.type, i.config, i.id).objects);
+const s18cLandmarks = s18cObjects.filter((o) => o.layoutRole === "landmark");
+assert.ok(s18cLandmarks.length >= 3, "each cluster contributes a landmark (camp fire / plaza well / town monument)");
+for (const inst of s18cInstances) {
+  const o = inst.config.origin;
+  const hasCenter = s18cObjects.some(
+    (d) => d.generatorId === inst.id && (d.layoutRole === "landmark" || d.layoutRole === "path") &&
+      Math.hypot(d.transform.position.x - o.x, d.transform.position.z - o.z) <= 12
+  );
+  assert.ok(hasCenter, `${inst.id} has a focal object near its origin`);
+}
 
 console.log("world document regression checks passed");

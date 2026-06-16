@@ -19,6 +19,7 @@ const CYL_R = PRIMITIVE_BASE.cylRadius;
 const CYL_H = PRIMITIVE_BASE.cylHeight;
 const STREET_COLOR = "#3a3d42";
 const TREE_COLOR = "#3f7a3a";
+const MONUMENT_COLOR = "#9a958c";
 const STREET_LIFT = 0.04;
 
 /**
@@ -42,6 +43,7 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city", { bui
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "path",
       })
     );
   }
@@ -49,7 +51,7 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city", { bui
   for (const b of layout?.buildings ?? []) {
     const base = getHeight(b.x, b.z);
     // Prefab-backed building, or primitive fallback when no/invalid prefab.
-    if (buildingPrefab && pushPrefab(buildingPrefab, { x: b.x, y: base, z: b.z }, b.yaw ?? 0, prefabFitScale(buildingPrefab, b.w, b.d))) {
+    if (buildingPrefab && pushPrefab(buildingPrefab, { x: b.x, y: base, z: b.z }, b.yaw ?? 0, prefabFitScale(buildingPrefab, b.w, b.d), "building")) {
       continue;
     }
     push(
@@ -62,13 +64,14 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city", { bui
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "building",
       })
     );
   }
 
   for (const p of layout?.props ?? []) {
     const base = getHeight(p.x, p.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: p.x, y: base, z: p.z }, 0, prefabFitScale(propPrefab, p.r * 2, p.r * 2))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: p.x, y: base, z: p.z }, 0, prefabFitScale(propPrefab, p.r * 2, p.r * 2), "vegetation")) {
       continue;
     }
     push(
@@ -81,6 +84,28 @@ export function cityLayoutToWorldObjects(layout, generatorId = "gen-city", { bui
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: false,
+        layoutRole: "vegetation",
+      })
+    );
+  }
+
+  // Central landmark (Stage 18C): a stone monument at the town's central crossing, so
+  // a generated city has a readable focal point instead of undifferentiated blocks.
+  if (layout?.landmark) {
+    const m = layout.landmark;
+    const base = getHeight(m.x, m.z);
+    const h = 5.5;
+    push(
+      primitiveDescriptor("cylinder", "Town Monument", MONUMENT_COLOR, generatorId, {
+        pos: [m.x, base + h / 2, m.z],
+        rot: [0, 0, 0],
+        scale: [1.3 / CYL_R, h / CYL_H, 1.3 / CYL_R],
+        collider: "cylinder",
+        castShadow: true,
+        receiveShadow: true,
+        excludeGrass: true,
+        excludeTrees: true,
+        layoutRole: "landmark",
       })
     );
   }

@@ -12,10 +12,13 @@ import { PRIMITIVE_BASE, primitiveDescriptor, prefabFitScale, createEmitter } fr
 const TAU = Math.PI * 2;
 const CUBE = PRIMITIVE_BASE.cube;
 const PLANE = PRIMITIVE_BASE.plane;
+const CYL_R = PRIMITIVE_BASE.cylRadius;
+const CYL_H = PRIMITIVE_BASE.cylHeight;
 
 const PAVING_COLOR = "#6f6a60";
 const PROP_COLOR = "#7c6a4f";
 const SIGN_COLOR = "#5b4a33";
+const WELL_COLOR = "#8a857b";
 
 export function generatePlazaLayout(config) {
   const rng = mulberry32(stringToSeed(`${config.seed}:${config.style}`));
@@ -36,7 +39,13 @@ export function generatePlazaLayout(config) {
     props.push({ x: cx + Math.cos(a) * rr, z: cz + Math.sin(a) * rr, s: 0.8 + rng() * 0.7, yaw: a + Math.PI });
   }
 
-  const spawn = { x: cx, z: cz, name: "plaza-spawn" };
+  // A central well/obelisk is the plaza's landmark — a readable focal point that the
+  // square is built around (Stage 18C). Sits at the center; the spawn is moved out to
+  // the entrance so the player arrives facing it across the open paving.
+  const well = { x: cx, z: cz, r: 0.9 };
+  // Spawn just outside the entrance (−Z), clear of the prop ring and the well, with the
+  // entrance trigger between it and the square — a readable "step in and you see it".
+  const spawn = { x: cx, z: cz - (radius + 2), name: "plaza-spawn" };
   const sign = { x: cx, z: cz - radius * 0.6, yaw: 0, text: `Plaza - ${style}` };
   // radius ≤ 22 (size-clamped); the interaction validator bounds it to [0.1, 250].
   const trigger = { x: cx, z: cz - radius - 1.5, radius, event: "plaza-enter" };
@@ -46,6 +55,7 @@ export function generatePlazaLayout(config) {
     center: { x: cx, z: cz },
     paving,
     props,
+    well,
     spawn,
     sign,
     trigger,
@@ -72,13 +82,34 @@ export function plazaLayoutToWorldObjects(layout, generatorId = "gen-plaza", { p
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "path",
+      })
+    );
+  }
+
+  // Central landmark (well / obelisk) — the focal point the square reads around.
+  if (layout?.well) {
+    const w = layout.well;
+    const base = getHeight(w.x, w.z);
+    const h = 1.4;
+    push(
+      primitiveDescriptor("cylinder", "Plaza Well", WELL_COLOR, generatorId, {
+        pos: [w.x, base + h / 2, w.z],
+        rot: [0, 0, 0],
+        scale: [w.r / CYL_R, h / CYL_H, w.r / CYL_R],
+        collider: "cylinder",
+        castShadow: true,
+        receiveShadow: true,
+        excludeGrass: true,
+        excludeTrees: true,
+        layoutRole: "landmark",
       })
     );
   }
 
   for (const pr of layout?.props ?? []) {
     const base = getHeight(pr.x, pr.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: pr.x, y: base, z: pr.z }, pr.yaw, prefabFitScale(propPrefab, pr.s, pr.s))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: pr.x, y: base, z: pr.z }, pr.yaw, prefabFitScale(propPrefab, pr.s, pr.s), "prop")) {
       continue;
     }
     push(
@@ -91,11 +122,12 @@ export function plazaLayoutToWorldObjects(layout, generatorId = "gen-plaza", { p
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }
 
-  // Central spawn (invisible marker).
+  // Spawn marker at the entrance (invisible).
   if (layout?.spawn) {
     const sp = layout.spawn;
     const base = getHeight(sp.x, sp.z);
@@ -111,6 +143,7 @@ export function plazaLayoutToWorldObjects(layout, generatorId = "gen-plaza", { p
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "spawn", name: sp.name },
+        layoutRole: "marker",
       })
     );
   }
@@ -130,6 +163,7 @@ export function plazaLayoutToWorldObjects(layout, generatorId = "gen-plaza", { p
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "sign", text: s.text, showRadius: 7 },
+        layoutRole: "marker",
       })
     );
   }
@@ -150,6 +184,7 @@ export function plazaLayoutToWorldObjects(layout, generatorId = "gen-plaza", { p
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "trigger", shape: "sphere", radius: tr.radius, channel: "default", emitOnEnter: [tr.event], emitOnExit: [], once: false },
+        layoutRole: "marker",
       })
     );
   }

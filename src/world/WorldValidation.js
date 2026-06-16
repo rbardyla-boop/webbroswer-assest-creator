@@ -18,6 +18,10 @@ const PRIMITIVES = new Set(["cube", "sphere", "cylinder", "plane", "ramp"]);
 const OBJECT_TYPES = new Set(["primitive", "relief", "imported", "image", "custom", "gltf"]);
 const CAMERA_MODES = new Set(["first", "third"]);
 const COLLIDERS = new Set(Object.values(COLLIDER_TYPES));
+// Settlement layout roles (Stage 18C) — declarative classification a generator may
+// stamp on an emitted object so the layout QA gate judges structure from data, not
+// display names. Anything outside this allow-list (incl. hand-placed objects) → null.
+const LAYOUT_ROLES = new Set(["building", "path", "prop", "landmark", "marker", "vegetation", "edge"]);
 
 export function validateWorldDocument(input) {
   const warnings = [];
@@ -140,6 +144,10 @@ function sanitizeGeneratorId(value) {
   return cleaned.length ? cleaned : null;
 }
 
+function sanitizeLayoutRole(value) {
+  return LAYOUT_ROLES.has(value) ? value : null;
+}
+
 function sanitizeGenerators(generators) {
   const src = generators && typeof generators === "object" ? generators : {};
   const instances = Array.isArray(src.instances) ? src.instances : [];
@@ -173,6 +181,8 @@ function sanitizeObjects(objects, warnings) {
       // emitted this object (Stage 17C). Both null for hand-placed objects.
       color: sanitizeObjectColor(item?.color),
       generatorId: sanitizeGeneratorId(item?.generatorId),
+      // Settlement layout role (Stage 18C) — null for hand-placed objects.
+      layoutRole: sanitizeLayoutRole(item?.layoutRole),
       asset: item?.asset ?? null,
       transform,
       collider,

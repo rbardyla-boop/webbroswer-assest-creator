@@ -1,0 +1,14 @@
+{
+  "name": "starvale-handdrawn-mmo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clean-room hand-drawn browser MMO vertical slice with offline sim and dependency-free authoritative Node server.",
+  "scripts": {
+    "start": "node server/server.mjs",
+    "server": "node server/server.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

@@ -1,0 +1,19 @@
+{
+  "name": "threejs-runtime-city-generator",
+  "private": true,
+  "version": "0.2.1",
+  "type": "module",
+  "description": "Reusable high-performance Three.js runtime city generator with instanced grass, terrain, capsule player, FP/TP cameras, zones, save/load, debug instrumentation, and verified city chunk render flags.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verify": "node scripts/verify-runtime-city.mjs"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

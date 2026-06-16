@@ -809,3 +809,59 @@ spatially to recover frustum culling; candidate BatchedMesh for mixed-geometry s
 props), 20D fake volumetric lighting + height fog (god-rays/height-fog, bounded +
 toggleable), 20C KTX2/DRACO texture pipeline, 20E per-frame allocation audit, then a
 WebGPU/TSL research branch only (r169/WebGL stays production).
+
+## ADR-018C — Settlement Planning Standards + Layout QA (Stage 18C)
+
+**Decision.** Before any further generator expansion (more types, WFC), install a
+**standard** that judges whether a generated settlement has READABLE STRUCTURE — a
+center, a visible landmark, a clear spawn, no overlapping buildings, no paths through
+buildings, connected anchors, valid markers — not merely "objects exist". The standard
+is `docs/SETTLEMENT_LAYOUT_STANDARD.md`; the doctrine mapping planning skills onto the
+engine is `docs/GENERATOR_PLANNING_SKILL_ADOPTION.md`; the enforceable subset is the
+`npm run qa:layout` gate; readability at runtime is proven by `npm run
+test:settlement-layout`. Sequenced deliberately **before** WFC: WFC without a standard
+just produces more structured-looking bad output — first define what "good" means.
+
+**The classification data boundary (`layoutRole`).** Settlement role becomes DATA, not
+a display-name guess. A new optional `layoutRole` enum (`building | path | prop |
+landmark | marker | vegetation | edge`, default `null`) joins the declarative-metadata
+family (`generatorId` / `interaction` / `particles`): emitters stamp it via
+`primitiveDescriptor` (`emitHelpers`), `WorldValidation.sanitizeLayoutRole` allow-lists
+it (hostile values → `null`), and it round-trips through `WorldObjectManager`
+(build → `userData.layoutRole`; `serializeWorldObject` → descriptor). So the gate reads
+a field, never a string — durable across renames and new generators.
+
+**The gate reuses canonical paths headless.** `qa:layout` (`scripts/layout-gates.mjs`)
+is pure Node: it generates canonical scenes (connected village, standalone camp / plaza
+/ city) via `generateGeneratorObjects`, validates them, builds the **real** scene graph
+(`new THREE.Scene()` → `WorldObjectManager` → `loadWorldObjects` — THREE geometry/
+material construct without a GL context, exactly as the Node regression already proves),
+and judges with the **canonical `validatePlacement`** + `THREE.Box3`/segment math — **no
+bespoke footprint code**. House style mirrors `qa:skills` (PASS/WARN/FAIL + summary +
+exit 1). Wired into the `qa` chain.
+
+**Green-now retrofit (the standard caught real defects).** Per "retrofit city/camp/
+plaza against that standard", canonical scenes must pass GREEN — which surfaced and
+fixed genuine layout bugs: camp **crates overlapping tents** (now round-robined across
+tents and pushed clear of the rotated-AABB footprint), **crate↔crate piling**, and city
+**street trees punched through buildings** (now placed in the road-side gutter strip
+clear of lots). Two missing focal points were added: a **Plaza Well** landmark at center
+(plaza spawn moved to the entrance so you arrive facing it across the square) and a
+**Town Monument** landmark snapped to the city's central crossroads (building-free for
+any block count). `qa:layout` is green at **43/0**.
+
+**Observability.** DEV-only `window.__LAYOUT_DEBUG__()` (runtime) returns the spawn,
+landmark world positions, per-role counts, marker sub-counts, and the instanced-batch
+count; `test:settlement-layout` authors a village, spawns at the camp entrance, and
+asserts a landmark is near the spawn (readability proxy) + paths/buildings/markers
+present + instancing active + zero console errors. Production bundle verified clean of
+`__LAYOUT_DEBUG__` / `layout-gates` (grep).
+
+**Hard-gated vs. judgment.** `qa:layout` enforces the *checkable* criteria (overlaps,
+landmark/center existence, spawn clearance + line-of-sight, anchor connectivity, marker
+validity, caps, round-trip). The *qualitative* criteria (silhouette readability,
+foreground/midground composition, copy-paste feel, intentional density) remain author +
+visual-proof judgment, documented in the standard — the gate is a floor, not a ceiling.
+
+**Next.** WFC layout generator (now that "good" is defined), then resume the
+optimization ladder (20B/20D/20C/20E). r169/WebGL stays production.

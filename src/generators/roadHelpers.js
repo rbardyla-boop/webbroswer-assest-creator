@@ -31,6 +31,7 @@ export function roadSegment(a, b, width, color, generatorId, name = "Road") {
     receiveShadow: true,
     excludeGrass: true,
     excludeTrees: true,
+    layoutRole: "path",
   });
 }
 

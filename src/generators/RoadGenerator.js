@@ -91,7 +91,7 @@ export function roadLayoutToWorldObjects(layout, generatorId = "gen-road", { pro
 
   for (const lamp of layout?.lamps ?? []) {
     const base = getHeight(lamp.x, lamp.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: lamp.x, y: base, z: lamp.z }, 0, prefabFitScale(propPrefab, 1, 1))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: lamp.x, y: base, z: lamp.z }, 0, prefabFitScale(propPrefab, 1, 1), "prop")) {
       continue;
     }
     push(
@@ -104,6 +104,7 @@ export function roadLayoutToWorldObjects(layout, generatorId = "gen-road", { pro
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }

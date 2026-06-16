@@ -75,6 +75,8 @@ export function connectorLayoutToWorldObjects(layout, generatorId = "gen-connect
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        // Decorative wayfinding post (no interaction) → "prop", not an interactive marker.
+        layoutRole: "prop",
       })
     );
   }

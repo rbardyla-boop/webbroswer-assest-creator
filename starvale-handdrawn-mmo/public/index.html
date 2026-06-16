@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Starvale Frontier — Hand-Drawn Browser MMO</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <section id="boot" class="boot">
+    <div class="card title-card">
+      <div class="eyebrow">HAND-DRAWN 3D-LIKE BROWSER MMO</div>
+      <h1>Starvale Frontier</h1>
+      <p>Eastbrook Vale, three connected zones, nine classes, shared online realm or instant offline mode.</p>
+      <div class="mode-row">
+        <button id="offlineBtn">Play Offline</button>
+        <button id="onlineBtn">Play Online</button>
+      </div>
+      <div id="auth" class="auth hidden">
+        <input id="user" placeholder="account" autocomplete="username" />
+        <input id="pass" placeholder="password" type="password" autocomplete="current-password" />
+        <div class="mode-row"><button id="loginBtn">Login</button><button id="registerBtn">Register</button></div>
+        <div id="chars"></div>
+      </div>
+      <div id="create" class="auth hidden">
+        <input id="charName" placeholder="character name" />
+        <select id="classSelect"></select>
+        <button id="createCharBtn">Create Character</button>
+      </div>
+      <p class="small">Controls: WASD move · click target · F interact/loot · 1-4 spells · B bags · L quest log · M map · Enter chat · /invite, /duel, /trade, /complete qid.</p>
+    </div>
+  </section>
+
+  <div id="hud" class="hud hidden">
+    <div id="unit" class="panel unit"></div>
+    <div id="target" class="panel target"></div>
+    <div id="party" class="panel party"></div>
+    <div id="questPanel" class="panel window hidden"></div>
+    <div id="bagPanel" class="panel window hidden"></div>
+    <div id="mapPanel" class="panel window hidden"></div>
+    <div id="vendorPanel" class="panel window hidden"></div>
+    <div id="chat" class="panel chat"></div>
+    <input id="chatInput" class="chat-input hidden" maxlength="180" />
+    <div id="actionbar" class="actionbar"></div>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

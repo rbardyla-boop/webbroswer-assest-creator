@@ -70,7 +70,7 @@ export function forestLayoutToWorldObjects(layout, generatorId = "gen-forest", {
 
   for (const t of layout?.trees ?? []) {
     const base = getHeight(t.x, t.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: t.x, y: base, z: t.z }, 0, prefabFitScale(propPrefab, t.canopyR * 2, t.canopyR * 2))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: t.x, y: base, z: t.z }, 0, prefabFitScale(propPrefab, t.canopyR * 2, t.canopyR * 2), "vegetation")) {
       continue;
     }
     // Primitive tree = trunk + canopy. Keep the pair atomic against the cap so a
@@ -86,6 +86,7 @@ export function forestLayoutToWorldObjects(layout, generatorId = "gen-forest", {
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: false,
+        layoutRole: "vegetation",
       })
     );
     push(
@@ -98,6 +99,7 @@ export function forestLayoutToWorldObjects(layout, generatorId = "gen-forest", {
         receiveShadow: false,
         excludeGrass: true,
         excludeTrees: false,
+        layoutRole: "vegetation",
       })
     );
   }
@@ -114,6 +116,7 @@ export function forestLayoutToWorldObjects(layout, generatorId = "gen-forest", {
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }

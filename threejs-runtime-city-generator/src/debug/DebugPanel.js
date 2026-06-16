@@ -1,0 +1,88 @@
+// On-screen debug HUD. Pure DOM (no canvas), updated once per frame with a
+// snapshot of system stats. Toggle visibility with the configured key.
+
+export class DebugPanel {
+  constructor({ visible = true } = {}) {
+    this.visible = visible;
+    this.fps = 60;
+    this._acc = 0;
+    this._frames = 0;
+    this._lastReport = 0;
+
+    this.el = document.createElement("div");
+    this.el.id = "debug-panel";
+    Object.assign(this.el.style, {
+      position: "fixed",
+      left: "16px",
+      top: "14px",
+      zIndex: "20",
+      minWidth: "210px",
+      padding: "11px 13px",
+      background: "rgba(14, 18, 16, 0.82)",
+      border: "1px solid rgba(120, 200, 140, 0.22)",
+      borderRadius: "10px",
+      backdropFilter: "blur(8px)",
+      font: '11px/1.6 "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
+      color: "#d7e6dc",
+      pointerEvents: "none",
+      whiteSpace: "pre",
+    });
+    document.body.appendChild(this.el);
+    this._applyVisibility();
+  }
+
+  toggle() {
+    this.visible = !this.visible;
+    this._applyVisibility();
+  }
+
+  _applyVisibility() {
+    this.el.style.display = this.visible ? "block" : "none";
+  }
+
+  // dt in seconds. data carries everything the HUD displays.
+  update(dt, data) {
+    // Smooth FPS, reported a few times a second so it reads steadily.
+    this._acc += dt;
+    this._frames += 1;
+    this._lastReport += dt;
+    if (this._lastReport >= 0.25) {
+      this.fps = this._frames / this._acc;
+      this._acc = 0;
+      this._frames = 0;
+      this._lastReport = 0;
+    }
+    if (!this.visible) return;
+
+    const s = data.grass;
+    const city = data.city || { visibleChunks: 0, activeChunks: 0, buildings: 0, props: 0, drawCallsEstimate: 0, nearestZone: "n/a", seed: "", styleLabel: "" };
+    const p = data.player;
+    const lod = s.lod;
+    const lodTotal = Math.max(1, lod[0] + lod[1] + lod[2]);
+    const pct = (n) => Math.round((n / lodTotal) * 100);
+    const k = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+
+    const fpsColor =
+      this.fps >= 55 ? "#7fdca0" : this.fps >= 30 ? "#e6c463" : "#e0795a";
+
+    this.el.innerHTML =
+      `<span style="color:#7fdca0;letter-spacing:.12em">GRASS WORLD · DEBUG</span>\n` +
+      `<span style="color:#8fa899">fps        </span><b style="color:${fpsColor}">${this.fps.toFixed(0)}</b>\n` +
+      `<span style="color:#8fa899">camera     </span>${data.cameraMode}\n` +
+      `<span style="color:#8fa899">draw calls </span>${data.drawCalls} + city~${city.drawCallsEstimate}\n` +
+      `<span style="color:#8fa899">patches    </span>${s.visiblePatches} vis / ${s.activePatches} active\n` +
+      `<span style="color:#8fa899">city chunks</span>${city.visibleChunks} vis / ${city.activeChunks} active\n` +
+      `<span style="color:#8fa899">city seed  </span>${city.seed} (${city.styleLabel || "style"})\n` +
+      `<span style="color:#8fa899">zone       </span>${city.nearestZone}\n` +
+      `<span style="color:#8fa899">buildings  </span>${k(city.buildings)} + props ${k(city.props)}\n` +
+      `<span style="color:#8fa899">blades~    </span>${k(s.visibleBlades)}\n` +
+      `<span style="color:#8fa899">LOD 0/1/2  </span>${lod[0]}/${lod[1]}/${lod[2]}  (${pct(lod[0])}/${pct(lod[1])}/${pct(lod[2])}%)\n` +
+      `<span style="color:#8fa899">build queue</span>${s.queueLength} (+${s.builtThisFrame}/f)\n` +
+      `<span style="color:#8fa899">player xyz </span>${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
+      `<span style="color:#8fa899">grounded   </span>${data.grounded ? "yes" : "airborne"}`;
+  }
+
+  dispose() {
+    this.el.remove();
+  }
+}

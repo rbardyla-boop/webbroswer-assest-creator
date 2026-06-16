@@ -102,6 +102,7 @@ export function ruinLayoutToWorldObjects(layout, generatorId = "gen-ruin", { pro
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "building",
       })
     );
   }
@@ -118,13 +119,14 @@ export function ruinLayoutToWorldObjects(layout, generatorId = "gen-ruin", { pro
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "edge",
       })
     );
   }
 
   for (const c of layout?.columns ?? []) {
     const base = getHeight(c.x, c.z);
-    if (propPrefab && pushPrefab(propPrefab, { x: c.x, y: base, z: c.z }, 0, prefabFitScale(propPrefab, c.r * 2, c.r * 2))) {
+    if (propPrefab && pushPrefab(propPrefab, { x: c.x, y: base, z: c.z }, 0, prefabFitScale(propPrefab, c.r * 2, c.r * 2), "prop")) {
       continue;
     }
     push(
@@ -137,6 +139,7 @@ export function ruinLayoutToWorldObjects(layout, generatorId = "gen-ruin", { pro
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }
@@ -155,6 +158,7 @@ export function ruinLayoutToWorldObjects(layout, generatorId = "gen-ruin", { pro
         receiveShadow: true,
         excludeGrass: true,
         excludeTrees: true,
+        layoutRole: "prop",
       })
     );
   }
@@ -173,6 +177,7 @@ export function ruinLayoutToWorldObjects(layout, generatorId = "gen-ruin", { pro
         excludeGrass: true,
         excludeTrees: true,
         interaction: { role: "sign", text: s.text, showRadius: 6 },
+        layoutRole: "marker",
       })
     );
   }
