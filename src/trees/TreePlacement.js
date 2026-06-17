@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeight, getSlope } from "../terrain/terrainSampling.js";
+import { getHeight, getSlope, getWaterLevel } from "../terrain/terrainSampling.js";
 import { hash2i, mulberry32 } from "../utils/random.js";
 import { TAU } from "../utils/math.js";
 import { patchCandidateCount } from "./TreeConfig.js";
@@ -34,6 +34,7 @@ export function generateTreePatchData(gx, gz, cfg, exclusionSystem = null) {
     if (cfg.respectExclusions && (exclusionSystem?.isTreeExcluded?.(x, z) ?? exclusionSystem?.isGrassExcluded?.(x, z))) continue;
 
     const y = getHeight(x, z);
+    if (y < getWaterLevel(x, z)) continue; // below the waterline — submerged, no trees
     if (y > cfg.snowlineMaxHeight) continue; // above the snowline — bare/snow, no trees
     const height = cfg.treeSize.height * (1 + (rng() * 2 - 1) * cfg.variation.height);
     const trunkRadius =

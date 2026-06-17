@@ -15,8 +15,27 @@
 //   visual : material-shader config (hex colors + thresholds) the terrain material
 //            reads to add the snow/scree pixel bands. Plain data — the material does
 //            the THREE.Color conversion, keeping the profile THREE-free.
+//
+// Stage Visual-1 — water lives in the contract too, mirroring snowlineAt:
+//   waterLevelAt(x,z) -> world Y of the glacial water table (-Infinity = dry world).
+//                        A point is submerged where height(x,z) < waterLevelAt(x,z).
+//   wetnessAt(x,z)    -> 0..1 shoreline dampness band just ABOVE the waterline (0 if
+//                        submerged or dry world). Pure terrain-derived mask.
+//   hasWater          : boolean — gates building the derived water surface mesh.
+//   visual.waterlineY : representative scalar water level (-1e6 = none) for UI/debug.
 
 export const GRASS_DENSITY_FLOOR = 0.2; // minimum coverage where grass is allowed at all
+
+// No-water defaults — profiles without a water table (e.g. rolling hills) spread this
+// so the water contract is uniform: waterLevelAt = -Infinity makes every "submerged?"
+// test (`height < waterLevelAt`) false, and the loader skips the water mesh on hasWater.
+export function dryProfileWater() {
+  return {
+    hasWater: false,
+    waterLevelAt: () => -Infinity,
+    wetnessAt: () => 0,
+  };
+}
 
 // Shared meadow mask helper (low-frequency fbm → 0..1) — used by profiles that want
 // patchy meadows. Profiles pass their own scale/offset so masks don't collide.

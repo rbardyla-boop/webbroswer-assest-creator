@@ -12,6 +12,8 @@ import { ColliderSystem } from "../physics/ColliderSystem.js";
 import { WorldObjectManager } from "./WorldObjectManager.js";
 import { validateWorldDocument } from "./WorldValidation.js";
 import { applyLighting } from "../lighting/LightingRig.js";
+import { GlacialWater } from "./water/GlacialWater.js";
+import { ValleyAtmosphere } from "./atmosphere/ValleyAtmosphere.js";
 
 export class WorldRuntimeLoader {
   constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
@@ -22,6 +24,8 @@ export class WorldRuntimeLoader {
     this.assetLibrary = assetLibrary;
     this.animationRuntime = animationRuntime;
     this.terrain = null;
+    this.water = null;
+    this.atmosphere = null;
     this.grass = null;
     this.trees = null;
     this.bushes = null;
@@ -42,8 +46,26 @@ export class WorldRuntimeLoader {
     // material captures the scene fog.
     applyLighting({ lights: this.lights, scene: this.scene }, document.lighting);
 
+    // Capture the lighting-defined base fog before grass is built (Visual-1). The
+    // atmosphere does not change scene.fog here — it only eases from this base each
+    // runtime frame — so grass still captures a coherent fog at construction.
+    this.atmosphere = new ValleyAtmosphere(document.atmosphere);
+    this.atmosphere.applyBase(this.scene);
+
     this.terrain = new Terrain(document.terrain);
     this.scene.add(this.terrain.mesh);
+
+    // Glacial water (Visual-1) — a derived surface mesh. Only built when the active
+    // profile actually has a water table (rolling → none) and the block is enabled,
+    // so we never feed -Infinity water levels into geometry.
+    const profile = getActiveTerrainProfile();
+    if (profile.hasWater && document.water?.enabled !== false) {
+      this.water = new GlacialWater(document.water, {
+        size: document.terrain.size,
+        segments: document.terrain.segments,
+      });
+      this.scene.add(this.water.mesh);
+    }
 
     this.manager = new WorldObjectManager(this.scene, {
       colliderSystem: this.colliderSystem,
@@ -62,15 +84,21 @@ export class WorldRuntimeLoader {
     // The active profile's snowline caps tree/bush placement so vegetation stops
     // below the snow (rolling → Infinity, so no effect). Grass self-limits via
     // canPlaceGrass, which already consults the profile snowline + slope.
-    const snowline = getActiveTerrainProfile().visual?.snowlineY ?? Infinity;
+    const snowline = profile.visual?.snowlineY ?? Infinity;
     this.grass = new GrassSystem(this.scene, this.lights, this.scene.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
     this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees, snowline), this.colliderSystem);
     this.bushes = new BushSystem(this.scene, bushConfigFromDocument(document.bushes, snowline), this.colliderSystem);
+
+    // Grass captured the base fog at construction; hand it to the atmosphere so the
+    // eased fog can be pushed back into the grass shader as the camera moves (runtime).
+    this.atmosphere.attachFogConsumer(this.grass);
 
     return {
       document,
       warnings: this.warnings,
       terrain: this.terrain,
+      water: this.water,
+      atmosphere: this.atmosphere,
       grass: this.grass,
       trees: this.trees,
       bushes: this.bushes,
@@ -100,6 +128,11 @@ export class WorldRuntimeLoader {
 
   dispose() {
     this.animationRuntime?.clear();
+    this.atmosphere?.dispose();
+    if (this.water) {
+      this.scene.remove(this.water.mesh);
+      this.water.dispose();
+    }
     this.grass?.dispose();
     this.trees?.dispose();
     this.bushes?.dispose();
@@ -112,6 +145,8 @@ export class WorldRuntimeLoader {
       this.scene.remove(this.terrain.mesh);
       this.terrain.dispose();
     }
+    this.water = null;
+    this.atmosphere = null;
     this.grass = null;
     this.trees = null;
     this.bushes = null;

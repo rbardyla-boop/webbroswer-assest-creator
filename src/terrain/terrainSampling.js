@@ -76,6 +76,18 @@ export function getGrassDensityFactor(x, z) {
   return activeProfile.grassDensity(x, z);
 }
 
+// Glacial water table Y at (x, z) — delegated to the active profile. A point is
+// submerged where getHeight(x,z) < getWaterLevel(x,z). Returns -Infinity for dry
+// profiles (rolling), so every "submerged?" test is false and consumers stay inert.
+export function getWaterLevel(x, z) {
+  return activeProfile.waterLevelAt(x, z);
+}
+
+// Shoreline dampness (0..1) just above the waterline — for wet-meadow/mist masks.
+export function getWetness(x, z) {
+  return activeProfile.wetnessAt(x, z);
+}
+
 // Find a pleasant spawn: an open, fairly flat, slightly elevated spot near the
 // origin so the player starts with a view across the field rather than in a pit.
 // Reusable for any "place an actor on good ground" need.
@@ -87,6 +99,7 @@ export function findGoodSpawn(radius = 80, samples = 17) {
       const x = (ix / (samples - 1) - 0.5) * 2 * radius;
       const z = (iz / (samples - 1) - 0.5) * 2 * radius;
       const h = getHeight(x, z);
+      if (h < activeProfile.waterLevelAt(x, z)) continue; // never pick a submerged spot
       const slope = getSlope(x, z);
       // Prefer elevation and flatness; mild penalty for distance from origin.
       const score = h - slope * 22 - Math.hypot(x, z) * 0.03;
@@ -103,6 +116,8 @@ export function findGoodSpawn(radius = 80, samples = 17) {
 // combining the profile's slope limit, its snowline (no grass on snow/ice), and the
 // meadow mask. Profile-driven so alpine excludes snow + steep rock automatically.
 export function canPlaceGrass(x, z, rng01) {
+  if (getHeight(x, z) < activeProfile.waterLevelAt(x, z)) return false; // submerged — open water
+
   const slope = getSlope(x, z);
   if (slope > activeProfile.grassSlopeLimit) return false; // too steep — bare rock/scree
 

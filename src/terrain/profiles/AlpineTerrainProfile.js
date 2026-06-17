@@ -40,6 +40,12 @@ const ALPINE_BANDS = {
   screeSlope1: 0.7,
 };
 
+// Glacial water tuning. The valley floor is broad + flat (floorFlat keeps it flat to
+// |x|~35, noise stays within ~2u of floor), so a flat table reads as a shallow
+// braided wetland filling the trough lowline + tarns — NOT a narrow river.
+const WATER_RISE = -1.0; // table sits ~1u below the bare floor → shallow, channel-shaped
+const WET_BAND = 2.0; // shoreline dampness reaches this many world-units above the water
+
 export function createAlpineProfile(config = {}) {
   const amp = clamp(numberOr(config.heightAmplitude, 14) / 14, 0.5, 3); // 14 = baseline → ×1
   const seed = String(config.seed ?? 0);
@@ -63,6 +69,23 @@ export function createAlpineProfile(config = {}) {
     return base + undulate + flow + detail;
   };
 
+  // Glacial water table: a near-flat meltwater sheet a touch below the bare valley
+  // floor, kept parallel to the mean floor by the SAME -z*flow term height() uses.
+  // BARE ALPINE.floor (never *amp): the flat valley floor is lerp(floor, top, wall) =
+  // `floor` at the axis (only the wall TOP scales with amp), so a *amp table would
+  // flood the valley at amp<1 and drain it dry at amp>1. A point is submerged where
+  // height(x,z) < waterLevelAt(x,z); the walls rise far above this so water never
+  // climbs them (no x term needed — dryness emerges from the terrain, not the table).
+  const waterLevelAt = (x, z) => ALPINE.floor - z * ALPINE.flow + WATER_RISE;
+
+  // Shoreline dampness: 1 at the waterline fading to 0 by WET_BAND above it; 0 once
+  // submerged (open water, owned by the water mesh — not "wet ground" for vegetation).
+  const wetnessAt = (x, z) => {
+    const above = height(x, z) - waterLevelAt(x, z);
+    if (above <= 0) return 0;
+    return clamp(1 - smoothstep(0, WET_BAND, above), 0, 1);
+  };
+
   // Snow band thresholds scaled with amplitude — precomputed ONCE (colorAt runs per
   // mesh vertex; building a config object per call would churn the GC at build time).
   const bands = amp === 1
@@ -73,13 +96,18 @@ export function createAlpineProfile(config = {}) {
     id: "alpine",
     params: { heightAmplitude: numberOr(config.heightAmplitude, 14), seed, profile: "alpine" },
     grassSlopeLimit: 0.5,
+    hasWater: true,
     height,
+    waterLevelAt,
+    wetnessAt,
     grassDensity(x, z) {
       // Meadow lives on the valley floor (away from the walls), patchy by fbm.
       const wall = smoothstep(ALPINE.valleyHalfWidth * ALPINE.floorFlat, ALPINE.valleyHalfWidth, Math.abs(x));
       const floorMask = 1 - wall;
       const patch = smoothstep(-0.3, 0.5, fbm2D(x * 0.02 + so, z * 0.02 - 40, 3));
-      return clamp(GRASS_DENSITY_FLOOR + (1 - GRASS_DENSITY_FLOOR) * floorMask * patch, 0, 1);
+      const base = GRASS_DENSITY_FLOOR + (1 - GRASS_DENSITY_FLOOR) * floorMask * patch;
+      // Wet-meadow lift: grass thickens along the damp shoreline band near the water.
+      return clamp(base + 0.15 * wetnessAt(x, z), 0, 1);
     },
     snowlineAt(x, z) {
       return ALPINE.snowline * amp + fbm2D(x * 0.01 + so, z * 0.01, 2) * 6;
@@ -95,6 +123,7 @@ export function createAlpineProfile(config = {}) {
       snowBlend: 9,
       screeSlope: [0.35, 0.7],
       screeY: [18 * amp, ALPINE.snowline * amp],
+      waterlineY: ALPINE.floor + WATER_RISE, // representative scalar (z=0) for UI/debug
     },
   };
 }

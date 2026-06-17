@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeight, getSlope } from "../terrain/terrainSampling.js";
+import { getHeight, getSlope, getWaterLevel } from "../terrain/terrainSampling.js";
 import { hash2i, mulberry32, fbm2D } from "../utils/random.js";
 import { TAU } from "../utils/math.js";
 import { bushCandidateCount } from "./BushConfig.js";
@@ -43,6 +43,7 @@ export function generateBushPatchData(gx, gz, cfg, exclusionSystem = null) {
     if (cfg.respectExclusions && (exclusionSystem?.isTreeExcluded?.(x, z) ?? exclusionSystem?.isGrassExcluded?.(x, z))) continue;
 
     const y = getHeight(x, z);
+    if (y < getWaterLevel(x, z)) continue; // below the waterline — submerged, no bushes
     if (y < cfg.minHeight || y > cfg.maxHeight || y > cfg.snowlineMaxHeight) continue;
 
     const scaleMul = 1 + (rng() * 2 - 1) * cfg.variation.scale;

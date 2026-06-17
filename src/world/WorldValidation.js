@@ -6,6 +6,8 @@ import { sanitizePlacedAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
 import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { sanitizeLighting } from "../lighting/LightingValidation.js";
+import { sanitizeWater } from "./water/WaterValidation.js";
+import { sanitizeAtmosphere } from "./atmosphere/AtmosphereValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
 import { PROFILE_IDS } from "../terrain/profiles/index.js";
@@ -54,6 +56,9 @@ export function validateWorldDocument(input) {
   doc.player.spawn = sanitizeVec3Object(doc.player.spawn, { x: 0, y: 0, z: 0 });
   if (!CAMERA_MODES.has(doc.player.cameraMode)) doc.player.cameraMode = "third";
   doc.lighting = sanitizeLighting(doc.lighting);
+  // Glacial water render block + valley atmosphere modulation (Visual-1).
+  doc.water = sanitizeWater(doc.water);
+  doc.atmosphere = sanitizeAtmosphere(doc.atmosphere);
   doc.visibility = createVisibilityConfig(doc.visibility);
   doc.generators = sanitizeGenerators(doc.generators);
   // Runtime assets (Arsenal v2): recipe-backed placed weapons; each item validated +

@@ -5,6 +5,7 @@
 import { fbm2D } from "../../utils/random.js";
 import { clamp, smoothstep } from "../../utils/math.js";
 import { srgbHexToLinear, bandColorAt } from "../visual/ValleyColorBands.js";
+import { dryProfileWater } from "./TerrainProfile.js";
 
 const ROLLING_DEFAULTS = { heightAmplitude: 14, featureScale: 0.012, detailScale: 0.06, detailAmount: 1.6, octaves: 5 };
 const GRASS_FLOOR = 0.4;
@@ -36,6 +37,7 @@ export function createRollingProfile(config = {}) {
     id: "rolling",
     params: p,
     grassSlopeLimit: 0.55,
+    ...dryProfileWater(), // no water table on rolling hills (waterLevelAt = -Infinity)
     height(x, z) {
       const base = fbm2D(x * p.featureScale, z * p.featureScale, p.octaves);
       const shaped = Math.sign(base) * Math.pow(Math.abs(base), 1.15);
@@ -66,6 +68,7 @@ export function createRollingProfile(config = {}) {
       snowBlend: 1,
       screeSlope: [2, 3],
       screeY: [1e6, 2e6],
+      waterlineY: -1e6, // no water — far below any terrain
     },
   };
 }

@@ -991,3 +991,51 @@ proof renders on); DEV hook `__VISUAL0_DEBUG__` stripped from prod.
 
 **Deferred (non-goals).** Rivers, water simulation, weather, wildlife, settlement gameplay,
 inventory, combat, Arsenal v3. The profile contract is the seam later visual layers extend.
+
+## ADR-024 — Visual-1: Glacial Water & Atmosphere Depth (terrain-authored)
+
+**Decision.** Layer glacial **water** + **atmosphere depth** onto the alpine valley, both
+derived entirely from the active `TerrainProfile` (the Visual-0 seam) — no second terrain
+truth, no texture assets, no weather/ocean/erosion sim. Docs: `docs/VISUAL1_WATER.md`.
+
+**Water lives in the profile contract.** Mirroring `snowlineAt`, a profile now exposes
+`waterLevelAt(x,z)` (glacial water table; `-Infinity` = dry), `wetnessAt(x,z)` (0..1 shoreline
+band), `hasWater`, and `visual.waterlineY`; `dryProfileWater()` is the no-water default rolling
+spreads. `terrainSampling` adds `getWaterLevel`/`getWetness` wrappers. The alpine table is
+`ALPINE.floor − z*flow + WATER_RISE(−1.0)` using the **bare `floor`, never `floor*amp`** — the
+flat valley floor is `lerp(floor, top, wall)`=`floor` at the axis, so a `*amp` table would
+flood/drain the valley off the default amplitude (`waterLevelAt(0,0)` is amplitude-stable at −6,
+asserted by `test:water`). The broad flat floor yields a **shallow braided wetland** (~9–11% of
+the trough submerged, ~2u deep) + tarns, with the ridge walls always dry — the chosen
+"broad glacial wetland" character (not a narrow river).
+
+**One derived surface mesh.** `src/world/water/GlacialWater.js` builds a plane like
+`Terrain._build()`: vertex `Y = getWaterLevel`, per-vertex `aDepth = getWaterLevel − getHeight`.
+`GlacialWaterMaterial` upgrades a **transparent** `MeshStandardMaterial` via `onBeforeCompile`
+(fog/lighting/shadow stay free), **`discard`s where `aDepth ≤ 0`** (so river + lakes + tarns
+fall out of ONE sheet — no River/Lake/Mask sub-systems), with depth tint, fresnel rim,
+`uTime` procedural shimmer (no texture), foam, `depthWrite:false`. The world `water` block is
+RENDER config only; the loader builds the mesh only when `profile.hasWater` (never feeds
+`-Infinity` into geometry).
+
+**Atmosphere = camera-relative fog.** Global linear `THREE.Fog` (volumetric is a non-goal).
+`ValleyAtmosphere.computeValleyFog` (pure, Node-tested) thickens fog in the basin / thins it on
+the ridge and shifts toward a cold mist near water/snowline; the class eases `scene.fog` each
+**runtime** frame (editor keeps the static base so it never fights live lighting edits) and
+re-syncs grass fog via `GrassSystem.syncLighting` only when the eased value moves. Built after
+`applyLighting` (base captured before grass), `attachFogConsumer(grass)` after grass.
+
+**Vegetation + spawn.** `canPlaceGrass` rejects submerged first; trees/bushes get a per-point
+`if (y < getWaterLevel(x,z)) continue;` floor gate (inert on rolling). `resolveSpawn` relocates a
+submerged spawn to `findGoodSpawn()` (now guarded to skip submerged candidates) before grounding —
+the default `{0,0,0}` lands in the trough's deepest pool, so this keeps the player dry without
+floating.
+
+**Verification.** `test:water` (masks/amplitude-stability/derived-mesh agreement/canPlaceGrass),
+`test:atmosphere` (determinism/basin>ridge/never-inverts/mist), `test:visual1` (SwiftShader: water
+shader compiles, water pools, no grass underwater, player not submerged, zero console errors);
+Visual-0 tests + full proof sweep + `qa` green (every alpine world now also builds water +
+atmosphere). DEV hooks `__WATER_DEBUG__`/`__ATMOSPHERE_DEBUG__`/`__VISUAL1_DEBUG__` stripped from prod.
+
+**Deferred (non-goals).** Boats/swimming/fishing, weather cycles, erosion, volumetric/raymarched
+fog, wildlife, combat, inventory, Arsenal v3.

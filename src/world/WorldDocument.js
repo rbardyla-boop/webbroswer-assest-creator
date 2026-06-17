@@ -4,6 +4,8 @@ import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
 import { createBushConfig } from "../bushes/BushConfig.js";
 import { glacialLighting } from "../lighting/GlacialAtmosphere.js";
+import { createWaterConfig } from "./water/WaterConfig.js";
+import { createAtmosphereConfig } from "./atmosphere/AtmosphereConfig.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
@@ -83,6 +85,12 @@ export function createWorldDocument(overrides = {}) {
     },
     // Global lighting rig (sun + hemisphere fill + distance fog).
     lighting: glacialLighting(),
+    // Glacial water RENDER config (Visual-1) — colors/flow/foam only. The water LEVEL
+    // is terrain authority (the profile owns it), so it is intentionally NOT stored here.
+    water: createWaterConfig(),
+    // Valley atmosphere (Visual-1) — how the global fog is modulated by camera position
+    // (thicker in the basin, cold mist near water/snowline). Base fog stays in `lighting`.
+    atmosphere: createAtmosphereConfig(),
     // Guard-banded visibility/streaming policy (Stage 17A).
     visibility: createVisibilityConfig(),
     // Procedural generator instances (Stage 17C) — authoring intent (seed/config);

@@ -11,7 +11,7 @@ import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
 import { Input } from "./core/input.js";
 
-import { findGoodSpawn, getHeight, getActiveTerrainProfile } from "./terrain/terrainSampling.js";
+import { findGoodSpawn, getHeight, getWaterLevel, getActiveTerrainProfile } from "./terrain/terrainSampling.js";
 
 import { ColliderSystem } from "./physics/ColliderSystem.js";
 
@@ -79,10 +79,14 @@ const animationRuntime = runtimeMode ? new AnimationRuntime() : null;
 if (animationRuntime && import.meta.env.DEV) window.__ANIM_RUNTIME__ = animationRuntime;
 let world = null;
 let terrain = null;
+let water = null;
+let atmosphere = null;
 let grass = null;
 let trees = null;
 let bushes = null;
 let objectManager = null;
+// Scratch for the camera's world position (atmosphere fog modulation, runtime only).
+const _atmoCamPos = new THREE.Vector3();
 
 const player = new Player();
 scene.add(player.mesh);
@@ -286,6 +290,36 @@ if (import.meta.env.DEV) {
       groundDelta: Math.abs(player.position.y - groundY),
     };
   };
+  // Dev/test-only: Stage Visual-1 — the glacial water surface + valley atmosphere.
+  // Read-only; called by test:visual1 to prove water is present (alpine) / absent
+  // (rolling), the player is not submerged, and the fog is modulating.
+  window.__WATER_DEBUG__ = () => {
+    if (!water) return { present: false, hasWater: getActiveTerrainProfile().hasWater };
+    const geo = water.mesh.geometry;
+    const aDepth = geo.getAttribute("aDepth");
+    let submergedVerts = 0;
+    for (let i = 0; i < aDepth.count; i++) if (aDepth.getX(i) > 0) submergedVerts++;
+    const px = player.position.x;
+    const pz = player.position.z;
+    return {
+      present: true,
+      triangles: geo.index ? geo.index.count / 3 : aDepth.count / 3,
+      submergedVerts,
+      waterLevelAtPlayer: getWaterLevel(px, pz),
+      playerSubmerged: player.position.y < getWaterLevel(px, pz),
+    };
+  };
+  window.__ATMOSPHERE_DEBUG__ = () => ({
+    present: !!atmosphere,
+    fog: scene.fog ? { near: scene.fog.near, far: scene.fog.far, color: `#${scene.fog.color.getHexString()}` } : null,
+  });
+  window.__VISUAL1_DEBUG__ = () => ({
+    profile: getActiveTerrainProfile().id,
+    waterPresent: !!water,
+    waterlineY: getActiveTerrainProfile().visual?.waterlineY ?? null,
+    grassBlades: grass?.stats?.visibleBlades ?? 0,
+    fogNear: scene.fog?.near ?? null,
+  });
 }
 
 function handleWorldChanged(change = {}) {
@@ -311,6 +345,22 @@ function isAgentAwake(object3D) {
 // platform spawn doesn't pop on the first physics tick. Mirrors PlayerController.
 function groundedSpawnY(spawn) {
   return colliders.getSupportHeight(spawn.x, spawn.z, spawn.y) ?? getHeight(spawn.x, spawn.z);
+}
+
+// Resolve a spawn to DRY, grounded ground. If the authored/default spawn (x,z) sits
+// in open water — the default {0,0,0} lands in the glacial pool at the trough's
+// lowest point — relocate to findGoodSpawn() (which rejects submerged candidates)
+// instead of dropping the player into the water. Never floats: Y is the support
+// surface of the resolved (x,z). No-op for any dry spawn (Visual-0 worlds, rolling).
+function resolveSpawn(spawn) {
+  let x = spawn.x;
+  let z = spawn.z;
+  if (getHeight(x, z) < getWaterLevel(x, z)) {
+    const dry = findGoodSpawn();
+    x = dry.x;
+    z = dry.z;
+  }
+  return { x, y: groundedSpawnY({ x, z, y: spawn.y }), z };
 }
 
 // Register the world's animated objects with the visibility kernel so their per-
@@ -356,6 +406,8 @@ async function applyLoadedWorld(document) {
   world = await worldLoader.load(document);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;
+  water = world.water;
+  atmosphere = world.atmosphere;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -372,9 +424,10 @@ async function applyLoadedWorld(document) {
 
   const spawn = world.document.player.spawn;
   // Ground the player on the support surface at spawn (collider top, else the
-  // terrain single source) so it never starts floating or buried — and so a spawn
-  // saved on a platform doesn't pop. Mirrors PlayerController grounding.
-  player.position.set(spawn.x, groundedSpawnY(spawn), spawn.z);
+  // terrain single source) so it never starts floating, buried, or underwater — and
+  // so a spawn saved on a platform doesn't pop. Mirrors PlayerController grounding.
+  const resolved = resolveSpawn(spawn);
+  player.position.set(resolved.x, resolved.y, resolved.z);
   player.velocityY = 0;
   player.syncMesh();
   setCameraMode(world.document.player.cameraMode);
@@ -488,6 +541,8 @@ async function boot() {
   world = await worldLoader.load(initialDoc);
   for (const warning of world.warnings) console.warn(warning);
   terrain = world.terrain;
+  water = world.water;
+  atmosphere = world.atmosphere;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -502,9 +557,10 @@ async function boot() {
   instancedRenderer?.rebuild(objectManager.objects);
 
   // Start on open, fairly flat ground with a vista across the field — grounded on
-  // the support surface so the player never spawns floating or buried.
+  // the support surface so the player never spawns floating, buried, or underwater.
   const spawn = world.document.player.spawn ?? findGoodSpawn();
-  player.position.set(spawn.x, groundedSpawnY(spawn), spawn.z);
+  const resolved = resolveSpawn(spawn);
+  player.position.set(resolved.x, resolved.y, resolved.z);
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -602,6 +658,7 @@ function frame(now) {
     grass.update(camera, elapsed);
     trees.update(camera);
     bushes?.update(camera);
+    water?.update(elapsed); // animate the glacial surface flow (atmosphere stays at base in the editor)
     placedWeaponRuntime.update(dt, null); // editor: animate all placed weapons (no kernel)
     renderer.render(scene, camera);
     budgetHUD?.update(dt);
@@ -623,6 +680,9 @@ function frame(now) {
   grass.update(camera, elapsed);
   trees.update(camera);
   bushes?.update(camera);
+  water?.update(elapsed); // glacial surface flow
+  camera.getWorldPosition(_atmoCamPos);
+  atmosphere?.update(_atmoCamPos, dt); // ease valley fog by camera position (thicker in basins)
   // Classify visibility tiers first, then let animation sleep asleep mixers.
   visibilityKernel?.update(camera, dt);
   animationRuntime?.update(dt, visibilityKernel ? isAgentAwake : null);

@@ -62,8 +62,9 @@ assert.ok(Math.abs(getSlope(...PT) - alpineSlope) > 1e-6, "slope moved with the 
 assertMeshMatchesSource("rolling");
 
 // Snow gate follows the active profile: an explicit snowcap profile rejects grass.
+// waterLevelAt is part of the profile contract (Visual-1) — a dry one is -Infinity.
 setTerrainProfile({
-  id: "snowcap", params: {}, grassSlopeLimit: 0.5, grassDensity: () => 1,
+  id: "snowcap", params: {}, grassSlopeLimit: 0.5, grassDensity: () => 1, waterLevelAt: () => -Infinity,
   height: () => 99, snowlineAt: () => 40, colorAt: (a, b, c, d, o) => o, visual: { snowlineY: 40 },
 });
 assert.equal(canPlaceGrass(0, 0, 0), false, "no grass above the active snowline");
