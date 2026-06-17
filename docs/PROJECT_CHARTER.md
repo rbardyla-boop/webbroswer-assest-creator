@@ -904,3 +904,45 @@ DEV hooks (`__ARSENAL_DEBUG__`/`__ARSENAL_REROLL__`) stripped from production.
 
 **Deferred (not in v1).** Placing weapons in the world, persistence/inventory, gameplay
 stats, animation (reload/fire). The recipe JSON is the hand-off boundary if those come.
+
+## ADR-022 — Arsenal v2: World Placement, Persistence & Runtime Attachment
+
+**Decision.** Convert the verified recipe-JSON boundary into a world asset system: a
+generated weapon can be placed in the main world, persisted (recipe only, never baked
+geometry), reloaded deterministically, and given runtime/animation hooks — **without**
+combat/inventory or merging the arsenal UI into the world app. Docs: `docs/ARSENAL_WORLD.md`.
+
+**Persistence = a new `runtimeAssets` block** (NOT a new `objects[]` kind), mirroring how
+`generators.instances` persists config rather than geometry. Each item is
+`{ kind:"generated.weapon", id, recipe, transform(euler), runtime }`. `createWorldDocument`
+gains the block; `validateWorldDocument` gains `sanitizeRuntimeAssetsBlock` (caps the list,
+sanitizes each recipe via the arsenal validator, drops invalid); `WorldSerializer` is
+unchanged (the block round-trips automatically). Rotation is stored euler; a quaternion is
+accepted at the boundary and normalized.
+
+**Strict dependency direction (`arsenal recipe → validator → world`).** Extracted the
+reusable, UI-free `WeaponRuntime.buildWeaponFromRecipe` (the workbench's `WeaponGenerator`
+is now a thin shell over it — one recipe→mesh path), `WeaponRecipeValidation.sanitizeWeaponRecipe`
+(the untrusted-input boundary; clamps part count, forces positive dimensions), and
+`WeaponRecipe.recipeHash`. The world imports ONLY these pure modules — never
+`WeaponWorkbench`/`arsenalMain`. `test:arsenal-world` greps `src/world/**` to enforce it;
+`/arsenal.html` stays a separate Vite entry, sharing data via a `localStorage` handoff
+queue (not code).
+
+**Placement = service + handoff drop (no editor click-tool this pass).** `WeaponPlacementTool.placeWeapon`
+grounds a weapon on the terrain via the single `getHeight` source; `PlacedAssetStore` owns
+the block + drains the `arsenal-export-queue` the Lab's "Send to World" writes;
+`PlacedWeaponRuntime` rebuilds every persisted weapon from its recipe on load, adds it to
+the scene, registers it with the visibility kernel, and advances the energy idle-pulse for
+**awake** weapons only. Built in both editor + runtime (visible while authoring + playing).
+Each weapon exposes named anchor markers (`muzzle`/`core`/`equip`/`socket`) for later combat.
+
+**Verification.** `npm run test:arsenal-world` (Node: determinism, validation/clamp,
+`runtimeAssets` round-trip, quaternion→euler, terrain grounding, finite markers, the
+world-imports-no-arsenal-UI grep); `npm run test:arsenal-world-proof` (SwiftShader: a weapon
+renders in the world runtime with markers, survives save→reload, the handoff queue drains,
+zero console errors); v1 `test:arsenal`/`test:arsenal-proof` + `test:world` + `npm run qa`
+green; DEV hook `__ARSENAL_WORLD__` stripped from prod.
+
+**Deferred.** Combat, loot/rarity gameplay, inventory, economy, networking, enemy drops,
+crafting, and an editor click-to-place tool. The recipe JSON remains the hand-off boundary.

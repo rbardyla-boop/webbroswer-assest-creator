@@ -33,6 +33,9 @@ import { AnimationRuntime } from "./animation/AnimationRuntime.js";
 import { InteractionRuntime } from "./interaction/InteractionRuntime.js";
 import { InteractionOverlay } from "./interaction/InteractionOverlay.js";
 import { ParticleRuntime } from "./particles/ParticleRuntime.js";
+import { PlacedWeaponRuntime } from "./world/placement/PlacedWeaponRuntime.js";
+import { PlacedAssetStore } from "./world/assets/PlacedAssetStore.js";
+import { placeWeapon, autoPlacementPoint } from "./world/placement/WeaponPlacementTool.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -99,6 +102,9 @@ if (interactionRuntime && import.meta.env.DEV) window.__INTERACTION_RUNTIME__ = 
 // Runtime-only: data-driven particle/smoke emitters. Loaded from the world's
 // objects after the world is built.
 const particleRuntime = runtimeMode ? new ParticleRuntime({ scene }) : null;
+// Placed generated weapons (Arsenal v2) — rebuilt from recipes on load; present in BOTH
+// editor and runtime so authored weapons are visible while building and while playing.
+const placedWeaponRuntime = new PlacedWeaponRuntime();
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
 // registered agents (currently animated objects) so far/off-screen ones sleep
@@ -147,6 +153,9 @@ if (import.meta.env.DEV) {
   // Dev/test-only: live placed-object count (used by the procedural proof to
   // confirm generated city objects loaded + rendered in the runtime).
   window.__WORLD_DEBUG__ = () => ({ objects: objectManager?.objects.size ?? 0 });
+  // Dev/test-only: placed generated weapons (Arsenal v2) — count + the first weapon's
+  // marker map, for test:arsenal-world-proof.
+  window.__ARSENAL_WORLD__ = () => placedWeaponRuntime.snapshot();
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
   // Scans the live objects once for their declarative layoutRole + interaction role —
   // the player's spawn position, landmark world positions (for a readability proxy),
@@ -298,6 +307,28 @@ function syncVisibilityAgents(document) {
   }
 }
 
+// Drain the Arsenal Lab handoff queue into the document (each weapon grounded near the
+// spawn) and rebuild every persisted runtime-asset weapon from its recipe. Called AFTER
+// syncVisibilityAgents so the weapons' kernel registrations survive the kernel's per-
+// load clear. Built in both editor + runtime (placedWeaponRuntime is mode-agnostic).
+function loadRuntimeAssets(document) {
+  const store = new PlacedAssetStore(document);
+  const spawn = document.player?.spawn ?? { x: 0, z: 0 };
+  // Explicit grid index so a replace-by-id (same weapon re-sent) never reuses a slot.
+  let drainIdx = store.list().length;
+  const dropped = store.drainHandoffQueue((asset) => {
+    const ok = !!placeWeapon(store, asset?.recipe, {
+      ...autoPlacementPoint(spawn, drainIdx),
+      id: asset?.id ?? null,
+      runtime: asset?.runtime ?? null,
+    });
+    if (ok) drainIdx++;
+    return ok;
+  });
+  placedWeaponRuntime.load(document, scene, visibilityKernel);
+  if (dropped > 0) worldSerializer.save(document); // persist freshly-dropped weapons
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -313,6 +344,7 @@ async function applyLoadedWorld(document) {
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
   syncVisibilityAgents(world.document);
+  loadRuntimeAssets(world.document);
   // Batch repeated static primitive objects into instanced draws (runtime only).
   instancedRenderer?.rebuild(objectManager.objects);
 
@@ -440,6 +472,7 @@ async function boot() {
   interactionRuntime?.load(objectManager);
   particleRuntime?.load(objectManager);
   syncVisibilityAgents(world.document);
+  loadRuntimeAssets(world.document);
   // Batch repeated static primitive objects into instanced draws (runtime only).
   instancedRenderer?.rebuild(objectManager.objects);
 
@@ -543,6 +576,7 @@ function frame(now) {
     grass.update(camera, elapsed);
     trees.update(camera);
     bushes?.update(camera);
+    placedWeaponRuntime.update(dt, null); // editor: animate all placed weapons (no kernel)
     renderer.render(scene, camera);
     budgetHUD?.update(dt);
     markWorldReady();
@@ -568,6 +602,7 @@ function frame(now) {
   animationRuntime?.update(dt, visibilityKernel ? isAgentAwake : null);
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
+  placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
 
   renderer.render(scene, camera);
   markWorldReady();
@@ -585,6 +620,7 @@ function frame(now) {
     grounded: player.grounded,
     drawCalls: renderer.info.render.calls,
     depth: reverseDepthStatus,
+    placedWeapons: placedWeaponRuntime.stats,
     visibility: visibilityKernel?.stats,
   });
   budgetHUD?.update(dt);

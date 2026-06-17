@@ -78,6 +78,7 @@ export class DebugPanel {
       `<span style="color:#8fa899">build queue</span>${s.queueLength} (+${s.builtThisFrame}/f)\n` +
       treeLines(trees, k) +
       bushLines(data.bushes, k) +
+      weaponLines(data.placedWeapons) +
       `<span style="color:#8fa899">player xyz </span>${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `<span style="color:#8fa899">grounded   </span>${data.grounded ? "yes" : "airborne"}`;
   }
@@ -85,6 +86,14 @@ export class DebugPanel {
   dispose() {
     this.el.remove();
   }
+}
+
+function weaponLines(w) {
+  if (!w || !w.count) return "";
+  return (
+    `<span style="color:#7fdca0;letter-spacing:.12em">WEAPONS</span>\n` +
+    `<span style="color:#8fa899">placed     </span>${w.count}  (${w.awake} awake / ${w.sleeping} sleep)\n`
+  );
 }
 
 function visibilityLines(v) {

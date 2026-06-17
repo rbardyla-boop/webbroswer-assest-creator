@@ -85,6 +85,10 @@ export function createWorldDocument(overrides = {}) {
     // Procedural generator instances (Stage 17C) — authoring intent (seed/config);
     // the objects they emit live in `objects` like any other placed object.
     generators: { instances: [] },
+    // Runtime assets (Stage 21B / Arsenal v2) — things rebuilt from a RECIPE on every
+    // load (never baked geometry): currently generated weapons. Each item carries
+    // { kind, id, recipe, transform, runtime }.
+    runtimeAssets: { version: 1, items: [] },
     objects: [],
     assets: {
       version: 1,

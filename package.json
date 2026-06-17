@@ -33,6 +33,8 @@
     "test:settlement-layout": "node scripts/browser-settlement-layout-proof.mjs",
     "test:arsenal": "node scripts/arsenal-regression.mjs",
     "test:arsenal-proof": "node scripts/browser-arsenal-proof.mjs",
+    "test:arsenal-world": "node scripts/arsenal-world-regression.mjs",
+    "test:arsenal-world-proof": "node scripts/browser-arsenal-world-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

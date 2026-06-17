@@ -10,6 +10,7 @@ import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
+import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -54,6 +55,9 @@ export function validateWorldDocument(input) {
   doc.lighting = sanitizeLighting(doc.lighting);
   doc.visibility = createVisibilityConfig(doc.visibility);
   doc.generators = sanitizeGenerators(doc.generators);
+  // Runtime assets (Arsenal v2): recipe-backed placed weapons; each item validated +
+  // its recipe sanitized, the list capped (defense in depth).
+  doc.runtimeAssets = sanitizeRuntimeAssetsBlock(doc.runtimeAssets, warnings);
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));

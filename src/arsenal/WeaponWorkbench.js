@@ -7,6 +7,12 @@ import { WeaponGenerator } from "./WeaponGenerator.js";
 import { createWeaponConfig, rollConfig, PARAM_RANGES, WEAPON_TYPES } from "./WeaponConfig.js";
 import { WEAPON_PRESETS } from "./WeaponPresets.js";
 import { hashSeed } from "./WeaponSeed.js";
+import { weaponAssetId } from "./WeaponRecipe.js";
+
+// Cross-entry handoff: /arsenal.html writes world-asset JSON to this localStorage key;
+// the world app drains it on load. Keeps the two entries decoupled (no shared imports).
+const HANDOFF_KEY = "arsenal-export-queue";
+const HANDOFF_MAX = 64;
 
 const PARAM_KEYS = Object.keys(PARAM_RANGES);
 
@@ -74,12 +80,40 @@ export class WeaponWorkbench {
   }
 
   _copyRecipe() {
-    const text = JSON.stringify(this._lastRecipe, null, 2);
+    this._copyText(JSON.stringify(this._lastRecipe, null, 2), "recipe copied");
+  }
+
+  // The world-asset handoff descriptor: kind + deterministic id + recipe + identity
+  // transform (the world grounds it on terrain at placement time).
+  _worldAsset() {
+    return {
+      kind: "generated.weapon",
+      id: weaponAssetId(this._lastRecipe),
+      recipe: this._lastRecipe,
+      transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+    };
+  }
+
+  _sendToWorld() {
+    try {
+      const store = globalThis.localStorage;
+      if (!store) return this._flash("storage unavailable");
+      const queue = JSON.parse(store.getItem(HANDOFF_KEY) ?? "[]");
+      queue.push(this._worldAsset());
+      store.setItem(HANDOFF_KEY, JSON.stringify(queue.slice(-HANDOFF_MAX)));
+      this._flash(`sent to world (${Math.min(queue.length, HANDOFF_MAX)})`);
+    } catch {
+      this._flash("send failed");
+    }
+  }
+
+  _copyWorldAsset() {
+    this._copyText(JSON.stringify(this._worldAsset(), null, 2), "world JSON copied");
+  }
+
+  _copyText(text, okMsg) {
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => this._flash("recipe copied"),
-        () => this._flash("copy blocked")
-      );
+      navigator.clipboard.writeText(text).then(() => this._flash(okMsg), () => this._flash("copy blocked"));
     } else {
       this._flash("clipboard unavailable");
     }
@@ -124,6 +158,14 @@ export class WeaponWorkbench {
     actions.appendChild(this._button("⟳ Randomize", () => this._randomize()));
     actions.appendChild(this._button("Copy recipe", () => this._copyRecipe()));
     this.root.appendChild(actions);
+
+    // World handoff: queue the current weapon for the world app, or copy its world-asset
+    // JSON for manual import. Decoupled — just a recipe + transform, no shared code.
+    const handoff = document.createElement("div");
+    Object.assign(handoff.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" });
+    handoff.appendChild(this._button("→ Send to World", () => this._sendToWorld()));
+    handoff.appendChild(this._button("Copy world JSON", () => this._copyWorldAsset()));
+    this.root.appendChild(handoff);
 
     // Toggles.
     const toggles = document.createElement("div");

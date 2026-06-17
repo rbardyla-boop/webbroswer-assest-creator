@@ -28,14 +28,23 @@
     "src/arsenal/WeaponGeometry.js",
     "src/arsenal/WeaponMaterial.js",
     "src/arsenal/WeaponGenerator.js",
-    "src/arsenal/WeaponWorkbench.js"
+    "src/arsenal/WeaponWorkbench.js",
+    "src/arsenal/WeaponRuntime.js",
+    "src/arsenal/WeaponRecipe.js",
+    "src/arsenal/WeaponRecipeValidation.js",
+    "src/world/assets/RuntimeAssetTypes.js",
+    "src/world/assets/RuntimeAssetRegistry.js",
+    "src/world/assets/PlacedAssetStore.js",
+    "src/world/placement/WeaponPlacementTool.js",
+    "src/world/placement/PlacedWeaponRuntime.js"
   ],
   "docs": [
     "docs/THREEJS_SKILL_ADOPTION.md",
     "docs/ASSET_IMPORT_GATE.md",
     "docs/IMAGE_GENERATION_GATE.md",
     "docs/AUDIO_GENERATION_GATE.md",
-    "docs/ARSENAL_LAB.md"
+    "docs/ARSENAL_LAB.md",
+    "docs/ARSENAL_WORLD.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",
