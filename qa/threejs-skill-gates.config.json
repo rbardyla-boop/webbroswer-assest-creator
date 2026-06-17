@@ -23,6 +23,12 @@
     "src/world/atmosphere/AtmosphereConfig.js",
     "src/world/atmosphere/AtmosphereValidation.js",
     "src/world/atmosphere/ValleyAtmosphere.js",
+    "src/world/wildlife/WildlifeSpecies.js",
+    "src/world/wildlife/WildlifeConfig.js",
+    "src/world/wildlife/WildlifeValidation.js",
+    "src/world/wildlife/WildlifePlacement.js",
+    "src/world/wildlife/WildlifeRuntime.js",
+    "src/world/wildlife/WildlifeSystem.js",
     "src/grass/GrassConfig.js",
     "src/grass/GrassGeometry.js",
     "src/grass/GrassMaterial.js",
@@ -60,7 +66,8 @@
     "docs/ARSENAL_LAB.md",
     "docs/ARSENAL_WORLD.md",
     "docs/VISUAL0_TERRAIN.md",
-    "docs/VISUAL1_WATER.md"
+    "docs/VISUAL1_WATER.md",
+    "docs/WILDLIFE0.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",

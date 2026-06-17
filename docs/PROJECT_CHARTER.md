@@ -1039,3 +1039,54 @@ atmosphere). DEV hooks `__WATER_DEBUG__`/`__ATMOSPHERE_DEBUG__`/`__VISUAL1_DEBUG
 
 **Deferred (non-goals).** Boats/swimming/fishing, weather cycles, erosion, volumetric/raymarched
 fog, wildlife, combat, inventory, Arsenal v3.
+
+## ADR-025 — Wildlife-0: Biome-Aware Ambient Wildlife (the contract hosts a living system)
+
+**Decision.** Prove the math biome contract (Visual-0 + Visual-1) can host a **living runtime
+system**, not just visuals: non-combat ambient animals that spawn, graze/wander, flee the
+viewer, and respect the masks **while moving** — deterministic from seed+region+profile, no
+second terrain/water/nav truth. Docs: `docs/WILDLIFE0.md`. Non-goals: predators/enemies/combat,
+drops, inventory, taming, quests, breeding, hunger, full navmesh, networked wildlife.
+
+**Two grounded species; a third staged.** `src/world/wildlife/WildlifeSpecies.js` (pure data)
+ships `alpine_hare` (meadow floor, skittish) + `ibex` (steeper grazer). A flying `snow_finch`
+flock is present but `enabled:false` — its aloft contract (a second grounding model) is promoted
+in Wildlife-1, keeping this stage's proof focused on the grounded core.
+
+**The same habitat gate at spawn AND every step.** `WildlifePlacement.habitatOK(x,z,species)`
+reads ONLY terrain authority — `getHeight`/`getSlope`/`getWaterLevel` + `getActiveTerrainProfile().
+snowlineAt` (there is no `getSnowline` wrapper) — rejecting submerged / above-snowline / too-steep /
+out-of-band. `WildlifeRuntime.updateAnimal` commits a proposed step ONLY if `habitatOK`, else
+turns; **flee runs the identical gate** (+ ×2 sub-step), so a wandering or fleeing animal can never
+enter water, climb scree, or cross the snowline. Grounded on `getHeight` (the single source), NOT
+`getSupportHeight` (O(colliders); ambient animals don't stand on crates). On rolling (waterLevel
+−∞, snowline +∞) the gate auto-degrades to slope+band.
+
+**Determinism + no persistence of derived state.** The spawn set is a pure function of
+`(seed, rx, rz, profile)` via `mulberry32(hash2i(rx^seed, rz+seed) ^ salt)` (the tree/bush idiom) →
+identical on re-run (twice-equal test). Motion is seeded per-animal (placement `motionSeed`), uses
+zero `Math.random`/`Date.now` (source scan), and is never persisted — only the `wildlife` config
+block (seed + toggles + distances) round-trips, like `lighting`.
+
+**Streaming + instanced render + bounded count.** `WildlifeSystem` mirrors `BushSystem`: region
+grid keyed `rx,rz`, built within `visibleDistance`, dropped beyond `keepDistance` (hysteresis);
+the FSM runs only within `simulateDistance` (LOD; far-active regions render a frozen pose). One
+`THREE.InstancedMesh` per species (`DynamicDrawUsage`, capacity 1024, `count` gates draw). Hard caps
+(`regionMemberCap`, `MAX_INSTANCES_PER_SPECIES 1024`, `MAX_ACTIVE_WILDLIFE 1500`) bound the active
+set; `dispose()` releases each species mesh + clears regions (no reload leak). `load()` is a pure
+no-op when disabled/empty — so it can never throw into the shared console-error gate that every
+consumer proof depends on.
+
+**Wiring.** `wildlife: createWildlifeConfig()` in `WorldDocument`; `sanitizeWildlife` in
+`WorldValidation`; constructed/returned/disposed in `WorldRuntimeLoader` beside the other systems;
+`main.js` reassigns the module var via `applyLoadedWorld`, ticks `wildlife?.update(dt, camera)` in
+both loop sites, prewarms at load, exposes `__WILDLIFE_DEBUG__`.
+
+**Verification.** `test:wildlife` (determinism, spawn legality, bounded, **movement legality —
+2000-step relentless flee never enters water/cliff/snow**, rolling safety, no-Math.random scan);
+`test:wildlife0` (SwiftShader: animals instanced + on terrain, none floating/submerged/above
+snowline, player unaffected, zero console errors); the full regression sweep stays green (every
+alpine world now also builds wildlife). DEV hook stripped from prod.
+
+**Deferred (non-goals).** Predators/enemies/combat, drops, inventory, taming, quests, breeding,
+hunger, full navmesh, networked wildlife, the flying flock (staged disabled → Wildlife-1).

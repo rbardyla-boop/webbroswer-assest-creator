@@ -81,6 +81,7 @@ let world = null;
 let terrain = null;
 let water = null;
 let atmosphere = null;
+let wildlife = null;
 let grass = null;
 let trees = null;
 let bushes = null;
@@ -320,6 +321,10 @@ if (import.meta.env.DEV) {
     grassBlades: grass?.stats?.visibleBlades ?? 0,
     fogNear: scene.fog?.near ?? null,
   });
+  // Dev/test-only: Stage Wildlife-0 — ambient animals + grounded-contract violations.
+  // Read-only; called by test:wildlife0 to prove animals render, sit on the terrain
+  // (not floating/submerged), and stay below the snowline.
+  window.__WILDLIFE_DEBUG__ = () => wildlife?.debugSnapshot() ?? { present: false };
 }
 
 function handleWorldChanged(change = {}) {
@@ -408,6 +413,7 @@ async function applyLoadedWorld(document) {
   terrain = world.terrain;
   water = world.water;
   atmosphere = world.atmosphere;
+  wildlife = world.wildlife;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -434,6 +440,7 @@ async function applyLoadedWorld(document) {
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
   bushes?.prewarm(camera, 200);
+  wildlife?.prewarm(camera);
   updateSun();
   editor?.setWorldContext({
     terrain,
@@ -543,6 +550,7 @@ async function boot() {
   terrain = world.terrain;
   water = world.water;
   atmosphere = world.atmosphere;
+  wildlife = world.wildlife;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -608,6 +616,7 @@ async function boot() {
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
   bushes?.prewarm(camera, 200);
+  wildlife?.prewarm(camera);
   updateSun();
   requestAnimationFrame(frame);
 }
@@ -660,6 +669,7 @@ function frame(now) {
     bushes?.update(camera);
     water?.update(elapsed); // animate the glacial surface flow (atmosphere stays at base in the editor)
     placedWeaponRuntime.update(dt, null); // editor: animate all placed weapons (no kernel)
+    wildlife?.update(dt, camera); // ambient animals graze/wander; flee the editor camera
     renderer.render(scene, camera);
     budgetHUD?.update(dt);
     markWorldReady();
@@ -689,6 +699,7 @@ function frame(now) {
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
+  wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer
 
   renderer.render(scene, camera);
   markWorldReady();

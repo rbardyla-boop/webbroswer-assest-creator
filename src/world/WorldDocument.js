@@ -6,6 +6,7 @@ import { createBushConfig } from "../bushes/BushConfig.js";
 import { glacialLighting } from "../lighting/GlacialAtmosphere.js";
 import { createWaterConfig } from "./water/WaterConfig.js";
 import { createAtmosphereConfig } from "./atmosphere/AtmosphereConfig.js";
+import { createWildlifeConfig } from "./wildlife/WildlifeConfig.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
@@ -91,6 +92,9 @@ export function createWorldDocument(overrides = {}) {
     // Valley atmosphere (Visual-1) — how the global fog is modulated by camera position
     // (thicker in the basin, cold mist near water/snowline). Base fog stays in `lighting`.
     atmosphere: createAtmosphereConfig(),
+    // Ambient wildlife (Wildlife-0) — seed + species toggles + streaming distances. The
+    // herds re-derive deterministically from seed+region+profile; no per-animal persist.
+    wildlife: createWildlifeConfig(),
     // Guard-banded visibility/streaming policy (Stage 17A).
     visibility: createVisibilityConfig(),
     // Procedural generator instances (Stage 17C) — authoring intent (seed/config);

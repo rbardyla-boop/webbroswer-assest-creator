@@ -14,6 +14,7 @@ import { validateWorldDocument } from "./WorldValidation.js";
 import { applyLighting } from "../lighting/LightingRig.js";
 import { GlacialWater } from "./water/GlacialWater.js";
 import { ValleyAtmosphere } from "./atmosphere/ValleyAtmosphere.js";
+import { WildlifeSystem } from "./wildlife/WildlifeSystem.js";
 
 export class WorldRuntimeLoader {
   constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
@@ -29,6 +30,7 @@ export class WorldRuntimeLoader {
     this.grass = null;
     this.trees = null;
     this.bushes = null;
+    this.wildlife = null;
     this.manager = null;
     this.document = null;
     this.warnings = [];
@@ -93,6 +95,11 @@ export class WorldRuntimeLoader {
     // eased fog can be pushed back into the grass shader as the camera moves (runtime).
     this.atmosphere.attachFogConsumer(this.grass);
 
+    // Ambient wildlife (Wildlife-0) — herds re-derive from seed+region+active profile.
+    // Disabled/empty config is a no-op (never mutates the scene).
+    this.wildlife = new WildlifeSystem(this.scene);
+    this.wildlife.load(document, this.scene);
+
     return {
       document,
       warnings: this.warnings,
@@ -102,6 +109,7 @@ export class WorldRuntimeLoader {
       grass: this.grass,
       trees: this.trees,
       bushes: this.bushes,
+      wildlife: this.wildlife,
       objectManager: this.manager,
       colliderSystem: this.colliderSystem,
     };
@@ -128,6 +136,7 @@ export class WorldRuntimeLoader {
 
   dispose() {
     this.animationRuntime?.clear();
+    this.wildlife?.dispose();
     this.atmosphere?.dispose();
     if (this.water) {
       this.scene.remove(this.water.mesh);
@@ -150,6 +159,7 @@ export class WorldRuntimeLoader {
     this.grass = null;
     this.trees = null;
     this.bushes = null;
+    this.wildlife = null;
     this.manager = null;
     this.terrain = null;
   }
