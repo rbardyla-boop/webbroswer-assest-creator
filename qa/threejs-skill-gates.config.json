@@ -21,13 +21,21 @@
     "src/debug/DebugPanel.js",
     "src/editor/ReliefEditor.js",
     "src/utils/math.js",
-    "src/utils/random.js"
+    "src/utils/random.js",
+    "src/arsenal/arsenalMain.js",
+    "src/arsenal/WeaponConfig.js",
+    "src/arsenal/WeaponGrammar.js",
+    "src/arsenal/WeaponGeometry.js",
+    "src/arsenal/WeaponMaterial.js",
+    "src/arsenal/WeaponGenerator.js",
+    "src/arsenal/WeaponWorkbench.js"
   ],
   "docs": [
     "docs/THREEJS_SKILL_ADOPTION.md",
     "docs/ASSET_IMPORT_GATE.md",
     "docs/IMAGE_GENERATION_GATE.md",
-    "docs/AUDIO_GENERATION_GATE.md"
+    "docs/AUDIO_GENERATION_GATE.md",
+    "docs/ARSENAL_LAB.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",

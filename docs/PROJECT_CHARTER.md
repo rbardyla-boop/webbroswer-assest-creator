@@ -865,3 +865,42 @@ visual-proof judgment, documented in the standard — the gate is a floor, not a
 
 **Next.** WFC layout generator (now that "good" is defined), then resume the
 optimization ladder (20B/20D/20C/20E). r169/WebGL stays production.
+
+## ADR-021 — Procedural Arsenal Lab v1 (separate-entry tool)
+
+**Decision.** Lean into the prototype's proven strength — procedural geometry + hand-
+written shaders, zero art assets — with a self-contained tool that emits **infinite
+fictional sci-fi weapon silhouettes from math**, not imported models. It is a live
+browser **workbench** (randomize a seed, pick a base type, tweak sliders, turntable,
+exploded/wireframe/glow, copy the recipe JSON), NOT an inventory/world system. Visual-
+only fictional props; no real firearm engineering. Docs: `docs/ARSENAL_LAB.md`.
+
+**Separate Vite entry (true isolation).** Added `vite.config.js` (first one — the app was
+single-entry) with two inputs, a new `arsenal.html`, and `src/arsenal/arsenalMain.js`
+with its OWN studio scene / lights / camera / loop (NOT the world terrain/grass). Build
+emits both `index.html` and an isolated `arsenal-*.js` chunk; the world app is unchanged.
+The lab reuses only `createRenderer` + `utils/{random,math}` + the established
+`ShaderMaterial`/geometry/dispose patterns.
+
+**Data boundary (grammar → geometry → material → group).** Mirrors the layout→emitter
+split: `WeaponGrammar` is PURE `(config) → recipe` (plain JSON, no THREE, deterministic
+via `mulberry32` — **no `Math.random`**); `WeaponGeometry` turns the recipe into
+`BufferGeometry` parts (headless-safe — geometry builds without a GL context, so the
+determinism test runs in Node); `WeaponMaterial` gives identity (shared alloy
+`MeshStandardMaterial` + a hand-written energy `ShaderMaterial`: Fresnel rim, emissive
+pulse, scanlines, flow); `WeaponGenerator` composes a `Group` and owns teardown. Every
+config field is clamped and every count capped (`ARSENAL_LIMITS`), so a hostile config
+still yields a bounded, finite weapon.
+
+**Silhouette first.** Four base types with strong profile rules so each reads at a glance
+— sidearm (compact), longarm (directional), heavy (massive), exotic (impossible, not a
+gun). Form before detail before shader.
+
+**Verification.** `npm run build` (both entries clean), `npm run test:arsenal` (Node:
+determinism, clamping, ≥1 energy core/type, vertex budget), `npm run test:arsenal-proof`
+(SwiftShader: all 4 types render — sidearm 7 meshes/868 tris, longarm 20/3064, heavy
+26/1828, exotic 24/2428 — deterministic counts, zero console errors), `npm run qa` green.
+DEV hooks (`__ARSENAL_DEBUG__`/`__ARSENAL_REROLL__`) stripped from production.
+
+**Deferred (not in v1).** Placing weapons in the world, persistence/inventory, gameplay
+stats, animation (reload/fire). The recipe JSON is the hand-off boundary if those come.

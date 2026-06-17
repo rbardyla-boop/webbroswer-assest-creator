@@ -31,6 +31,8 @@
     "test:connectors": "node scripts/browser-connectors-proof.mjs",
     "test:budget": "node scripts/browser-budget-proof.mjs",
     "test:settlement-layout": "node scripts/browser-settlement-layout-proof.mjs",
+    "test:arsenal": "node scripts/arsenal-regression.mjs",
+    "test:arsenal-proof": "node scripts/browser-arsenal-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

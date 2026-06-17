@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Arsenal Lab — Procedural Weapon Generator</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f0d; color: #d7e6dc;
+        font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+      #hint { position: fixed; right: 16px; bottom: 14px; z-index: 20; max-width: 280px; padding: 9px 11px;
+        background: rgba(14, 18, 16, 0.82); border: 1px solid rgba(120, 200, 140, 0.22); border-radius: 10px;
+        font-size: 11px; line-height: 1.55; color: #8fa899; backdrop-filter: blur(8px); pointer-events: none; }
+      #hint b { color: #d7e6dc; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hint"><b>Drag</b> orbit · <b>Wheel</b> zoom · panel ← seed, type, sliders, presets</div>
+    <script type="module" src="/src/arsenal/arsenalMain.js"></script>
+  </body>
+</html>
