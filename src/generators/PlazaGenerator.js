@@ -45,7 +45,9 @@ export function generatePlazaLayout(config) {
   const well = { x: cx, z: cz, r: 0.9 };
   // Spawn just outside the entrance (−Z), clear of the prop ring and the well, with the
   // entrance trigger between it and the square — a readable "step in and you see it".
-  const spawn = { x: cx, z: cz - (radius + 2), name: "plaza-spawn" };
+  // Offset (radius + 3.5) keeps the gap to the outermost prop edge above the layout
+  // gate's spawn-clearance radius for every plaza size (worst case ≈ 0.08·radius + 2.75).
+  const spawn = { x: cx, z: cz - (radius + 3.5), name: "plaza-spawn" };
   const sign = { x: cx, z: cz - radius * 0.6, yaw: 0, text: `Plaza - ${style}` };
   // radius ≤ 22 (size-clamped); the interaction validator bounds it to [0.1, 250].
   const trigger = { x: cx, z: cz - radius - 1.5, radius, event: "plaza-enter" };

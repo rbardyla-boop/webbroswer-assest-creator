@@ -155,21 +155,26 @@ async function checkScene(scene) {
   // 1. Round-trip: validation is idempotent (object count + roles preserved).
   const v1 = validateWorldDocument(raw).document;
   const v2 = validateWorldDocument(v1).document;
-  if (v1.objects.length === scene.objects.length && v2.objects.length === v1.objects.length) {
+  const lengthsStable = v1.objects.length === scene.objects.length && v2.objects.length === v1.objects.length;
+  if (lengthsStable) {
     pass(`${tag}: round-trip`, `${v1.objects.length} objects stable`);
+    // Only compare roles index-wise when counts match — otherwise the indices are
+    // misaligned and the comparison is meaningless (the count FAIL already blocks).
+    const rolesPreserved = v1.objects.every((o, i) => o.layoutRole === v2.objects[i].layoutRole);
+    if (rolesPreserved) pass(`${tag}: layoutRole round-trip`);
+    else fail(`${tag}: layoutRole round-trip`, "a layoutRole changed across re-validation");
   } else {
     fail(`${tag}: round-trip`, `emitted ${scene.objects.length} → ${v1.objects.length} → ${v2.objects.length}`);
   }
-  const rolesPreserved = v1.objects.every((o, i) => o.layoutRole === v2.objects[i].layoutRole);
-  if (rolesPreserved) pass(`${tag}: layoutRole round-trip`);
-  else fail(`${tag}: layoutRole round-trip`, "a layoutRole changed across re-validation");
 
-  // 2. Object count under the hard cap.
-  if (v1.objects.length <= GENERATOR_LIMITS.MAX_TOTAL_OBJECTS * scene.instances.length) {
-    pass(`${tag}: object cap`, `${v1.objects.length} objects`);
-  } else {
-    fail(`${tag}: object cap`, `${v1.objects.length} objects`);
-  }
+  // 2. Object count under the hard cap — PER GENERATOR (each emitter caps itself at
+  // MAX_TOTAL_OBJECTS; a scene-wide sum would let one runaway generator hide behind
+  // the others' headroom).
+  const perGen = new Map();
+  for (const o of v1.objects) perGen.set(o.generatorId, (perGen.get(o.generatorId) ?? 0) + 1);
+  const overCap = [...perGen.entries()].filter(([, n]) => n > GENERATOR_LIMITS.MAX_TOTAL_OBJECTS);
+  if (overCap.length === 0) pass(`${tag}: object cap`, `${v1.objects.length} objects, max/gen ${Math.max(0, ...perGen.values())}`);
+  else fail(`${tag}: object cap`, overCap.map(([id, n]) => `${id}=${n}`).join(", "));
 
   // Build the real scene graph headless and gather world boxes.
   const sceneGraph = new THREE.Scene();
@@ -189,12 +194,16 @@ async function checkScene(scene) {
   else fail(`${tag}: valid placements`, `${placement.invalid.length} invalid (${placement.invalid[0]?.reason})`);
 
   // 11. No path runs through a building footprint (beyond a small clip tolerance).
+  // Normalise the overlap by the SMALLER of the two footprints, not the building's:
+  // a thin road fully crossing a wide building covers a tiny fraction of the building
+  // but ~all of its own footprint — so min() makes a full crossing read as ~1.0
+  // regardless of building size (a road merely clipping a corner stays small).
   let through = 0;
   let throughEx = "";
   for (const p of paths) {
     for (const b of buildings) {
       const ov = xzOverlapArea(p, b);
-      if (ov > PATH_OVERLAP_TOL * xzArea(xz(b))) {
+      if (ov > PATH_OVERLAP_TOL * Math.min(xzArea(xz(p)), xzArea(xz(b)))) {
         through++;
         if (!throughEx) throughEx = `${p.name}×${b.name}`;
       }
@@ -218,6 +227,9 @@ async function checkScene(scene) {
   else fail(`${tag}: has landmark`, "no object tagged layoutRole=landmark");
 
   // 8. Each origin-bearing instance has a center (focal landmark/path near its origin).
+  // Filtered by generatorId, so this is PER CLUSTER — in a multi-cluster village it
+  // catches a cluster that lost its focal object even when another still has a landmark
+  // (i.e. strictly stronger than the global "has landmark" count below).
   const anchored = scene.instances.filter((i) => Number.isFinite(i.config?.origin?.x));
   const missingCenter = anchored.filter((i) => {
     const o = i.config.origin;
