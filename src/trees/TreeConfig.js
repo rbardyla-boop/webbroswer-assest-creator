@@ -15,6 +15,9 @@ export function createTreeConfig(overrides = {}) {
     respectExclusions: true,
     trunkCollision: false,
     slopeLimit: 0.34,
+    // Runtime-only snow ceiling: the world loader sets this to the active terrain
+    // profile's snowline so trees stop below the snow. Infinity = no snow (rolling).
+    snowlineMaxHeight: Infinity,
     treeSize: {
       height: 7.5,
       trunkRadius: 0.28,

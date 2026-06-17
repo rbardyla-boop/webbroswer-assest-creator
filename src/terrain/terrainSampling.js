@@ -1,11 +1,19 @@
 // Reusable terrain field. Everything that needs to know "how high / which way /
 // can grass grow here" goes through these pure functions: the terrain mesh,
 // grass placement, and the player's grounding all sample the same source.
+//
+// Stage Visual-0 — this module is now a thin WRAPPER over ONE active TerrainProfile.
+// getHeight/grassDensity delegate to the profile; getNormal/getSlope/findGoodSpawn
+// are built on getHeight so they auto-follow it. Swapping the profile (setTerrain
+// profile, called on world load) swaps the whole world's ground truth — there is no
+// second mesh and no forked sampler. `TERRAIN` stays exported as the rolling defaults
+// the WorldDocument terrain block seeds from.
 
-import { fbm2D } from "../utils/random.js";
-import { clamp, smoothstep } from "../utils/math.js";
+import { clamp } from "../utils/math.js";
+import { createTerrainProfile } from "./profiles/index.js";
 
-// Tunable shape of the world. Kept here so the whole field is reproducible.
+// Rolling-hills defaults — the WorldDocument terrain block reads these as its seed
+// values. The active SHAPE comes from the profile below, not from mutating this.
 export const TERRAIN = {
   heightAmplitude: 14, // peak-to-valley scale in world units
   featureScale: 0.012, // lower = larger, rolling features
@@ -14,17 +22,29 @@ export const TERRAIN = {
   octaves: 5,
 };
 
-// World height at (x, z) in world units. Smooth and deterministic.
-export function getHeight(x, z) {
-  const base = fbm2D(x * TERRAIN.featureScale, z * TERRAIN.featureScale, TERRAIN.octaves);
-  // Bias toward gentle valleys with occasional rises.
-  const shaped = Math.sign(base) * Math.pow(Math.abs(base), 1.15);
-  const detail =
-    fbm2D(x * TERRAIN.detailScale, z * TERRAIN.detailScale, 3) * TERRAIN.detailAmount;
-  return shaped * TERRAIN.heightAmplitude + detail;
+// The single active terrain profile. Defaults to alpine (the world's identity);
+// the world loader replaces it from the document's terrain block on load.
+let activeProfile = createTerrainProfile({});
+
+/** Swap the active terrain profile (whole-world ground-truth switch). */
+export function setTerrainProfile(profile) {
+  if (profile && typeof profile.height === "function") activeProfile = profile;
+  return activeProfile;
 }
 
-// Surface normal via central differences. `eps` trades accuracy for cost.
+/** The active profile — for the mesh/material to read colorAt + visual config. */
+export function getActiveTerrainProfile() {
+  return activeProfile;
+}
+
+// World height at (x, z) in world units. Smooth and deterministic — delegated to
+// the active profile so this is the ONE height source for mesh, placement, grounding.
+export function getHeight(x, z) {
+  return activeProfile.height(x, z);
+}
+
+// Surface normal via central differences over getHeight. `eps` trades accuracy for
+// cost. Profile-agnostic: it only ever calls getHeight, so it follows the profile.
 const _epsDefault = 0.75;
 export function getNormal(x, z, target = { x: 0, y: 1, z: 0 }, eps = _epsDefault) {
   const hL = getHeight(x - eps, z);
@@ -50,13 +70,10 @@ export function getSlope(x, z) {
 }
 const _normalScratch = { x: 0, y: 1, z: 0 };
 
-// A spatially-varying density mask so grass clusters into meadows while keeping
-// a continuous baseline of coverage (no bare gaps). Returns 0..1.
-const GRASS_FLOOR = 0.4; // minimum coverage everywhere grass is allowed
+// Spatially-varying meadow density mask (0..1) — delegated to the active profile so
+// each terrain identity decides where grass clusters.
 export function getGrassDensityFactor(x, z) {
-  const meadow = fbm2D(x * 0.02 + 100, z * 0.02 - 70, 3); // ~[-1,1]
-  const mask = smoothstep(-0.3, 0.5, meadow);
-  return clamp(GRASS_FLOOR + (1 - GRASS_FLOOR) * mask, 0, 1);
+  return activeProfile.grassDensity(x, z);
 }
 
 // Find a pleasant spawn: an open, fairly flat, slightly elevated spot near the
@@ -82,11 +99,14 @@ export function findGoodSpawn(radius = 80, samples = 17) {
   return best;
 }
 
-// Placement rule: should a grass blade be allowed at this point?
-// Reusable predicate combining slope, height band, and the meadow mask.
+// Placement rule: should a grass blade be allowed at this point? Reusable predicate
+// combining the profile's slope limit, its snowline (no grass on snow/ice), and the
+// meadow mask. Profile-driven so alpine excludes snow + steep rock automatically.
 export function canPlaceGrass(x, z, rng01) {
   const slope = getSlope(x, z);
-  if (slope > 0.55) return false; // too steep — bare rock/dirt
+  if (slope > activeProfile.grassSlopeLimit) return false; // too steep — bare rock/scree
+
+  if (getHeight(x, z) > activeProfile.snowlineAt(x, z)) return false; // above snowline — snow/ice
 
   const density = getGrassDensityFactor(x, z);
   if (density <= 0.02) return false;

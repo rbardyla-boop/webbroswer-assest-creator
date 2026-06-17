@@ -20,6 +20,9 @@ export function createBushConfig(overrides = {}) {
     slopeLimit: 0.5, // bushes climb steeper ground than trees
     minHeight: -1e6, // height-band filter (world Y)
     maxHeight: 1e6,
+    // Runtime-only snow ceiling (loader sets it to the profile snowline). Kept
+    // separate from maxHeight so user intent serializes unchanged. Infinity = none.
+    snowlineMaxHeight: Infinity,
     clumpStrength: 0.45, // 0 = uniform; →1 thins bushes outside noise clumps
     clumpScale: 0.06, // spatial frequency of the clump field
     bushSize: { radius: 0.9, height: 0.8 },

@@ -11,7 +11,7 @@ import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
 import { Input } from "./core/input.js";
 
-import { findGoodSpawn } from "./terrain/terrainSampling.js";
+import { findGoodSpawn, getHeight, getActiveTerrainProfile } from "./terrain/terrainSampling.js";
 
 import { ColliderSystem } from "./physics/ColliderSystem.js";
 
@@ -271,6 +271,21 @@ if (import.meta.env.DEV) {
       slopeRock: u.uTerrainSlopeRock?.value ?? null,
     };
   };
+  // Dev/test-only: Stage Visual-0 — the active terrain profile (identity), the
+  // player's grounding against the SINGLE height source, and the snowline. Proves
+  // the world loaded the profile and the player rests on the same field the mesh
+  // and grass sample. Read-only; called by test:visual0.
+  window.__VISUAL0_DEBUG__ = () => {
+    const profile = getActiveTerrainProfile();
+    const groundY = getHeight(player.position.x, player.position.z);
+    return {
+      profile: profile.id,
+      snowlineY: profile.visual?.snowlineY ?? null,
+      player: { x: player.position.x, y: player.position.y, z: player.position.z },
+      groundY,
+      groundDelta: Math.abs(player.position.y - groundY),
+    };
+  };
 }
 
 function handleWorldChanged(change = {}) {
@@ -289,6 +304,13 @@ function handleWorldChanged(change = {}) {
 // Stable predicate (no per-frame allocation) the animation runtime consults.
 function isAgentAwake(object3D) {
   return visibilityKernel ? visibilityKernel.isAwake(object3D) : true;
+}
+
+// Ground a spawn point on its support surface (collider top, else the terrain
+// single source) so the player starts standing — never floating or buried, and a
+// platform spawn doesn't pop on the first physics tick. Mirrors PlayerController.
+function groundedSpawnY(spawn) {
+  return colliders.getSupportHeight(spawn.x, spawn.z, spawn.y) ?? getHeight(spawn.x, spawn.z);
 }
 
 // Register the world's animated objects with the visibility kernel so their per-
@@ -349,7 +371,10 @@ async function applyLoadedWorld(document) {
   instancedRenderer?.rebuild(objectManager.objects);
 
   const spawn = world.document.player.spawn;
-  player.position.set(spawn.x, spawn.y, spawn.z);
+  // Ground the player on the support surface at spawn (collider top, else the
+  // terrain single source) so it never starts floating or buried — and so a spawn
+  // saved on a platform doesn't pop. Mirrors PlayerController grounding.
+  player.position.set(spawn.x, groundedSpawnY(spawn), spawn.z);
   player.velocityY = 0;
   player.syncMesh();
   setCameraMode(world.document.player.cameraMode);
@@ -476,9 +501,10 @@ async function boot() {
   // Batch repeated static primitive objects into instanced draws (runtime only).
   instancedRenderer?.rebuild(objectManager.objects);
 
-  // Start on open, fairly flat ground with a vista across the field.
+  // Start on open, fairly flat ground with a vista across the field — grounded on
+  // the support surface so the player never spawns floating or buried.
   const spawn = world.document.player.spawn ?? findGoodSpawn();
-  player.position.set(spawn.x, spawn.y ?? 0, spawn.z);
+  player.position.set(spawn.x, groundedSpawnY(spawn), spawn.z);
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {

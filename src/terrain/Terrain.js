@@ -10,13 +10,9 @@
 // 13A lighting edits, shadows, and scene fog keep working untouched.
 
 import * as THREE from "three";
-import { getHeight, getSlope } from "./terrainSampling.js";
-import { clamp, smoothstep } from "../utils/math.js";
-
-const COLOR_GRASS = new THREE.Color(0x4f6b34);
-const COLOR_DIRT = new THREE.Color(0x6b5836);
-const COLOR_ROCK = new THREE.Color(0x6a6660);
-const COLOR_LOW = new THREE.Color(0x3c5530); // damp lowland
+import { getHeight, getSlope, getActiveTerrainProfile } from "./terrainSampling.js";
+import { clamp } from "../utils/math.js";
+import { snowScreeUniforms, SNOW_SCREE_FRAG_HEAD, SNOW_SCREE_FRAG_BODY } from "./visual/SnowRockDirtBlend.js";
 
 // Material-v2 defaults. Every field is a 0..1 intensity except macroScale (a
 // world-space frequency). Conservative so the ground reads richer, not noisy.
@@ -54,7 +50,10 @@ export class Terrain {
 
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const c = new THREE.Color();
+    // The active terrain profile owns BOTH the height (single source) and the band
+    // colors — so the mesh, grass placement, and grounding all agree by construction.
+    const profile = getActiveTerrainProfile();
+    const rgb = [0, 0, 0];
 
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -63,17 +62,13 @@ export class Terrain {
       pos.setY(i, h);
 
       const slope = getSlope(x, z);
-      // Blend ground color by height band, then push toward rock on steep slope.
-      const lowT = smoothstep(-8, 2, h);
-      c.copy(COLOR_LOW).lerp(COLOR_GRASS, lowT);
-      c.lerp(COLOR_DIRT, smoothstep(0.18, 0.4, slope));
-      c.lerp(COLOR_ROCK, smoothstep(0.42, 0.62, slope));
+      profile.colorAt(x, z, h, slope, rgb); // linear [r,g,b] band color for this profile
 
       // Subtle per-vertex value variation for life.
       const v = 0.92 + 0.16 * fract(Math.sin((x * 12.9 + z * 78.2)) * 43758.5);
-      colors[i * 3 + 0] = clamp(c.r * v, 0, 1);
-      colors[i * 3 + 1] = clamp(c.g * v, 0, 1);
-      colors[i * 3 + 2] = clamp(c.b * v, 0, 1);
+      colors[i * 3 + 0] = clamp(rgb[0] * v, 0, 1);
+      colors[i * 3 + 1] = clamp(rgb[1] * v, 0, 1);
+      colors[i * 3 + 2] = clamp(rgb[2] * v, 0, 1);
     }
 
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -84,7 +79,7 @@ export class Terrain {
       roughness: 0.95,
       metalness: 0.0,
     });
-    this._applyMaterialUpgrade(mat);
+    this._applyMaterialUpgrade(mat, profile);
 
     const mesh = new THREE.Mesh(geo, mat);
     mesh.name = "Terrain";
@@ -99,17 +94,20 @@ export class Terrain {
   // reference into shader.uniforms) so live editor edits mutate `.value` WITHOUT
   // a recompile. The injected source is identical every compile, so Three.js can
   // recompile freely (e.g. when fog toggles) without a feedback loop.
-  _applyMaterialUpgrade(mat) {
+  _applyMaterialUpgrade(mat, profile = getActiveTerrainProfile()) {
     const s = this.materialSettings;
+    const visual = profile.visual;
     const uniforms = {
       uTerrainMacroIntensity: { value: s.macroIntensity },
       uTerrainMacroScale: { value: s.macroScale },
       uTerrainSlopeRock: { value: s.slopeRock },
       uTerrainHeightTint: { value: s.heightTint },
       uTerrainDetailIntensity: { value: s.detailIntensity },
-      // Rock tint target is intentionally fixed (matches the baked vertex rock
-      // band) — not a live setting, so syncMaterial/getMaterialSettings omit it.
-      uTerrainRockColor: { value: COLOR_ROCK.clone() },
+      // Rock tint target comes from the active profile (matches its baked vertex
+      // rock band) — identity, not a live setting, so syncMaterial omits it.
+      uTerrainRockColor: { value: new THREE.Color(visual.rockColor) },
+      // Snow/scree bands (profile identity) — set once at build.
+      ...snowScreeUniforms(visual),
     };
     this._uniforms = uniforms;
 
@@ -136,14 +134,19 @@ export class Terrain {
           "#include <begin_vertex>\nvTerrainWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;"
         );
 
+      // Macro/rock/height body first, then snow + scree bands on top (snow wins where
+      // it lands). Both reuse the vTerrainWPos/vTerrainNrm varyings declared above.
       shader.fragmentShader = shader.fragmentShader
-        .replace("#include <common>", `#include <common>\n${TERRAIN_FRAG_HEAD}`)
-        .replace("#include <color_fragment>", `#include <color_fragment>\n${TERRAIN_FRAG_BODY}`);
+        .replace("#include <common>", `#include <common>\n${TERRAIN_FRAG_HEAD}\n${SNOW_SCREE_FRAG_HEAD}`)
+        .replace(
+          "#include <color_fragment>",
+          `#include <color_fragment>\n${TERRAIN_FRAG_BODY}\n${SNOW_SCREE_FRAG_BODY}`
+        );
     };
 
     // Give the upgraded material its own program-cache identity so it can never
     // collide with a vanilla MeshStandardMaterial in the renderer's cache.
-    mat.customProgramCacheKey = () => "terrain-material-v2";
+    mat.customProgramCacheKey = () => "terrain-material-v2-glacial";
   }
 
   // Live editor tuning: clamp, merge, push values into the shared uniforms. No

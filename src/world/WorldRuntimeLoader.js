@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Terrain } from "../terrain/Terrain.js";
-import { TERRAIN } from "../terrain/terrainSampling.js";
+import { TERRAIN, setTerrainProfile, getActiveTerrainProfile } from "../terrain/terrainSampling.js";
+import { createTerrainProfile } from "../terrain/profiles/index.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { GrassSystem } from "../grass/GrassSystem.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
@@ -58,9 +59,13 @@ export class WorldRuntimeLoader {
 
     // Use the live scene fog (applyLighting may have replaced/removed it) so the
     // grass material captures the world's actual fog, not a stale reference.
+    // The active profile's snowline caps tree/bush placement so vegetation stops
+    // below the snow (rolling → Infinity, so no effect). Grass self-limits via
+    // canPlaceGrass, which already consults the profile snowline + slope.
+    const snowline = getActiveTerrainProfile().visual?.snowlineY ?? Infinity;
     this.grass = new GrassSystem(this.scene, this.lights, this.scene.fog, grassConfigFromDocument(document.grass), this.colliderSystem);
-    this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees), this.colliderSystem);
-    this.bushes = new BushSystem(this.scene, bushConfigFromDocument(document.bushes), this.colliderSystem);
+    this.trees = new TreeSystem(this.scene, treeConfigFromDocument(document.trees, snowline), this.colliderSystem);
+    this.bushes = new BushSystem(this.scene, bushConfigFromDocument(document.bushes, snowline), this.colliderSystem);
 
     return {
       document,
@@ -116,10 +121,19 @@ export class WorldRuntimeLoader {
 }
 
 export function applyTerrainSettings(settings = {}) {
+  // Keep the legacy TERRAIN defaults in sync (editor terrain sliders read/write
+  // these and serialize-back reads them to capture in-editor terrain edits).
   TERRAIN.heightAmplitude = settings.heightAmplitude ?? TERRAIN.heightAmplitude;
   TERRAIN.featureScale = settings.featureScale ?? TERRAIN.featureScale;
   TERRAIN.detailScale = settings.detailScale ?? TERRAIN.detailScale;
   TERRAIN.detailAmount = settings.detailAmount ?? TERRAIN.detailAmount;
+
+  // Swap the active terrain profile — the whole-world ground-truth switch. The
+  // document carries `profile`; an editor "Apply Terrain" (sliders only) keeps the
+  // current profile id and merges its params so the seed/identity isn't reset.
+  const base = getActiveTerrainProfile().params ?? {};
+  const profile = settings.profile ?? getActiveTerrainProfile().id;
+  setTerrainProfile(createTerrainProfile({ ...base, ...settings, profile }));
 }
 
 function grassConfigFromDocument(grass = {}) {
@@ -141,7 +155,7 @@ function grassConfigFromDocument(grass = {}) {
   });
 }
 
-function treeConfigFromDocument(trees = {}) {
+function treeConfigFromDocument(trees = {}, snowlineMaxHeight = Infinity) {
   return createTreeConfig({
     enabled: trees.enabled,
     density: trees.density,
@@ -150,10 +164,11 @@ function treeConfigFromDocument(trees = {}) {
     keepDistance: trees.keepDistance,
     seed: trees.seed,
     respectExclusions: trees.respectExclusions,
+    snowlineMaxHeight, // runtime-only snow ceiling (not serialized)
   });
 }
 
-function bushConfigFromDocument(bushes = {}) {
+function bushConfigFromDocument(bushes = {}, snowlineMaxHeight = Infinity) {
   return createBushConfig({
     enabled: bushes.enabled,
     density: bushes.density,
@@ -167,6 +182,7 @@ function bushConfigFromDocument(bushes = {}) {
     clumpScale: bushes.clumpScale,
     minHeight: bushes.minHeight,
     maxHeight: bushes.maxHeight,
+    snowlineMaxHeight, // runtime-only snow ceiling (not serialized)
   });
 }
 

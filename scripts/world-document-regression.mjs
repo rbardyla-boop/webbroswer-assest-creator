@@ -1848,7 +1848,7 @@ assert.equal(terrPack.world.terrain.material.macroScale, 0.2);
 const terr = new Terrain({ size: 40, segments: 8, material: { macroIntensity: 0.6, slopeRock: 0.4 } });
 const tmat = terr.mesh.material;
 assert.equal(typeof tmat.onBeforeCompile, "function", "onBeforeCompile injected");
-assert.equal(tmat.customProgramCacheKey(), "terrain-material-v2", "own program-cache identity");
+assert.equal(tmat.customProgramCacheKey(), "terrain-material-v2-glacial", "own program-cache identity");
 assert.equal(tmat.vertexColors, true, "vertex colors remain the base signal");
 assert.equal(tmat.fog, true, "material fog stays on so scene fog applies");
 assert.equal(terr.mesh.receiveShadow, true, "terrain still receives shadows");

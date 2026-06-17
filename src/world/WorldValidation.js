@@ -8,6 +8,7 @@ import { sanitizeInteraction } from "../interaction/InteractionValidation.js";
 import { sanitizeLighting } from "../lighting/LightingValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
+import { PROFILE_IDS } from "../terrain/profiles/index.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
@@ -61,10 +62,13 @@ export function validateWorldDocument(input) {
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));
+  doc.terrain.seed = Math.floor(numberOr(doc.terrain.seed, 0)); // defense in depth (profile seed)
   doc.terrain.heightAmplitude = numberOr(doc.terrain.heightAmplitude, 14);
   doc.terrain.featureScale = positiveNumber(doc.terrain.featureScale, 0.012);
   doc.terrain.detailScale = positiveNumber(doc.terrain.detailScale, 0.06);
   doc.terrain.detailAmount = numberOr(doc.terrain.detailAmount, 1.6);
+  // Terrain profile (identity) — allow-list to the known profiles; default alpine.
+  doc.terrain.profile = PROFILE_IDS.includes(doc.terrain.profile) ? doc.terrain.profile : "alpine";
   doc.terrain.material = sanitizeTerrainMaterial(doc.terrain.material);
 
   doc.grass.enabled = doc.grass.enabled !== false;

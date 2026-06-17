@@ -3,12 +3,13 @@
 //
 // The slice is built programmatically into the WorldDocument v2 shape: each kit
 // is expanded (via the prefab serializer) at a terrain-snapped placement, so
-// every part is grounded and carries its prefabRef. Sampling uses the document's
-// own terrain settings (applied to the shared TERRAIN state before snapping) so
-// baked Y values match what the runtime loader applies on load.
+// every part is grounded and carries its prefabRef. Baking activates the same
+// terrain profile the runtime loader will apply for this document, so baked Y
+// values match the loaded world.
 
 import { createWorldDocument } from "../WorldDocument.js";
-import { getHeight, findGoodSpawn, TERRAIN } from "../../terrain/terrainSampling.js";
+import { getHeight, findGoodSpawn, setTerrainProfile } from "../../terrain/terrainSampling.js";
+import { createTerrainProfile } from "../../terrain/profiles/index.js";
 import { createBuiltinPrefabs } from "../../prefabs/BuiltinKits.js";
 import { worldObjectsFromPrefab } from "../../prefabs/PrefabSerializer.js";
 
@@ -32,11 +33,10 @@ export function buildVerticalSliceV1() {
     terrain: { ...SLICE_TERRAIN },
   });
 
-  // Snap sampling to the slice's terrain before baking heights.
-  TERRAIN.heightAmplitude = SLICE_TERRAIN.heightAmplitude;
-  TERRAIN.featureScale = SLICE_TERRAIN.featureScale;
-  TERRAIN.detailScale = SLICE_TERRAIN.detailScale;
-  TERRAIN.detailAmount = SLICE_TERRAIN.detailAmount;
+  // Activate the document's terrain profile before baking so getHeight() samples
+  // the SAME field the runtime loader will apply on load (otherwise a previously
+  // loaded world's profile would bake mismatched Y values).
+  setTerrainProfile(createTerrainProfile(doc.terrain));
 
   const kits = new Map(createBuiltinPrefabs().map((p) => [p.id, p]));
   const base = findGoodSpawn(); // flat, open ground near the origin

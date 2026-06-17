@@ -946,3 +946,48 @@ green; DEV hook `__ARSENAL_WORLD__` stripped from prod.
 
 **Deferred.** Combat, loot/rarity gameplay, inventory, economy, networking, enemy drops,
 crafting, and an editor click-to-place tool. The recipe JSON remains the hand-off boundary.
+
+## ADR-023 — Visual-0: Glacial Valley Visual Layer (single terrain source, profile-backed)
+
+**Decision.** Establish the visual-world pipeline correctly *before* adding water/weather/
+wildlife: make `terrainSampling.js` a thin **wrapper over ONE active `TerrainProfile`** and
+give the world a glacial/alpine identity from MATH (no texture assets). The goal is the
+architecture — a single, swappable ground truth feeding the mesh, placement, and grounding —
+not "a pretty valley." Docs: `docs/VISUAL0_TERRAIN.md`.
+
+**Single source, profile-backed.** A `TerrainProfile` is pure, deterministic, seeded math
+(Node-safe, no THREE): `height(x,z)`, `grassDensity`, `snowlineAt`, `grassSlopeLimit`,
+`colorAt` (linear RGB band color), and `visual` (material snow/scree config). `terrainSampling`
+holds `activeProfile` + `setTerrainProfile`/`getActiveTerrainProfile`; `getHeight`/`grassDensity`
+delegate, and `getNormal`/`getSlope`/`findGoodSpawn` are unchanged (built on `getHeight`, so they
+auto-follow the profile). **Every export is preserved** — all 22 consumers / ~70 call sites are
+untouched. No second terrain mesh, no forked sampler. The `terrain-single-source` test builds the
+real mesh headless and proves each vertex `Y === getHeight`, `getSlope == ∂getHeight`, and that one
+`setTerrainProfile` moves all of them.
+
+**Alpine everywhere.** `AlpineTerrainProfile` (a U-shaped glacial trough with ridged-multifractal
+walls, domain warp, a snowline, rock/scree slope masks, and a valley-floor meadow mask) is the
+default for every world; `RollingProfile` preserves the original hills math **verbatim** (a test
+asserts height-for-height parity) and stays selectable via a persisted `terrain.profile` field
+(default `"alpine"`, allow-listed in validation). Visual identity comes from `visual/ValleyColorBands`
+(THREE-free vertex band colors, shared by `colorAt` + the mesh) and `visual/SnowRockDirtBlend` (the
+snow/scree GLSL appended after the existing material-v2 `onBeforeCompile` body; rolling's snowlineY
+is far above terrain → the material behaves exactly as before). Default lighting becomes
+`lighting/GlacialAtmosphere.glacialLighting()` (cool sun/sky + denser blue fog reaching further),
+applied through the unchanged `LightingRig`.
+
+**Placement adaptation.** Grass self-limits in `canPlaceGrass` (profile slope limit + snowline).
+Trees/bushes gain a **runtime-only** `snowlineMaxHeight` cap (set by the loader to the profile
+snowline; `Infinity` for rolling) — kept separate from the user's `maxHeight` so intent serializes
+unchanged. `WorldRuntimeLoader.applyTerrainSettings` now also swaps the profile (the whole-world
+ground-truth switch), preserving the current profile id + params when the editor applies sliders.
+
+**Verification.** `npm run test:terrain-profile` (determinism + rolling parity + alpine masks),
+`npm run test:terrain-source` (mesh==getHeight, slope==∂getHeight, one-swap-moves-all),
+`npm run test:visual0` (SwiftShader: alpine profile loads, player grounded on the single source,
+snow/scree shader compiles with zero console errors, glacial fog applied, grass renders);
+`test:world` + the full proof sweep + `npm run qa` green (alpine is now the default terrain every
+proof renders on); DEV hook `__VISUAL0_DEBUG__` stripped from prod.
+
+**Deferred (non-goals).** Rivers, water simulation, weather, wildlife, settlement gameplay,
+inventory, combat, Arsenal v3. The profile contract is the seam later visual layers extend.

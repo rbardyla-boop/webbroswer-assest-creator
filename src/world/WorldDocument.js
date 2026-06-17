@@ -3,7 +3,7 @@ import { DEFAULT_TERRAIN_MATERIAL } from "../terrain/Terrain.js";
 import { createGrassConfig } from "../grass/GrassConfig.js";
 import { createTreeConfig } from "../trees/TreeConfig.js";
 import { createBushConfig } from "../bushes/BushConfig.js";
-import { defaultLighting } from "../lighting/LightingTypes.js";
+import { glacialLighting } from "../lighting/GlacialAtmosphere.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
@@ -33,6 +33,9 @@ export function createWorldDocument(overrides = {}) {
       featureScale: TERRAIN.featureScale,
       detailScale: TERRAIN.detailScale,
       detailAmount: TERRAIN.detailAmount,
+      // Terrain identity. Alpine (glacial valley) is the default everywhere; "rolling"
+      // selects the legacy hills. Drives the profile that owns getHeight + colors.
+      profile: "alpine",
       // Material v2 (macro noise + height/slope layering over the vertex colors).
       material: { ...DEFAULT_TERRAIN_MATERIAL },
     },
@@ -79,7 +82,7 @@ export function createWorldDocument(overrides = {}) {
       cameraMode: "third",
     },
     // Global lighting rig (sun + hemisphere fill + distance fog).
-    lighting: defaultLighting(),
+    lighting: glacialLighting(),
     // Guard-banded visibility/streaming policy (Stage 17A).
     visibility: createVisibilityConfig(),
     // Procedural generator instances (Stage 17C) — authoring intent (seed/config);

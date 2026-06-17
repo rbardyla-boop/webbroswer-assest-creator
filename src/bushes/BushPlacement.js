@@ -43,7 +43,7 @@ export function generateBushPatchData(gx, gz, cfg, exclusionSystem = null) {
     if (cfg.respectExclusions && (exclusionSystem?.isTreeExcluded?.(x, z) ?? exclusionSystem?.isGrassExcluded?.(x, z))) continue;
 
     const y = getHeight(x, z);
-    if (y < cfg.minHeight || y > cfg.maxHeight) continue;
+    if (y < cfg.minHeight || y > cfg.maxHeight || y > cfg.snowlineMaxHeight) continue;
 
     const scaleMul = 1 + (rng() * 2 - 1) * cfg.variation.scale;
     const radius = cfg.bushSize.radius * scaleMul;

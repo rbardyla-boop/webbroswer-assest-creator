@@ -9,6 +9,13 @@
     "src/core/lights.js",
     "src/terrain/Terrain.js",
     "src/terrain/terrainSampling.js",
+    "src/terrain/profiles/TerrainProfile.js",
+    "src/terrain/profiles/RollingProfile.js",
+    "src/terrain/profiles/AlpineTerrainProfile.js",
+    "src/terrain/profiles/index.js",
+    "src/terrain/visual/ValleyColorBands.js",
+    "src/terrain/visual/SnowRockDirtBlend.js",
+    "src/lighting/GlacialAtmosphere.js",
     "src/grass/GrassConfig.js",
     "src/grass/GrassGeometry.js",
     "src/grass/GrassMaterial.js",
@@ -44,7 +51,8 @@
     "docs/IMAGE_GENERATION_GATE.md",
     "docs/AUDIO_GENERATION_GATE.md",
     "docs/ARSENAL_LAB.md",
-    "docs/ARSENAL_WORLD.md"
+    "docs/ARSENAL_WORLD.md",
+    "docs/VISUAL0_TERRAIN.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",
