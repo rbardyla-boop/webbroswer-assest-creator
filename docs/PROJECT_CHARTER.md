@@ -1194,3 +1194,53 @@ fixed + re-verified.
 
 **Non-goals.** No new species/behavior, no Family-B adoption, no centralizing `0.7072` into
 Family B, no "fixing" the raw-centre sim/render metric, no ECS migration, no Arsenal v3.
+
+## ADR-028 — Ambient-0: Streamed Environmental Micro-Actors (the third RegionStreamer consumer)
+
+**Decision.** Prove the Wildlife-2 `RegionStreamer` extraction generalizes by adding a THIRD streamed
+runtime actor class — `alpine_motes`, tiny firefly-like glowing specks that drift over the glacial
+valley's wet meadow + waterside — **with zero changes to the streamer** and **no change to wildlife
+behavior**. Also the first runtime consumer of `getWetness` (the Visual-1 shoreline-dampness signal
+nothing had used). A small, visually-additive feature, not a refactor. Docs: `docs/AMBIENT0.md`. User
+picks: firefly-glow look (additive, depthWrite off); wet-meadow & waterside habitat.
+
+**The streamer is REUSED, never copied or mutated.** `AmbientSystem` constructs its OWN `RegionStreamer`
+instance with its OWN budget (`MAX_ACTIVE_MOTES`), `buildRegion`/`countItems`(=`region.motes.length`)/
+distance getters, aliases `this.regions = streamer.regions`, keeps its own raw-centre sim/render gate —
+exactly as `WildlifeSystem`/`AloftWildlife` do. No method/field added to `RegionStreamer`/`RegionMetrics`/
+`RegionKey`. A `test:ambient` source-scan asserts `src/world/ambient/` re-implements no region-streaming
+math and imports `RegionStreamer` (GOTCHA: the scan false-matched its OWN header comment listing the
+tokens — reworded the comment, same prose-in-comment class as the Wildlife-0 Math.random scan).
+
+**Biome-aware density (first getWetness consumer).** `densityAt = clamp01(wetWeight*getWetness +
+meadowWeight*getGrassDensityFactor) * snowFactor`, `snowFactor = isFinite(snow) ? clamp01((snow−h)/
+snowFalloff) : 1`; accept on `rng() < densityAt` (the grass probabilistic-thinning idiom). Motes
+concentrate on the wet meadow/shoreline, thin to 0 at the snowline, auto-degrade on rolling (wetness 0,
+snowline +∞ → meadow-only). Proven: 971 motes / 439 on wet ground; placed-mean density ≫ uniform baseline.
+
+**Bounded drift + hover = copied flock discipline.** `updateMote`: dt clamped FIRST, velocity = wind +
+seeded `fbm2D` wander clamped to maxSpeed, per-step displacement capped (MAX_STEP), position
+hard-projected back inside `tetherRadius` of home every step, non-finite → snap home, scatter heading-only
+(NaN-threat-safe). Twinkle = `sizeBase*(1 + amp*sin(phase))` with `amp<1` (factor ∈ (0,2), never collapses
+to 0). `solveHoverY` = the flock floor-after-band solver (`max(getHeight+hoverOffset, getHeight+minClearance,
+isFinite(water)?water+minClearance:-∞)`) → mote contract ⊂ proven bird contract (never below ground/water,
+incl. the trough where the alpine water table sits above terrain). Render finite-guards pos AND scale
+before `setMatrixAt` (motes write a per-instance scale unlike birds).
+
+**Render + wiring.** One `InstancedMesh` of a tiny `OctahedronGeometry` + `MeshBasicMaterial` (self-lit
+firefly glow: AdditiveBlending, transparent, depthWrite:false, fog:true, no shadows); `mesh.count` gates
+draw; caps `MAX_ACTIVE_MOTES 2000`/`MAX_INSTANCES 4096`. Wiring mirrors wildlife one-for-one (one `ambient`
+handle: `WorldDocument`/`WorldValidation` +1 each, `WorldRuntimeLoader` construct/return/dispose, `main.js`
+tick-after-wildlife/prewarm/`__AMBIENT_DEBUG__`); `updateDocumentFromRuntime` untouched (config+seed
+round-trip like lighting/wildlife). Family-B (grass/bush/tree) untouched.
+
+**Verification.** `test:ambient` (determinism, biome bias with a non-trivial-baseline guard, hover above
+terrain+water incl. trough, 5000-step hostile sim with absurd wind + NaN threat + a dt=1e6 frame,
+rolling-safe, streamer-reused + no-Math.random scans); `test:ambient0` (SwiftShader: motes instanced +
+on-band + none below ground/water/above snowline, **grounded + flock wildlife counters UNCHANGED in the
+same scene**, player unaffected, zero console errors); full sweep with wildlife (435/32) + flock (72/783)
++ streamer counts byte-identical; build + qa 32/0/0. Fresh-context adversarial review: APPROVE, 0 crit /
+0 high; its MEDIUM (genuinely-finite hover fallback) + LOW (uniform-baseline assertion) fixed + re-verified.
+
+**Non-goals.** No weather system, no particle editor, no combat/projectiles/status/inventory/loot, no
+flock-behavior changes, no Family-B streamer extraction, no `RegionStreamer` mutation, no Arsenal v3.

@@ -7,6 +7,7 @@ import { glacialLighting } from "../lighting/GlacialAtmosphere.js";
 import { createWaterConfig } from "./water/WaterConfig.js";
 import { createAtmosphereConfig } from "./atmosphere/AtmosphereConfig.js";
 import { createWildlifeConfig } from "./wildlife/WildlifeConfig.js";
+import { createAmbientConfig } from "./ambient/AmbientConfig.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
@@ -95,6 +96,9 @@ export function createWorldDocument(overrides = {}) {
     // Ambient wildlife (Wildlife-0) — seed + species toggles + streaming distances. The
     // herds re-derive deterministically from seed+region+profile; no per-animal persist.
     wildlife: createWildlifeConfig(),
+    // Streamed environmental micro-actors (Ambient-0) — firefly-like motes; re-derive
+    // deterministically from seed+region+profile (third RegionStreamer consumer).
+    ambient: createAmbientConfig(),
     // Guard-banded visibility/streaming policy (Stage 17A).
     visibility: createVisibilityConfig(),
     // Procedural generator instances (Stage 17C) — authoring intent (seed/config);

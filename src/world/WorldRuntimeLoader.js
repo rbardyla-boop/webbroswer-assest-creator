@@ -15,6 +15,7 @@ import { applyLighting } from "../lighting/LightingRig.js";
 import { GlacialWater } from "./water/GlacialWater.js";
 import { ValleyAtmosphere } from "./atmosphere/ValleyAtmosphere.js";
 import { WildlifeSystem } from "./wildlife/WildlifeSystem.js";
+import { AmbientSystem } from "./ambient/AmbientSystem.js";
 
 export class WorldRuntimeLoader {
   constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
@@ -31,6 +32,7 @@ export class WorldRuntimeLoader {
     this.trees = null;
     this.bushes = null;
     this.wildlife = null;
+    this.ambient = null;
     this.manager = null;
     this.document = null;
     this.warnings = [];
@@ -100,6 +102,11 @@ export class WorldRuntimeLoader {
     this.wildlife = new WildlifeSystem(this.scene);
     this.wildlife.load(document, this.scene);
 
+    // Streamed ambient micro-actors (Ambient-0) — the third RegionStreamer consumer.
+    // Disabled/empty config is a no-op (never mutates the scene).
+    this.ambient = new AmbientSystem(this.scene);
+    this.ambient.load(document, this.scene);
+
     return {
       document,
       warnings: this.warnings,
@@ -110,6 +117,7 @@ export class WorldRuntimeLoader {
       trees: this.trees,
       bushes: this.bushes,
       wildlife: this.wildlife,
+      ambient: this.ambient,
       objectManager: this.manager,
       colliderSystem: this.colliderSystem,
     };
@@ -136,6 +144,7 @@ export class WorldRuntimeLoader {
 
   dispose() {
     this.animationRuntime?.clear();
+    this.ambient?.dispose();
     this.wildlife?.dispose();
     this.atmosphere?.dispose();
     if (this.water) {
@@ -160,6 +169,7 @@ export class WorldRuntimeLoader {
     this.trees = null;
     this.bushes = null;
     this.wildlife = null;
+    this.ambient = null;
     this.manager = null;
     this.terrain = null;
   }

@@ -35,6 +35,13 @@
     "src/world/streaming/RegionStreamer.js",
     "src/world/streaming/RegionMetrics.js",
     "src/world/streaming/RegionKey.js",
+    "src/world/ambient/AmbientSpecies.js",
+    "src/world/ambient/AmbientConfig.js",
+    "src/world/ambient/AmbientValidation.js",
+    "src/world/ambient/AmbientPlacement.js",
+    "src/world/ambient/AmbientRuntime.js",
+    "src/world/ambient/AmbientMaterial.js",
+    "src/world/ambient/AmbientSystem.js",
     "src/grass/GrassConfig.js",
     "src/grass/GrassGeometry.js",
     "src/grass/GrassMaterial.js",
@@ -74,7 +81,8 @@
     "docs/VISUAL0_TERRAIN.md",
     "docs/VISUAL1_WATER.md",
     "docs/WILDLIFE0.md",
-    "docs/WILDLIFE1.md"
+    "docs/WILDLIFE1.md",
+    "docs/AMBIENT0.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",

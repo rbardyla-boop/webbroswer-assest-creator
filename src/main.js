@@ -82,6 +82,7 @@ let terrain = null;
 let water = null;
 let atmosphere = null;
 let wildlife = null;
+let ambient = null;
 let grass = null;
 let trees = null;
 let bushes = null;
@@ -325,6 +326,8 @@ if (import.meta.env.DEV) {
   // Read-only; called by test:wildlife0 to prove animals render, sit on the terrain
   // (not floating/submerged), and stay below the snowline.
   window.__WILDLIFE_DEBUG__ = () => wildlife?.debugSnapshot() ?? { present: false };
+  // Dev/test-only: Stage Ambient-0 — streamed firefly motes + hover-contract violations.
+  window.__AMBIENT_DEBUG__ = () => ambient?.debugSnapshot() ?? { present: false };
 }
 
 function handleWorldChanged(change = {}) {
@@ -414,6 +417,7 @@ async function applyLoadedWorld(document) {
   water = world.water;
   atmosphere = world.atmosphere;
   wildlife = world.wildlife;
+  ambient = world.ambient;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -441,6 +445,7 @@ async function applyLoadedWorld(document) {
   grass.prewarm(camera, 80);
   bushes?.prewarm(camera, 200);
   wildlife?.prewarm(camera);
+  ambient?.prewarm(camera);
   updateSun();
   editor?.setWorldContext({
     terrain,
@@ -551,6 +556,7 @@ async function boot() {
   water = world.water;
   atmosphere = world.atmosphere;
   wildlife = world.wildlife;
+  ambient = world.ambient;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -617,6 +623,7 @@ async function boot() {
   grass.prewarm(camera, 80);
   bushes?.prewarm(camera, 200);
   wildlife?.prewarm(camera);
+  ambient?.prewarm(camera);
   updateSun();
   requestAnimationFrame(frame);
 }
@@ -670,6 +677,7 @@ function frame(now) {
     water?.update(elapsed); // animate the glacial surface flow (atmosphere stays at base in the editor)
     placedWeaponRuntime.update(dt, null); // editor: animate all placed weapons (no kernel)
     wildlife?.update(dt, camera); // ambient animals graze/wander; flee the editor camera
+    ambient?.update(dt, camera); // firefly motes drift over the wet meadow; scatter from the camera
     renderer.render(scene, camera);
     budgetHUD?.update(dt);
     markWorldReady();
@@ -700,6 +708,7 @@ function frame(now) {
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer
+  ambient?.update(dt, camera); // firefly motes: bounded drift over the wet meadow, scatter from the viewer
 
   renderer.render(scene, camera);
   markWorldReady();

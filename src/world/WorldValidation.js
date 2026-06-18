@@ -9,6 +9,7 @@ import { sanitizeLighting } from "../lighting/LightingValidation.js";
 import { sanitizeWater } from "./water/WaterValidation.js";
 import { sanitizeAtmosphere } from "./atmosphere/AtmosphereValidation.js";
 import { sanitizeWildlife } from "./wildlife/WildlifeValidation.js";
+import { sanitizeAmbient } from "./ambient/AmbientValidation.js";
 import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { sanitizeTerrainMaterial } from "../terrain/Terrain.js";
 import { PROFILE_IDS } from "../terrain/profiles/index.js";
@@ -62,6 +63,8 @@ export function validateWorldDocument(input) {
   doc.atmosphere = sanitizeAtmosphere(doc.atmosphere);
   // Ambient wildlife config (Wildlife-0) — seed/toggles/distances, species allow-listed.
   doc.wildlife = sanitizeWildlife(doc.wildlife);
+  // Streamed ambient micro-actors (Ambient-0) — seed/toggles/distances/wind, allow-listed.
+  doc.ambient = sanitizeAmbient(doc.ambient);
   doc.visibility = createVisibilityConfig(doc.visibility);
   doc.generators = sanitizeGenerators(doc.generators);
   // Runtime assets (Arsenal v2): recipe-backed placed weapons; each item validated +
