@@ -13,6 +13,11 @@ import { weaponAssetId } from "../../arsenal/WeaponRecipe.js";
 export const RUNTIME_ASSET_KINDS = Object.freeze(["generated.weapon"]);
 export const MAX_RUNTIME_ASSETS = 256; // defense in depth; far above any real placement count
 const RUNTIME_STATES = new Set(["idle", "equipped", "held", "stored"]);
+// Equip slot a weapon is attached to when state === "equipped" (Arsenal v4). The canonical
+// slot table lives in src/world/placement/WeaponEquipSlots.js; this set is just the membership
+// guard at the validation boundary so the persisted `slot` survives save→load (the whitelist
+// below otherwise drops unknown keys). Keep in sync with SLOT_NAMES there.
+const RUNTIME_SLOTS = new Set(["rightHand", "back", "hip"]);
 
 function num(value, fallback) {
   const n = Number(value);
@@ -83,6 +88,10 @@ export function normalizeRuntimeAssetDescriptor(item) {
       visible: rt.visible !== false,
       castShadow: rt.castShadow !== false,
       receiveShadow: rt.receiveShadow !== false,
+      // Arsenal v4: which player slot an equipped weapon is attached to (null when not equipped
+      // or for legacy/transient equips → load() falls back to "rightHand"). Whitelisted here so
+      // it survives the save→load round-trip; an unknown value sanitizes to null.
+      slot: RUNTIME_SLOTS.has(rt.slot) ? rt.slot : null,
     },
   };
 }

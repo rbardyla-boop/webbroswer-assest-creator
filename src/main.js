@@ -170,11 +170,12 @@ if (import.meta.env.DEV) {
   // Dev/test-only: placed generated weapons (Arsenal v2) — count + the first weapon's
   // marker map, for test:arsenal-world-proof.
   window.__ARSENAL_WORLD__ = () => placedWeaponRuntime.snapshot();
-  // Dev/test-only: equip-to-hand state (Arsenal v3) — placed count, equipped id/type,
-  // marker world positions, persist mode. For test:arsenal-v3.
+  // Dev/test-only: equip-to-hand + slot state (Arsenal v3/v4) — placed count, equipped id/type,
+  // occupied slot, marker world positions, slot-matrix finiteness, persist mode. For the
+  // arsenal v3/v4 proofs.
   window.__ARSENAL_EQUIP__ = () => weaponEquipRuntime.debugSnapshot();
-  // Dev/test-only: deterministic drivers so the proof can place/equip without a canvas
-  // raycast (the editor click path is the user-facing equivalent of `place`).
+  // Dev/test-only: deterministic drivers so the proof can place/equip/cycle slots without a
+  // canvas raycast (the editor click path is the user-facing equivalent of `place`).
   window.__ARSENAL_EQUIP_DO__ = {
     place: ({ x = 0, z = 0 } = {}) => {
       if (!placedAssetStore) return null;
@@ -184,7 +185,9 @@ if (import.meta.env.DEV) {
       if (descriptor) placedWeaponRuntime.add(descriptor);
       return descriptor?.id ?? null;
     },
-    equip: (id) => weaponEquipRuntime.equip(id, player),
+    equip: (id, slot) => weaponEquipRuntime.equip(id, player, slot),
+    cycle: () => weaponEquipRuntime.cycleSlot(player),
+    selectSlot: (slot) => (weaponEquipRuntime.equippedId ? weaponEquipRuntime.equip(weaponEquipRuntime.equippedId, player, slot) : false),
     unequip: (mode = "drop") => weaponEquipRuntime.unequip(player, mode),
     toggleNearest: (mode = "drop") => weaponEquipRuntime.toggleNearest(player, mode),
     setPersist: (on) => {
@@ -734,6 +737,8 @@ function frame(now) {
   // world; G stores (hides) the held one. No firing — just attach/detach.
   if (input.wasPressed("KeyF")) weaponEquipRuntime.toggleNearest(player, "drop");
   if (input.wasPressed("KeyG")) weaponEquipRuntime.toggleNearest(player, "store");
+  // Arsenal v4 slots: R cycles the held weapon through rightHand → back → hip (oriented attach).
+  if (input.wasPressed("KeyR")) weaponEquipRuntime.cycleSlot(player);
 
   // Update order: camera (yaw/pitch + mode) → movement → grass streaming.
   cameraController.update(dt);

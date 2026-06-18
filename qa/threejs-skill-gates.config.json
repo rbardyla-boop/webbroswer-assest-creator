@@ -70,7 +70,9 @@
     "src/world/assets/PlacedAssetStore.js",
     "src/world/placement/WeaponPlacementTool.js",
     "src/world/placement/PlacedWeaponRuntime.js",
-    "src/world/placement/WeaponEquipRuntime.js"
+    "src/world/placement/WeaponEquipRuntime.js",
+    "src/world/placement/WeaponMarkerTransforms.js",
+    "src/world/placement/WeaponEquipSlots.js"
   ],
   "docs": [
     "docs/THREEJS_SKILL_ADOPTION.md",
@@ -80,6 +82,7 @@
     "docs/ARSENAL_LAB.md",
     "docs/ARSENAL_WORLD.md",
     "docs/ARSENAL_V3.md",
+    "docs/ARSENAL_V4.md",
     "docs/VISUAL0_TERRAIN.md",
     "docs/VISUAL1_WATER.md",
     "docs/WILDLIFE0.md",

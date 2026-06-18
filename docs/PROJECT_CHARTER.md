@@ -1293,3 +1293,55 @@ adversarial review: APPROVE 0 crit/0 high; MEDIUM (store reparent order) + LOW (
 
 **Non-goals.** No combat/damage/projectiles, inventory, rarity, loot/drops, economy, crafting, stats;
 no merging the workbench into the world app; no `runtimeAssets`/recipe schema change.
+
+## ADR-030 — Arsenal v4: Oriented Equip Slots & Multi-Slot Attachment (the attachment contract)
+
+**Decision.** Strengthen the v3 equip from position-only to a full-transform attachment contract
+before weapon variety/combat depend on it: markers expose finite `{position, rotation}`, attachment
+is a single compose rule, and the player gains three explicit slots (rightHand / back / hip). Still
+NOT gameplay. Docs: `docs/ARSENAL_V4.md`. User pick: **single-weapon slot-cycle** (one weapon at a
+time, **R** cycles rightHand → back → hip) over holster/multi-occupant (deferred to a future v5 — the
+smallest coherent change that still proves all three slots + persists which one).
+
+**The attachment rule.** `weaponLocal = slotMatrix(slot) × inverse(equipMatrix(markers))`, decomposed
+onto the weapon group, reparented to `player.mesh` — so the `equip` marker coincides with the slot in
+world space, oriented. The weapon stays a **direct child of `player.mesh`** (slots are transforms
+composed into the player-local matrix, NOT intermediate scene nodes) → `syncMesh` carries it and the
+v3 `equippedParentIsPlayer` invariant holds. The marker→transform is still the one unvalidated
+data→scene path → finite-guard the equip matrix, slot matrix, AND the decomposed result, all BEFORE
+reparenting (a poisoned marker leaves the weapon placed — preserves the v3 refusal).
+
+**Why the upgrade lives entirely in `src/world/placement/` (arsenal untouched).** The v1/v2 arsenal
+tests REQUIRE `userData.markers` stay position-only ARRAYS (`arsenal-world-regression.mjs:32`
+`m.every(...)`, `browser-arsenal-world-proof.mjs:65` `Array.isArray`). So the contract upgrade is a
+NEW world-layer module, `WeaponMarkerTransforms.js`, that LIFTS the arrays into oriented transforms
+(rotation defaults to IDENTITY — the weapon's model grip frame; meaningful per-attach orientation
+lives in the SLOT rotations in `WeaponEquipSlots.js`, legitimately inside the slot contract — not a
+render hack). This also matches the user's own module scoping (all v4 files under
+`src/world/placement/`). **Reduces-to-v3:** rightHand uses identity rotation and
+`localPosition == the v3 handLocal` exactly, so `slot × equip⁻¹` decomposes to `position = handLocal −
+equip`, identity quat — bit-for-bit the v3 result → v1/v2/v3 tests stay green UNCHANGED.
+
+**BLOCKER FIX (B1, the load-bearing one).** Slot persistence is impossible without it:
+`RuntimeAssetTypes.normalizeRuntimeAssetDescriptor` rebuilds the `runtime` block from a FIXED
+whitelist and drops unknown keys, so a naive `runtime.slot` is silently lost on every save→load
+(re-sanitized on `PlacedAssetStore.add`, `WorldSerializer.save`, and load). Fix: add a `RUNTIME_SLOTS`
+set + `slot:` to the whitelist (additive; no v2/v3 test deep-equals the runtime sub-block). `equip()`
+in persist mode writes `slot`; drop/store CLEAR it to null; `load()` re-attaches the equipped item to
+`runtime.slot ?? "rightHand"` unconditionally (legacy/transient saves fall back to rightHand).
+
+**Controls.** **R** = cycleSlot (re-runs `equip(id, player, nextSlot)`); **F**/**G** unchanged
+(equip-nearest/drop, store). `unequip(player, mode)` signature kept (the v3 DEV hook `A.unequip('drop')`
+passes mode positionally). One weapon equipped at a time → `load()`'s single `.find` is correct.
+
+**Verification.** `test:arsenal-equip-slots` (Node, headless THREE: marker/slot transforms finite; the
+core invariant `equipMarkerWorld == slotWorld` oriented for EACH of rightHand/back/hip; rightHand
+reduces to v3; `cycleSlot` walks the three; `runtime.slot` round-trips the sanitizer AND the document;
+drop/store clear it; persisted equipped@hip re-attaches to the hip on a fresh load; poisoned marker +
+unknown slot refused; isolation). `test:arsenal-v4` (SwiftShader: place→equip hand→cycle back→cycle
+hip→persist-equip on hip+save→**reload re-attaches to the hip**; player/wildlife/ambient unaffected; 0
+console errors). v1/v2/v3 arsenal tests + full sweep + build + qa green.
+
+**Non-goals.** No firing/damage/ammo/recoil, inventory grid, rarity, loot, crafting, enemies, or
+animation beyond static slot attachment; no holster/multi-occupant (deferred); no `src/arsenal/` or
+`/arsenal.html` changes; no recipe-schema change.

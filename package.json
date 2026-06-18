@@ -50,6 +50,8 @@
     "test:ambient0": "node scripts/browser-ambient0-proof.mjs",
     "test:arsenal-placement": "node scripts/arsenal-placement-regression.mjs",
     "test:arsenal-v3": "node scripts/browser-arsenal-v3-proof.mjs",
+    "test:arsenal-equip-slots": "node scripts/arsenal-equip-slots-regression.mjs",
+    "test:arsenal-v4": "node scripts/browser-arsenal-v4-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",
