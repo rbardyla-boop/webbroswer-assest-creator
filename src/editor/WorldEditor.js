@@ -28,6 +28,12 @@ import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
+// Arsenal v3 click-to-place: place a generated weapon onto terrain. PURE arsenal modules
+// only (recipe generation) — no workbench UI; the world↔arsenal boundary stays recipe-only.
+import { placeWeapon } from "../world/placement/WeaponPlacementTool.js";
+import { WEAPON_PRESETS } from "../arsenal/WeaponPresets.js";
+import { rollConfig } from "../arsenal/WeaponConfig.js";
+import { generateWeaponRecipe } from "../arsenal/WeaponGrammar.js";
 import { PrefabInstancer } from "../prefabs/PrefabInstancer.js";
 import { PrefabPanel } from "./PrefabPanel.js";
 import { SelectionGroup } from "./SelectionGroup.js";
@@ -57,6 +63,8 @@ export class WorldEditor {
     getTreeStats,
     prefabLibrary,
     modRegistry,
+    placedAssetStore,
+    placedWeaponRuntime,
     onLoadWorld,
     onWorldChanged,
     onOpen,
@@ -88,6 +96,12 @@ export class WorldEditor {
     this.prefabLibrary = prefabLibrary ?? new PrefabLibrary();
     this.prefabInstancer = new PrefabInstancer(objectManager);
     this.armedPrefab = null;
+    // Arsenal v3: when a weapon is armed, terrain clicks place generated weapons. The
+    // placed-asset store + runtime are injected per world load via setWorldContext.
+    this.armedWeaponRecipe = null;
+    this.placedAssetStore = placedAssetStore ?? null;
+    this.placedWeaponRuntime = placedWeaponRuntime ?? null;
+    this._weaponArmCounter = 0;
     this.lastExportReport = null;
     this.modRegistry = modRegistry ?? new ModRegistry();
     this.animationPreview = new AnimationPreview();
@@ -172,10 +186,13 @@ export class WorldEditor {
     return this.selection.primary;
   }
 
-  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, getGrassStats, getTreeStats }) {
+  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, getGrassStats, getTreeStats, placedAssetStore, placedWeaponRuntime }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
     this.grassSystem = grassSystem ?? this.grassSystem;
+    // Arsenal placement store/runtime are recreated per world load — keep the current ones.
+    this.placedAssetStore = placedAssetStore ?? this.placedAssetStore;
+    this.placedWeaponRuntime = placedWeaponRuntime ?? this.placedWeaponRuntime;
     if (objectManager) {
       this.prefabInstancer.setManager(objectManager);
       this.selection.setManager(objectManager);
@@ -191,6 +208,7 @@ export class WorldEditor {
     // never references torn-down meshes.
     this.voxelPanel?.clear();
     this._armPrefabPlacement(null);
+    this._armWeaponPlacement(false);
     this.prefabPanel?.refresh();
     // A reloaded world brings its own lighting — refresh the editor panel from it.
     this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
@@ -766,10 +784,13 @@ export class WorldEditor {
       if (typing) return;
       if (event.code === "Delete" || event.code === "Backspace") this._deleteSelected();
       if (event.code === "Escape") {
-        // Escape disarms prefab placement first, then closes the editor.
-        if (this.armedPrefab) this._armPrefabPlacement(null);
+        // Escape disarms placement (weapon, then prefab) first, then closes the editor.
+        if (this.armedWeaponRecipe) this._armWeaponPlacement(false);
+        else if (this.armedPrefab) this._armPrefabPlacement(null);
         else this.close();
       }
+      // B arms/disarms weapon placement (Arsenal v3): then terrain clicks drop generated weapons.
+      if (event.code === "KeyB") this._armWeaponPlacement(!this.armedWeaponRecipe);
       if (event.code === "KeyQ") this.transform.setMode("translate");
       if (event.code === "KeyE") this.transform.setMode("rotate");
       if (event.code === "KeyR") this.transform.setMode("scale");
@@ -805,6 +826,20 @@ export class WorldEditor {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    // When a weapon is armed, terrain clicks place a generated weapon (repeatedly,
+    // re-rolling so each is distinct) — the same placeWeapon→store→runtime path the
+    // runtime uses. Object selection is suppressed so multiple placements stay fast.
+    if (this.armedWeaponRecipe) {
+      const weaponHits = this.raycaster.intersectObject(this.terrain.mesh, false);
+      if (weaponHits.length && this.placedAssetStore && this.placedWeaponRuntime) {
+        const hit = weaponHits[0].point;
+        const descriptor = placeWeapon(this.placedAssetStore, this.armedWeaponRecipe, { x: hit.x, z: hit.z, yaw: 0 });
+        if (descriptor) this.placedWeaponRuntime.add(descriptor);
+        this._rollArmedWeapon(); // next click places a different weapon
+      }
+      return;
+    }
 
     // When a prefab is armed, terrain clicks place it (repeatedly) and object
     // selection is suppressed so multiple placements stay fast.
@@ -1047,6 +1082,25 @@ export class WorldEditor {
     if (this.armedPrefab) this._select(null);
     this.prefabPanel.setArmed(this.armedPrefab);
     if (!this.armedPrefab) this.prefabPanel.setStatus("Placement finished.");
+  }
+
+  // Arsenal v3: arm/disarm weapon placement. While armed, terrain clicks drop generated
+  // weapons. Rolls a fresh recipe each arm + after each placement (distinct weapons,
+  // distinct ids). Mutually exclusive with prefab placement.
+  _armWeaponPlacement(on) {
+    if (on) {
+      this._armPrefabPlacement(null);
+      this._select(null);
+      this._rollArmedWeapon();
+    } else {
+      this.armedWeaponRecipe = null;
+    }
+  }
+
+  _rollArmedWeapon() {
+    const preset = WEAPON_PRESETS[this._weaponArmCounter % WEAPON_PRESETS.length];
+    this.armedWeaponRecipe = generateWeaponRecipe(rollConfig(preset.seed + this._weaponArmCounter, preset.type));
+    this._weaponArmCounter++;
   }
 
   async _placeArmedPrefab(point) {

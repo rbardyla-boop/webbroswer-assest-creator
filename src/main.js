@@ -34,8 +34,12 @@ import { InteractionRuntime } from "./interaction/InteractionRuntime.js";
 import { InteractionOverlay } from "./interaction/InteractionOverlay.js";
 import { ParticleRuntime } from "./particles/ParticleRuntime.js";
 import { PlacedWeaponRuntime } from "./world/placement/PlacedWeaponRuntime.js";
+import { WeaponEquipRuntime } from "./world/placement/WeaponEquipRuntime.js";
 import { PlacedAssetStore } from "./world/assets/PlacedAssetStore.js";
 import { placeWeapon, autoPlacementPoint } from "./world/placement/WeaponPlacementTool.js";
+import { WEAPON_PRESETS } from "./arsenal/WeaponPresets.js";
+import { rollConfig } from "./arsenal/WeaponConfig.js";
+import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -111,6 +115,10 @@ const particleRuntime = runtimeMode ? new ParticleRuntime({ scene }) : null;
 // Placed generated weapons (Arsenal v2) — rebuilt from recipes on load; present in BOTH
 // editor and runtime so authored weapons are visible while building and while playing.
 const placedWeaponRuntime = new PlacedWeaponRuntime();
+// Equip-to-hand (Arsenal v3) — reparents a placed weapon onto the player at its `equip`
+// marker. Needs the per-load store (set in loadRuntimeAssets) + the player (runtime only).
+const weaponEquipRuntime = new WeaponEquipRuntime(placedWeaponRuntime, { scene });
+let placedAssetStore = null; // the current PlacedAssetStore, recreated per world load
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
 // registered agents (currently animated objects) so far/off-screen ones sleep
@@ -162,6 +170,29 @@ if (import.meta.env.DEV) {
   // Dev/test-only: placed generated weapons (Arsenal v2) — count + the first weapon's
   // marker map, for test:arsenal-world-proof.
   window.__ARSENAL_WORLD__ = () => placedWeaponRuntime.snapshot();
+  // Dev/test-only: equip-to-hand state (Arsenal v3) — placed count, equipped id/type,
+  // marker world positions, persist mode. For test:arsenal-v3.
+  window.__ARSENAL_EQUIP__ = () => weaponEquipRuntime.debugSnapshot();
+  // Dev/test-only: deterministic drivers so the proof can place/equip without a canvas
+  // raycast (the editor click path is the user-facing equivalent of `place`).
+  window.__ARSENAL_EQUIP_DO__ = {
+    place: ({ x = 0, z = 0 } = {}) => {
+      if (!placedAssetStore) return null;
+      const preset = WEAPON_PRESETS[0];
+      const recipe = generateWeaponRecipe(rollConfig(preset.seed + placedWeaponRuntime.entries.size, preset.type));
+      const descriptor = placeWeapon(placedAssetStore, recipe, { x, z, yaw: 0 });
+      if (descriptor) placedWeaponRuntime.add(descriptor);
+      return descriptor?.id ?? null;
+    },
+    equip: (id) => weaponEquipRuntime.equip(id, player),
+    unequip: (mode = "drop") => weaponEquipRuntime.unequip(player, mode),
+    toggleNearest: (mode = "drop") => weaponEquipRuntime.toggleNearest(player, mode),
+    setPersist: (on) => {
+      weaponEquipRuntime.persistEquip = !!on;
+      return weaponEquipRuntime.persistEquip;
+    },
+    save: () => world?.document && (worldSerializer.save(world.document), true),
+  };
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
   // Scans the live objects once for their declarative layoutRole + interaction role —
   // the player's spawn position, landmark world positions (for a readability proxy),
@@ -392,7 +423,8 @@ function syncVisibilityAgents(document) {
 // syncVisibilityAgents so the weapons' kernel registrations survive the kernel's per-
 // load clear. Built in both editor + runtime (placedWeaponRuntime is mode-agnostic).
 function loadRuntimeAssets(document) {
-  const store = new PlacedAssetStore(document);
+  placedAssetStore = new PlacedAssetStore(document);
+  const store = placedAssetStore;
   const spawn = document.player?.spawn ?? { x: 0, z: 0 };
   // Explicit grid index so a replace-by-id (same weapon re-sent) never reuses a slot.
   let drainIdx = store.list().length;
@@ -406,6 +438,10 @@ function loadRuntimeAssets(document) {
     return ok;
   });
   placedWeaponRuntime.load(document, scene, visibilityKernel);
+  // Equip runtime tracks the current store (descriptor access) and re-attaches any
+  // persisted "equipped" weapon to the player (runtime only; transient mode → no-op).
+  weaponEquipRuntime.setStore(store);
+  if (runtimeMode && player) weaponEquipRuntime.load(player);
   if (dropped > 0) worldSerializer.save(document); // persist freshly-dropped weapons
 }
 
@@ -455,6 +491,8 @@ async function applyLoadedWorld(document) {
     bushSystem: bushes,
     getGrassStats: () => grass.stats,
     getTreeStats: () => trees.stats,
+    placedAssetStore, // the store was recreated by loadRuntimeAssets above
+    placedWeaponRuntime,
   });
 }
 
@@ -607,6 +645,8 @@ async function boot() {
       getTreeStats: () => trees.stats,
       prefabLibrary,
       modRegistry,
+      placedAssetStore, // arsenal v3 click-to-place context (refreshed per load via setWorldContext)
+      placedWeaponRuntime,
       onLoadWorld: applyLoadedWorld,
       onWorldChanged: handleWorldChanged,
       onOpen: () => {
@@ -690,6 +730,10 @@ function frame(now) {
   // Global toggles.
   if (input.wasPressed("KeyH")) debug.toggle();
   if (input.wasPressed("KeyB")) budgetHUD?.toggle();
+  // Arsenal v3 equip: F equips the nearest placed weapon / drops the held one back to the
+  // world; G stores (hides) the held one. No firing — just attach/detach.
+  if (input.wasPressed("KeyF")) weaponEquipRuntime.toggleNearest(player, "drop");
+  if (input.wasPressed("KeyG")) weaponEquipRuntime.toggleNearest(player, "store");
 
   // Update order: camera (yaw/pitch + mode) → movement → grass streaming.
   cameraController.update(dt);

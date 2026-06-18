@@ -69,7 +69,8 @@
     "src/world/assets/RuntimeAssetRegistry.js",
     "src/world/assets/PlacedAssetStore.js",
     "src/world/placement/WeaponPlacementTool.js",
-    "src/world/placement/PlacedWeaponRuntime.js"
+    "src/world/placement/PlacedWeaponRuntime.js",
+    "src/world/placement/WeaponEquipRuntime.js"
   ],
   "docs": [
     "docs/THREEJS_SKILL_ADOPTION.md",
@@ -78,6 +79,7 @@
     "docs/AUDIO_GENERATION_GATE.md",
     "docs/ARSENAL_LAB.md",
     "docs/ARSENAL_WORLD.md",
+    "docs/ARSENAL_V3.md",
     "docs/VISUAL0_TERRAIN.md",
     "docs/VISUAL1_WATER.md",
     "docs/WILDLIFE0.md",

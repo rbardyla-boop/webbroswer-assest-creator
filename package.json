@@ -48,6 +48,8 @@
     "test:streamer": "node scripts/region-streamer-regression.mjs",
     "test:ambient": "node scripts/ambient-placement-regression.mjs",
     "test:ambient0": "node scripts/browser-ambient0-proof.mjs",
+    "test:arsenal-placement": "node scripts/arsenal-placement-regression.mjs",
+    "test:arsenal-v3": "node scripts/browser-arsenal-v3-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

@@ -1244,3 +1244,52 @@ same scene**, player unaffected, zero console errors); full sweep with wildlife 
 
 **Non-goals.** No weather system, no particle editor, no combat/projectiles/status/inventory/loot, no
 flock-behavior changes, no Family-B streamer extraction, no `RegionStreamer` mutation, no Arsenal v3.
+
+## ADR-029 — Arsenal v3: Click-to-Place & Equip-to-Hand (generated weapons become interactable)
+
+**Decision.** Make the generated weapons of Arsenal v1/v2 INTERACTABLE: click-to-place onto terrain
+in the editor, equip-to-hand on the player in runtime. A minimal interaction layer — NOT gameplay
+(no combat/damage/projectiles/inventory/loot/crafting/economy). Preserves the v2 recipe boundary,
+the `runtimeAssets` persistence, the marker contract, and the isolated `/arsenal.html`. Docs:
+`docs/ARSENAL_V3.md`. User picks: BOTH unequip outcomes (drop→world / store→hidden) and BOTH
+persistence modes (transient / persistEquip) are selectable.
+
+**Engineering call: extend the canonical `src/world/placement/`** (`PlacedWeaponRuntime` +
+`WeaponPlacementTool` already live there) — NOT a parallel `src/world/arsenal/`. `WeaponEquipRuntime`
+joins it; `ArsenalSelection`/`ArsenalDebug` fold into the editor armed-recipe + nearest query and
+`debugSnapshot`/DEV hooks. Equip runtime is owned in `main.js` (needs player + input + the per-load
+store), NOT `WorldRuntimeLoader` (no player; rebuilt per load). `updateDocumentFromRuntime` untouched.
+
+**Click-to-place.** `PlacedWeaponRuntime` gained CRUD (`add`/`remove`/`getEntry`) sharing one
+`_instantiate(item)` body with `load()`. BLOCKER FIX: `clear()`/`remove()` detach via
+`group.removeFromParent()` (NOT `scene.remove`) — a no-op once a weapon is parented to the player,
+which would orphan it on reload. The editor arms a FRESHLY-rolled default recipe
+(`generateWeaponRecipe(rollConfig(preset.seed, preset.type))`, key **B**) — NOT a handoff peek (the
+queue is drained+deleted before the editor opens). Editor imports only PURE arsenal modules; the
+boundary grep (extended to `src/world` + `src/editor`) forbids only `WeaponWorkbench|arsenalMain`.
+
+**Equip-to-hand.** `WeaponEquipRuntime` reparents a placed weapon's group onto `player.mesh` at the
+inverted `equip` marker. GOTCHA — markers are POSITION-ONLY (no orientation; verified in
+`WeaponRuntime._build`), so the attach transform is just `group.position = handLocal − equipLocal`
+at identity (the equip marker then coincides with the hand). The marker→transform is the one path
+with NO validator between data and the scene graph → FINITE-GUARDED (a non-finite marker/result
+refuses the equip, leaves it placed). **F** = equip nearest / drop; **G** = store (hide). The weapon
+follows the player as a child of `player.mesh` (`syncMesh` propagates) — no per-frame copy; the
+energy shader still ticks via `placedWeaponRuntime.update` regardless of parent.
+
+**Persistence (no schema change — `equipped`/`stored`/`owner`/`visible` already in the v2 `runtime`
+block).** `persistEquip` (default transient) gates whether `equip()` WRITES `state:"equipped"`.
+`load()` re-attaches equipped items UNCONDITIONALLY — the DOCUMENT is the source of truth, not the
+session flag (a transient equip never wrote that state). drop → grounded at the player, `idle`,
+transform written back; store → hidden, `stored`, `visible:false` (set BEFORE reparenting — review fix).
+
+**Verification.** `test:arsenal-placement` (Node, headless THREE: CRUD; equip-marker reparent math —
+marker coincides with the hand in world space, finite; drop/store/persist states; persisted-equipped
+re-attaches on a fresh load; `EQUIP_RADIUS` gate; hostile descriptor + poisoned marker rejected;
+isolation grep). `test:arsenal-v3` (SwiftShader: place→equip[parented to Player + markers finite]→
+drop→store→persist-equip+save→**reload re-attaches**; player/wildlife/ambient unaffected; 0 console
+errors). v2 `test:arsenal-world` + proof byte-unchanged; full sweep + build + qa green. Fresh-context
+adversarial review: APPROVE 0 crit/0 high; MEDIUM (store reparent order) + LOW (radius test) fixed.
+
+**Non-goals.** No combat/damage/projectiles, inventory, rarity, loot/drops, economy, crafting, stats;
+no merging the workbench into the world app; no `runtimeAssets`/recipe schema change.
