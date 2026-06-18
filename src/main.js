@@ -220,6 +220,38 @@ if (import.meta.env.DEV) {
     deposit: () => objectiveRuntime?.tryDeposit(player) ?? false,
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
+  // Dev/test-only: physical-movement driver so a proof can WALK the player through the world
+  // (no teleport). It only injects input intent — camera yaw + held movement keys, exactly what a
+  // real keyboard would — and `step` advances ONE fixed simulation tick using the SAME per-frame
+  // update the main loop runs (camera → player movement/collision/grounding → objective zone). A
+  // proof paces those steps deterministically, sidestepping headless rAF throttling while the player
+  // still translates through the real movement pipeline. faceXZ is the inverse of PlayerController's
+  // `_forward = (-sin yaw, 0, -cos yaw)` basis, so holding forward walks toward the target.
+  // For test:first-playable-proof.
+  window.__PLAYER_MOVE_DO__ = {
+    faceXZ: (x, z) => {
+      cameraController.yaw = Math.atan2(-(x - player.position.x), -(z - player.position.z));
+      return cameraController.yaw;
+    },
+    hold: (forward, strafe) => {
+      for (const k of ["KeyW", "KeyS", "KeyA", "KeyD"]) input.keys.delete(k);
+      if (forward > 0) input.keys.add("KeyW");
+      else if (forward < 0) input.keys.add("KeyS");
+      if (strafe > 0) input.keys.add("KeyD");
+      else if (strafe < 0) input.keys.add("KeyA");
+      return true;
+    },
+    stop: () => {
+      for (const k of ["KeyW", "KeyS", "KeyA", "KeyD"]) input.keys.delete(k);
+      return true;
+    },
+    step: (dt = 1 / 60) => {
+      cameraController.update(dt);
+      playerController.update(dt);
+      objectiveRuntime?.update(dt, player);
+      return true;
+    },
+  };
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
   // Scans the live objects once for their declarative layoutRole + interaction role —
   // the player's spawn position, landmark world positions (for a readability proxy),

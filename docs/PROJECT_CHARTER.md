@@ -1425,3 +1425,53 @@ marked done + §10/§11 refreshed.
 **Non-goals.** No combat, inventory, enemies, dialogue, procedural quest generation, economy, multiple
 objectives, generalized objective/quest engine, AI director, or live deployment; no `src/arsenal/` /
 `/arsenal.html` / recipe-schema / environment-system changes; no `WORLD_DOCUMENT_VERSION` bump.
+
+## ADR-033 — FP-2: Integrated First-Playable Proof (the one missing §7.7 gate)
+
+**Decision.** Author `test:first-playable-proof` (`scripts/browser-first-playable-proof.mjs`) — the
+INTEGRATED move-through-world loop the per-subsystem proofs never covered. In one SwiftShader session it
+loads a dense alpine world, proves the world is alive (terrain · water · fog · wildlife · flocks ·
+ambient motes, each asserted ACTIVE + legal, mirroring the wildlife1/ambient0 patterns + seeds), exercises
+the full weapon interaction (place → equip → slot-cycle → store via `__ARSENAL_EQUIP_DO__`), then plays
+the relic objective for real — equip the relic, **physically walk** it from spawn to the cache, deposit on
+the pedestal, complete — and proves completion + trophy + runtime assets survive a full reload, with zero
+console errors across both sessions. This satisfies §7.7 of the First Playable gate. No new gameplay; the
+proof gate, not a feature.
+
+**The walk must be real, not a teleport — and headless rAF is throttled.** The FP-1 proof used
+`teleportToCache`; FP-2's spec forbids that ("no movement bypass"). But the player only moves from
+keyboard input read off two MODULE-LOCAL symbols in `main.js` (`input.keys`, `cameraController.yaw`),
+and movement is camera-yaw-relative — neither is reachable from an injected eval, and pointer-lock mouse
+steering is unavailable headless. Measured: the headless renderer services ≈ one frame per CDP round-trip
+(~5fps), so a real-time wall-clock walk of the ~26-unit spawn→cache distance would take ~37s and be flaky.
+
+**Resolution — a DEV-only `__PLAYER_MOVE_DO__` movement driver (the only product-file touch).** Guarded
+by `import.meta.env.DEV` (stripped from prod, like `__OBJECTIVE_DO__`): `faceXZ(x,z)` sets the camera yaw
+to `atan2(-(x-px), -(z-pz))` (the inverse of `PlayerController`'s `_forward = (-sin yaw, 0, -cos yaw)`
+basis, so holding forward walks toward the target); `hold(forward,strafe)` injects the held movement keys;
+`step(dt)` advances ONE fixed simulation tick using the SAME per-frame update the main loop runs
+(`cameraController.update` → `playerController.update` → `objectiveRuntime.update`). The proof paces those
+steps deterministically (≤ 600 fixed 1/60s steps in one eval, stop on zone entry), so the player still
+translates through the real movement/collision/grounding pipeline and the objective zone is recomputed by
+the real `objectiveRuntime.update` — only the wall-clock pacing is replaced. The proof asserts the player
+moved > 5 units (genuine traversal, not a teleport), stays grounded, and is not submerged at the cache.
+Faithful but explicitly not a real-time playthrough — recorded as a residual risk in §11.
+
+**Boundaries.** No schema change (no `WORLD_DOCUMENT_VERSION` bump), no edits to any gameplay/runtime
+system beyond the one DEV driver, no `src/arsenal/` / `/arsenal.html` / recipe touch, no qa-config change
+(proof scripts aren't tracked there; the gate doc was already registered). `scripts/lib/browser.mjs` left
+byte-identical (the rAF-throttling launch flags were tried and had no measurable effect — reverted to keep
+the change minimal). Change surface: `src/main.js` (+the DEV driver), `package.json` (+ one script),
+`scripts/browser-first-playable-proof.mjs` (new), docs.
+
+**Verification.** `test:first-playable-proof` (SwiftShader 5229/9363) passes the full loop. No
+regressions: build, qa (skills 32/0/0 + layout), `test:world`, the foundation sweep (visual0/1, water,
+atmosphere, wildlife/0/1, flock, ambient/0, streamer), arsenal v1–v4, and `test:first-objective` +
+`-proof` all green (arsenal-v3 had one transient editor-readiness timeout under back-to-back load; passes
+in isolation). Tag `world-builder-first-playable-proof-fp2` (local, no push). Does NOT satisfy FP-4 —
+`world-builder-first-playable-v0` stays reserved until FP-3 (hidden-issue sweep) + §7.8 (go/no-go review).
+`docs/FIRST_PLAYABLE_BUILD.md` §7.7 + FP-2 marked done, §10/§11 refreshed.
+
+**Non-goals.** No new gameplay, weapon variety, Arsenal v5, or hidden-issue sweep (that's FP-3); no
+combat/inventory/quests; no schema bump; no gameplay/runtime-system edits beyond the DEV driver; do NOT
+apply `world-builder-first-playable-v0` (FP-4 only).

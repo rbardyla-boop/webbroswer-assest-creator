@@ -227,14 +227,18 @@ npm run test:first-objective-proof
 The relic-weapon objective (find → equip → carry → deposit-on-pedestal → complete) is playable and
 its completion + the relic's pedestal transform persist across reload.
 
-### 7.7 First-playable proof gate — **NOT YET BUILT (FP-2 deliverable)**
+### 7.7 First-playable proof gate — **DONE (FP-2, `scripts/browser-first-playable-proof.mjs`)**
 ```bash
-npm run test:first-playable-proof   # to be authored as scripts/browser-first-playable-proof.mjs
+npm run test:first-playable-proof
 ```
-The proof must verify, in one SwiftShader session: world loads · player grounded · terrain/water/fog
-visible · wildlife active · flocks active · ambient motes active · weapon can be placed · equipped ·
-slot-cycled · dropped or stored · the objective can be completed · the world can reload · runtime
-asset + objective state persist correctly · **zero console errors**.
+Verifies, in one SwiftShader session: world loads · player grounded + not submerged at spawn ·
+terrain/water/fog visible · wildlife active · flocks active · ambient motes active · weapon placed +
+equipped + slot-cycled + stored · the relic equips, is **physically walked** across the world to the
+cache (no teleport — the proof asserts the player moved > 5 units via the real movement pipeline) and
+deposited on the pedestal to complete · the world reloads · runtime asset + objective state persist ·
+**zero console errors** across both sessions. The deterministic walk is driven by a DEV-only
+`__PLAYER_MOVE_DO__` driver (camera yaw + held keys + fixed-step advance of the real per-frame update),
+stripped from production builds.
 
 ### 7.8 Adversarial review gate
 Before tagging the first playable (FP-4), run a fresh-context review across: determinism ·
@@ -281,10 +285,14 @@ completion + the pedestal transform are reload-safe; no inventory/combat. Commit
 `world-builder-first-objective-fp1`; docs `docs/FIRST_OBJECTIVE.md`, ADR-032. Gates: §7.6
 (`test:first-objective` + `test:first-objective-proof`).
 
-### FP-2 — First Playable Proof
-Author `test:first-playable-proof` (`scripts/browser-first-playable-proof.mjs`).
-Done when: the browser proof executes the full loop (load → move → environment → weapon interaction →
-slot-cycle → save/reload → objective state) and fails on any console error.
+### FP-2 — First Playable Proof — **DONE**
+`test:first-playable-proof` (`scripts/browser-first-playable-proof.mjs`) executes the full loop in one
+SwiftShader session: load → verify the living world (terrain/water/fog/wildlife/flocks/motes) → place +
+equip + slot-cycle + store a weapon → equip the relic and **physically walk** it (no teleport) to the
+cache → deposit → complete → save/reload → completion + trophy + runtime assets persist; fails on any
+console error. Driven by a DEV-only `__PLAYER_MOVE_DO__` movement driver (prod-stripped). Commit + tag
+`world-builder-first-playable-proof-fp2`; ADR-033. Gate: §7.7. (Does **not** satisfy FP-4 — the tag
+`world-builder-first-playable-v0` stays reserved until FP-3 + §7.8 are also done.)
 
 ### FP-3 — Hidden Issue Sweep
 Done when these edge/hostile cases are tested: spawn-in-water; weapon poisoned-marker; hostile `dt`;
@@ -297,34 +305,36 @@ Done when: all §7 gates pass; §7.8 review passes; the commit is clean; and
 
 ## 10. Current First Playable Status
 
-**Status: Foundation + first objective ready — integrated game-loop proof NOT yet ready (NO-GO for FP-4).**
+**Status: Foundation + first objective + integrated proof ready — hidden-issue sweep + go/no-go review still pending (NO-GO for FP-4).**
 
-What's proven (as of FP-1, commit `world-builder-first-objective-fp1`): the entire foundation stack in
-§4 passes its gates, §7.1–§7.6 are all green today, and the relic objective (find → equip → carry →
-deposit → complete) is playable and reload-safe.
+What's proven (as of FP-2, tag `world-builder-first-playable-proof-fp2`): the entire foundation stack
+in §4 passes its gates, **§7.1–§7.7 are all green today**, the relic objective (find → equip → carry →
+deposit → complete) is playable and reload-safe, and the INTEGRATED first-playable loop — load → living
+world → weapon interaction → **physically walk** the relic to the cache → deposit → reload-persist — now
+passes end-to-end in one SwiftShader session with zero console errors (`test:first-playable-proof`).
 
 What's still missing before the first playable can be tagged:
 
-1. A dedicated first-playable browser proof, `test:first-playable-proof` (FP-2) — the INTEGRATED loop
-   in one session (the FP-1 proof covers the objective in isolation, not the full move-through-world loop).
-2. A final hidden-issue sweep across the integrated loop (FP-3).
-3. A go/no-go review against this document (§7.8).
+1. A final hidden-issue sweep across the integrated loop (FP-3).
+2. A go/no-go review against this document (§7.8).
 
 ## 11. Update Rule
 
 After every accepted stage, replace the "Current entry" block below.
 
 ```text
-Last accepted stage: FP-1 — Relic Weapon Objective Marker
-Commit: tagged world-builder-first-objective-fp1
-Tag: world-builder-first-objective-fp1
-Tests passed: build, qa (skills/layout pass; qa:browser skip — Playwright absent),
-  test:first-objective (Node) + test:first-objective-proof (SwiftShader, new);
+Last accepted stage: FP-2 — Integrated First-Playable Proof
+Commit: tagged world-builder-first-playable-proof-fp2
+Tag: world-builder-first-playable-proof-fp2
+Tests passed: build, qa (skills 32/0/0 + layout pass; qa:browser skip — Playwright absent),
+  test:first-playable-proof (SwiftShader, NEW — full load→living-world→weapon→walk→deposit→reload loop,
+  0 console errors); test:first-objective (Node) + test:first-objective-proof (SwiftShader);
   test:world; foundation sweep (visual0/1, water, atmosphere, wildlife/0/1, flock, ambient/0, streamer);
   arsenal v1–v4 (test:arsenal, -world, -placement, -v3, -equip-slots, -v4) — compat, unchanged
-New risks found: integrated (move-through-world) first-playable proof still not built (FP-2);
-  hidden-issue sweep over the integrated loop not run (FP-3)
-Risks retired: no completable gameplay loop → the relic objective is playable + reload-safe;
-  objective-state persistence (objectives block whitelisted at the sanitizer, version unbumped)
-First playable readiness: foundation + first objective ready; integrated proof + hidden sweep pending
+New risks found: walk is paced by a DEV-only fixed-step driver (headless rAF is throttled to ~5fps),
+  not by the real wall-clock frame loop — faithful to the movement pipeline but not a real-time playthrough;
+  hidden-issue sweep over the integrated loop still not run (FP-3); §7.8 go/no-go review not run
+Risks retired: integrated move-through-world loop now proven (was the one missing §7.7 gate); the relic
+  is reachable on foot from spawn and the environment stays legal during a full traversal
+First playable readiness: §7.1–§7.7 green; FP-4 tag still gated on FP-3 hidden-issue sweep + §7.8 review
 ```
