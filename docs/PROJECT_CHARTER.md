@@ -1345,3 +1345,30 @@ console errors). v1/v2/v3 arsenal tests + full sweep + build + qa green.
 **Non-goals.** No firing/damage/ammo/recoil, inventory grid, rarity, loot, crafting, enemies, or
 animation beyond static slot attachment; no holster/multi-occupant (deferred); no `src/arsenal/` or
 `/arsenal.html` changes; no recipe-schema change.
+
+## ADR-031 — First Playable Build Gate (the first-game finish line, FP-0)
+
+**Decision.** Establish a single canonical **gate document**, `docs/FIRST_PLAYABLE_BUILD.md`, as the
+first-game build target distinct from engine-capability stages. It defines: the player-facing end goal
+(Glacial Valley First Playable — find/equip/carry/store a generated relic weapon, reload to prove
+persistence), the required vs deferred scope, a hidden-issue discovery checklist, the required test
+gates (all real npm scripts), go/no-go criteria, and an update rule kept current after each accepted
+stage. NOT a roadmap — every "done" is backed by a runnable command or a go/no-go check. This is a
+NON-feature stage (documentation only); it adds no code. (The user's draft suggested "ADR-030"; that
+number was already taken by Arsenal v4, so this is **ADR-031**.)
+
+**Why.** The foundation stack (Arsenal v1–v4, Visual-0/1, Wildlife-0/1/2, Ambient-0) is strong but is
+*engine capability*, not a proven *game loop*. Without a fixed, tested finish line, every cool system
+risks becoming a Build-1 requirement and "ready to demo" blurs into "ready to ship live." The gate
+separates the two and forces a tested-clear bar before any public/live exposure.
+
+**Shape.** Tags: `world-builder-first-playable-doc-v0.1` = this FP-0 doc milestone;
+`world-builder-first-playable-v0` is RESERVED for FP-4 (the actual playable) and applying it before the
+§8 GO criteria hold is itself a NO-GO violation. Milestones: FP-0 build doc (DONE) → FP-1 objective
+marker → FP-2 `test:first-playable-proof` (the one missing gate script) → FP-3 hidden-issue sweep →
+FP-4 tag. Current status: foundation gates §7.1–§7.5 all green as of Arsenal v4 (`b602009`); FP-1/FP-2/
+FP-3 not yet built → NO-GO for the first-playable tag. The document's §11 update block must be refreshed
+after every accepted stage.
+
+**Non-goals.** No code, no new feature, no combat/inventory/live-deploy; the doc explicitly defers all
+of those out of Build 1.
