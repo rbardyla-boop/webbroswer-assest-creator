@@ -29,6 +29,9 @@
     "src/world/wildlife/WildlifePlacement.js",
     "src/world/wildlife/WildlifeRuntime.js",
     "src/world/wildlife/WildlifeSystem.js",
+    "src/world/wildlife/FlockPlacement.js",
+    "src/world/wildlife/FlockRuntime.js",
+    "src/world/wildlife/AloftWildlife.js",
     "src/grass/GrassConfig.js",
     "src/grass/GrassGeometry.js",
     "src/grass/GrassMaterial.js",
@@ -67,7 +70,8 @@
     "docs/ARSENAL_WORLD.md",
     "docs/VISUAL0_TERRAIN.md",
     "docs/VISUAL1_WATER.md",
-    "docs/WILDLIFE0.md"
+    "docs/WILDLIFE0.md",
+    "docs/WILDLIFE1.md"
   ],
   "knownWarnings": [
     "Gameplay collision is currently terrain-height grounding only; prop/obstacle collision is not implemented yet.",

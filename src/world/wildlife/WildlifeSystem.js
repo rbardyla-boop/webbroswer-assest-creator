@@ -10,6 +10,7 @@ import { createWildlifeConfig } from "./WildlifeConfig.js";
 import { WILDLIFE_SPECIES } from "./WildlifeSpecies.js";
 import { placeRegion } from "./WildlifePlacement.js";
 import { spawnAnimal, updateAnimal } from "./WildlifeRuntime.js";
+import { AloftWildlife } from "./AloftWildlife.js";
 import { getHeight, getWaterLevel, getActiveTerrainProfile } from "../../terrain/terrainSampling.js";
 
 const MAX_INSTANCES_PER_SPECIES = 2048; // InstancedMesh capacity; excess active instances are clipped at render (mesh.count guard)
@@ -23,7 +24,9 @@ export class WildlifeSystem {
     this.enabled = false;
     this.regions = new Map(); // "rx,rz" -> { animals: [], center: {x,z} }
     this._meshes = new Map(); // speciesId -> THREE.InstancedMesh
-    this._activeSpecies = []; // species rows enabled by BOTH the row and the document
+    this._activeSpecies = []; // GROUNDED species rows enabled by BOTH the row and the document
+    this._activeAloftSpecies = []; // aloft species rows (delegated to the internal flock system)
+    this._aloft = null; // AloftWildlife — owned internally so the world's single wildlife handle is enough
 
     this._camPos = new THREE.Vector3();
     this._mat = new THREE.Matrix4();
@@ -46,10 +49,16 @@ export class WildlifeSystem {
     // Combine the document terrain seed with the wildlife seed so different worlds
     // (and different wildlife seeds) get distinct, deterministic herds.
     this.seed = (Math.floor(numOr(document?.terrain?.seed, 0)) ^ Math.floor(numOr(cfg.seed, 0))) | 0;
+    // GROUNDED species go through this system; ALOFT species (snow_finch) are delegated to
+    // the internal AloftWildlife so the grounded streaming/render path is unchanged.
     this._activeSpecies = WILDLIFE_SPECIES.filter(
-      (s) => s.enabled && cfg.species?.[s.id]?.enabled !== false
+      (s) => s.enabled && s.groundContract === "support" && cfg.species?.[s.id]?.enabled !== false
     );
-    if (!this.enabled || this._activeSpecies.length === 0) return;
+    this._activeAloftSpecies = WILDLIFE_SPECIES.filter(
+      (s) => s.enabled && s.groundContract === "aloft" && cfg.species?.[s.id]?.enabled !== false
+    );
+    // Return only when the whole block is dead — an aloft-only world still builds flocks.
+    if (!this.enabled || (this._activeSpecies.length === 0 && this._activeAloftSpecies.length === 0)) return;
 
     for (const species of this._activeSpecies) {
       const geo = buildSpeciesGeometry(species);
@@ -64,16 +73,23 @@ export class WildlifeSystem {
       this._meshes.set(species.id, mesh);
       this.scene.add(mesh);
     }
+
+    // Aloft flocks (Wildlife-1) — same config + combined seed, separate streaming/render.
+    this._aloft = this._activeAloftSpecies.length ? new AloftWildlife(this.scene) : null;
+    this._aloft?.load(cfg, this.seed, this._activeAloftSpecies);
   }
 
   update(dt, camera) {
-    if (!this.enabled || this._activeSpecies.length === 0 || !camera) return;
+    if (!this.enabled || !camera) return;
     camera.getWorldPosition(this._camPos);
     const camX = this._camPos.x;
     const camZ = this._camPos.z;
-    this._streamRegions(camX, camZ);
-    this._simulate(dt, camX, camZ);
-    this._render(camX, camZ);
+    if (this._activeSpecies.length > 0) {
+      this._streamRegions(camX, camZ);
+      this._simulate(dt, camX, camZ);
+      this._render(camX, camZ);
+    }
+    this._aloft?.update(dt, camX, camZ);
   }
 
   // Build regions entering visibleDistance, drop regions leaving keepDistance
@@ -176,10 +192,15 @@ export class WildlifeSystem {
 
   // Synchronously fill + render the nearby regions once (used at load/reveal).
   prewarm(camera) {
-    if (!this.enabled || this._activeSpecies.length === 0 || !camera) return;
+    if (!this.enabled || !camera) return;
     camera.getWorldPosition(this._camPos);
-    this._streamRegions(this._camPos.x, this._camPos.z);
-    this._render(this._camPos.x, this._camPos.z);
+    const camX = this._camPos.x;
+    const camZ = this._camPos.z;
+    if (this._activeSpecies.length > 0) {
+      this._streamRegions(camX, camZ);
+      this._render(camX, camZ);
+    }
+    this._aloft?.prewarm(camX, camZ);
   }
 
   // Dev/test observability — samples grounded-contract violations for the proof.
@@ -209,10 +230,13 @@ export class WildlifeSystem {
       groundedFloating,
       groundedSubmerged,
       aboveSnowline,
+      flocks: this._aloft?.flockSnapshot() ?? { present: false },
     };
   }
 
   dispose() {
+    this._aloft?.dispose();
+    this._aloft = null;
     for (const mesh of this._meshes.values()) {
       this.scene?.remove(mesh);
       mesh.geometry.dispose();
@@ -221,6 +245,7 @@ export class WildlifeSystem {
     this._meshes.clear();
     this.regions.clear();
     this._activeSpecies = [];
+    this._activeAloftSpecies = [];
     this.enabled = false;
     this.stats = emptyStats();
   }

@@ -35,7 +35,7 @@ export function placeRegion(rx, rz, config, seed) {
   const out = [];
 
   for (const species of WILDLIFE_SPECIES) {
-    if (!species.enabled) continue; // staged species (snow_finch)
+    if (!species.enabled || species.groundContract !== "support") continue; // grounded only — aloft (snow_finch) is placed by FlockPlacement
     if (config.species?.[species.id]?.enabled === false) continue; // disabled by the document
 
     const rng = mulberry32(hash2i(rx ^ seed, rz + seed) ^ species.rngSalt);

@@ -14,7 +14,7 @@ export const DEFAULT_WILDLIFE = {
   species: {
     alpine_hare: { enabled: true },
     ibex: { enabled: true },
-    snow_finch: { enabled: false }, // staged → Wildlife-1
+    snow_finch: { enabled: true }, // Wildlife-1: live aloft flock
   },
 };
 

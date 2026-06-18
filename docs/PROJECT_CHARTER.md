@@ -1090,3 +1090,64 @@ alpine world now also builds wildlife). DEV hook stripped from prod.
 
 **Deferred (non-goals).** Predators/enemies/combat, drops, inventory, taming, quests, breeding,
 hunger, full navmesh, networked wildlife, the flying flock (staged disabled → Wildlife-1).
+
+## ADR-026 — Wildlife-1: Aloft Flocks & Sky-Life Contract (the contract hosts a second movement domain)
+
+**Decision.** Promote the staged `snow_finch` row into a **live flying flock** — the first *aloft*
+consumer of the `TerrainProfile` biome contract. Prove the contract hosts sky-life (agents that fly
+but still respect terrain/water/snowline/region-streaming, with flock cohesion + player-scatter) as
+cleanly as Wildlife-0's ground-life, deterministic from seed+region+profile, no second terrain truth.
+Docs: `docs/WILDLIFE1.md`. User picks: V-wing silhouette marker; ridge-hugging high band (Y≈30–70);
+flocks fly by default. Non-goals: combat, drops, inventory, navmesh, full boids chaos, Arsenal v3.
+
+**The altitude solver is the aloft single source — and "water ≤ terrain" is FALSE.** `FlockPlacement.
+flockAltitudeAt(x,z,species,offset)` is the aloft analog of grounded `y=getHeight`, used at placement
+AND every runtime step. The alpine water table (`AlpineTerrainProfile`) is computed INDEPENDENTLY of
+height, so in the trough the water surface sits *above* terrain — "clamp above terrain ⇒ above water"
+is unsound. The solver takes an explicit `floor = max(getHeight+minClearance, water+minClearance)`,
+then `y = clamp(max(floor, getHeight+offset, snowline-attraction), minY, maxY)`, then **re-applies
+`y = max(y, floor)` AFTER the clamp** so a ridge crest taller than `maxY−minClearance` can't pull a
+bird below the mountain (maxY is a SOFT ceiling; clearance is inviolable). `getWaterLevel`/`snowlineAt`
+enter only `max`/`min`, never a multiply/divide, so the rolling profile's ±∞ degrades to "fly at the
+terrain floor" instead of NaN. A test that lowers `minY` below the water table proves the *water* term
+(not minY) is what protects.
+
+**Bounded cohesion is structural, not hoped-for.** `FlockRuntime.updateFlock` is a flock-level FSM
+(circle/drift/scatter/regroup). Centre step ≤ `min(maxSpeed·dt, MAX_STEP)` (dt clamped to MAX_DT);
+centre hard-projected back inside `maxTetherRadius` of home every step; member offset clamped ≤
+`maxSpread`; heading change ≤ `maxTurnRate·dt`. By triangle inequality every bird stays within
+`maxTetherRadius + maxSpread` of home, always — no NaN/Infinity under hostile dt or NaN threat (a
+poisoned centre snaps to home). **Scatter never freezes:** it flees away from the threat computed from
+the CENTRE (scatters as one body); if a full away-step would break the leash it steers the leash
+TANGENT instead (the aloft analog of Wildlife-0's wall-follow fix), sliding along the boundary. A
+`calmTime` debounce deterministically returns the flock to regroup→circle once the threat leaves.
+
+**Architecture — `WildlifeSystem` owns `AloftWildlife` internally.** The world threads ONE `wildlife`
+handle (7 call sites in `WorldRuntimeLoader` + `main.js`); internal ownership keeps **both files
+untouched** and the grounded streaming/render bodies byte-identical. The only grounded edits: a
+`groundContract==="support"` species filter, an always-true `if (grounded active)` guard around the
+grounded calls (so an aloft-only world still builds flocks), additive aloft delegation, and the
+`placeRegion` `groundContract!=="support"` skip. `AloftWildlife` COPIES the ~40-line region-streaming
+skeleton (same halfDiag nearest-corner hysteresis) rather than extracting a shared helper — extracting
+would perturb the proven grounded path; deferred to Wildlife-2 if a third streamed type appears.
+
+**Render.** One `THREE.InstancedMesh` per aloft species, a shallow gull-V chevron (2-tri
+`BufferGeometry`, `DoubleSide`). Separate aloft budget (`MAX_ACTIVE_FLOCK_BIRDS 1500`,
+`MAX_INSTANCES_PER_FLOCK_SPECIES 2048`); `mesh.count` gates draw; **every member position is
+finite-checked before `setMatrixAt`** (a NaN matrix would red the shared console-error gate).
+
+**Verification.** `test:flock` (Node: determinism, altitude-above-terrain+water on alpine trough +
+steepest ridge + rolling, hostile-minY water-term proof, 5000-step chase stays bounded + non-frozen +
+regroups, hostile-dt finiteness); `test:wildlife1` (SwiftShader: flocks instanced + rendered, no bird
+below terrain/water, GROUNDED animals still pass in the same scene, player unaffected, zero console
+errors); `test:wildlife` unchanged (435 grounded); full regression sweep (10 browser proofs) green.
+Fresh-context adversarial review: APPROVE, 0 critical / 0 high.
+
+**Known shared characteristics (not new defects, documented not fixed).** Both `AloftWildlife._render`
+and grounded `WildlifeSystem._render` gate on raw region-centre distance while streaming uses the
+halfDiag nearest-corner metric — an edge region can be streamed (and simulated) but not rendered;
+faithfully copied, kept parallel rather than diverged. A freshly-streamed flock starts `stateTimer=0`
+so it picks its first state on frame 1 (deterministic, harmless).
+
+**Deferred (non-goals).** Predators/attacks/damage/drops, inventory, quests, nesting, breeding,
+migration sim, full navmesh, full boids chaos, Arsenal v3 (await user pick).

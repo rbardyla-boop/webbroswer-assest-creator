@@ -55,11 +55,12 @@ for (let rx = -3; rx <= 3; rx++) {
 assert.ok(total > 100, `alpine world is populated (${total} animals across 49 regions)`);
 assert.ok(nonEmpty > 10, `herds spread across regions (${nonEmpty} non-empty)`);
 
-// --- snow_finch (flying, staged) is NEVER placed ---------------------------------
-assert.equal(WILDLIFE_SPECIES.find((s) => s.id === "snow_finch").enabled, false, "snow_finch staged disabled");
+// --- snow_finch is ALOFT (Wildlife-1): the GROUNDED placeRegion never emits it ----
+const finch = WILDLIFE_SPECIES.find((s) => s.id === "snow_finch");
+assert.equal(finch.groundContract, "aloft", "snow_finch is an aloft species (placed by FlockPlacement, not placeRegion)");
 for (let rx = -3; rx <= 3; rx++) {
   for (let rz = -3; rz <= 3; rz++) {
-    assert.ok(!placeRegion(rx, rz, cfg, SEED).some((m) => m.speciesId === "snow_finch"), "no finch placed");
+    assert.ok(!placeRegion(rx, rz, cfg, SEED).some((m) => m.speciesId === "snow_finch"), "grounded placeRegion never emits the aloft finch");
   }
 }
 

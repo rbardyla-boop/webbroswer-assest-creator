@@ -4,9 +4,10 @@
 // these to gate spawns + clamp movement against the active TerrainProfile; the system
 // builds one InstancedMesh per species from the `geometry` spec.
 //
-// Wildlife-0 ships two GROUNDED grazers. `snow_finch` (a flying flock) is present but
-// DISABLED — its aloft contract is promoted in Wildlife-1; the row keeps the data +
-// code path warm without adding a second grounding contract to this stage's proof.
+// Wildlife-0 shipped two GROUNDED grazers. Wildlife-1 promotes `snow_finch` into a LIVE
+// flying flock (groundContract "aloft"): the row carries flock-tuning numbers consumed by
+// FlockPlacement/FlockRuntime/AloftWildlife. The grounded path skips any non-"support"
+// species, so grounded placement/streaming is unchanged.
 
 export const WILDLIFE_SPECIES = [
   {
@@ -58,22 +59,33 @@ export const WILDLIFE_SPECIES = [
   },
   {
     id: "snow_finch",
-    enabled: false, // STAGED for Wildlife-1 (flying/aloft contract) — never placed here
-    groundContract: "aloft",
-    geometry: { shape: "cone", radius: 0.12, length: 0.3 },
-    color: 0xe8eef2,
+    enabled: true, // Wildlife-1: live aloft flock
+    groundContract: "aloft", // flies — y is solved by flockAltitudeAt (NOT getHeight)
+    geometry: { shape: "vwing", span: 1.4, chord: 0.6 }, // shallow gull-V silhouette (sized to read at altitude)
+    color: 0xe8eef2, // pale grey-white
     scale: [1, 1, 1],
-    yOffset: 0,
-    slopeLimit: 0.7,
-    minY: 30,
-    maxY: 70,
-    waterClearance: 0,
-    snowMargin: -20, // may sit above the snowline (high-altitude flock)
-    grazeGrassFloor: 0,
-    altitude: [14, 26], // aloft offset above terrain (Wildlife-1)
-    idleRadius: 40,
-    panicDistance: 22,
-    speed: { idle: 0, graze: 0, wander: 3.0, flee: 5.0 },
+    yOffset: 0, // aloft: render Y is the solved flight altitude, no ground offset
+    // habitat / altitude envelope (consumed by flockAltitudeAt)
+    slopeLimit: 0.7, // (unused by the aloft gate — birds fly over cliffs)
+    minClearance: 12, // HARD floor above terrain/water (inviolable; ≤ altitude[0])
+    altitude: [14, 26], // preferred per-bird offset band above terrain
+    minY: 30, // soft absolute floor (ridge-hugging high band)
+    maxY: 70, // soft absolute ceiling (terrain+clearance overrides it over high crests)
+    snowMargin: -20, // negative → the band reaches ABOVE the snowline (high-altitude flock)
+    waterClearance: 0, // (grounded-only field; aloft uses minClearance)
+    grazeGrassFloor: 0, // (grounded-only field)
+    // flock behaviour
+    idleRadius: 40, // circle/drift orbit radius around home
+    panicDistance: 22, // scatter when the viewer is within this of the flock centre
+    maxSpread: 9, // members stay within this of the flock centre (cohesion bound)
+    maxSpeed: 5.0, // hard ceiling on centre speed (units/s)
+    maxTurnRate: 2.2, // hard ceiling on heading change (rad/s)
+    circleAngularSpeed: 0.55, // orbit angular velocity when circling (rad/s)
+    scatterFactor: 1.8, // spread multiplier on scatter (product still clamped ≤ maxSpread)
+    maxTetherRadius: 55, // hard leash: centre never strays past this from home
+    calmTime: 3.0, // seconds un-panicked before a scattered flock regroups
+    speed: { idle: 0, graze: 0, wander: 3.0, flee: 5.0 }, // drift / scatter cruise speeds
+    // grouping
     herdsPerRegion: 1,
     members: [8, 14],
     regionMemberCap: 16,
