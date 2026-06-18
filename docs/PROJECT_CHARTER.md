@@ -1372,3 +1372,56 @@ after every accepted stage.
 
 **Non-goals.** No code, no new feature, no combat/inventory/live-deploy; the doc explicitly defers all
 of those out of Build 1.
+
+## ADR-032 — FP-1: Relic Weapon Objective Marker (the first completable gameplay loop)
+
+**Decision.** The first player-facing loop, built from existing systems only: find the marked relic
+weapon → equip it (Arsenal v4) → carry it to the cache marker → deposit it on the pedestal → complete,
+persisting across reload, with an always-on banner. NOT a quest engine / combat / inventory. Docs:
+`docs/FIRST_OBJECTIVE.md`. User pick: **deposit = visible trophy on the pedestal** (vs stow/hide). The
+relic is auto-spawned (a dedicated, deterministic `runtimeAssets` weapon with a fixed `RELIC_ID`) — not
+a genuine fork (designate-existing is unsatisfiable on an empty world + has an unstable id).
+
+**New `objectives` document block (additive — `WORLD_DOCUMENT_VERSION` UNCHANGED at 2).** Mirrors
+`runtimeAssets`: `{version, items[]}` with one descriptor `{kind:"relic-weapon.fp1", id, relicId,
+cache:{x,y,z}, radius, completed}`, validated by `ObjectiveTypes.sanitizeObjectivesBlock` and owned by
+`ObjectiveStore` (the `PlacedAssetStore` analog; self-heals + in-place mutation → reaches disk on save).
+Bumping the version would break ~6 zero-warning + `version === 2` assertions, so it stays additive and
+the sanitizer emits zero warnings on an empty block.
+
+**Persistence whitelist (the Arsenal-v4 B1 lesson, third time).** A document block survives save→load
+only if its sanitizer EXPLICITLY emits each field: `completed: item.completed === true` (a boolean is
+silently dropped if conditionally emitted — and it's read back on reload to restore the phase); and a
+**non-finite `cache` DROPS the whole objective** (no origin fallback — that would relocate the zone to
+world origin and make it uncompletable-by-walking). The relic's deposited pedestal transform persists
+via its existing `runtimeAssets` descriptor (in-place), so reload rebuilds the trophy + restores it.
+
+**Completion has no soft-lock.** `tryDeposit` (bound to **G**): holding the relic + in-zone → place it
+on the pedestal (idempotent) + `completed=true` + beacon→claimed; holding the relic out-of-zone → just
+**drop** it (visible, re-grabbable — never hidden); not holding the relic → returns false so the generic
+Arsenal v4 store runs. So the relic can never be lost, and completion only happens by a deliberate in-
+zone deposit. Completion is latched (terminal). Dedicated `ObjectiveRuntime` (a single objective) — NOT
+the InteractionRuntime trigger system (too heavy; the non-goals forbid a generalized quest engine);
+zone test is a plain `dx*dx+dz*dz < r*r`.
+
+**Runtime ownership + lifecycle.** `ObjectiveRuntime` is owned in `main.js` (runtime-only — needs the
+player + the per-load store), loaded AFTER the player is grounded (so sites derive from the resolved
+spawn), gated `runtimeMode && player` (`loadRuntimeAssets` runs in the editor too). The relic is spawned
+only if absent (fixed id → idempotent across reloads); that fresh world is saved once. The beacon +
+relic marker live on `scene` (NOT in `WorldRuntimeLoader.dispose`), so `load()` CLEARS its prior markers
+idempotently to avoid a leak/duplicate on reload (mirrors `PlacedWeaponRuntime.clear`). DEV hooks
+`__OBJECTIVE_DEBUG__` + `__OBJECTIVE_DO__` (relicId/equipRelic/teleportToCache/deposit/save — the proof
+drives the loop deterministically without physical movement; teleport forces an in-zone recompute).
+
+**Verification.** `test:first-objective` (Node, headless THREE: deterministic relic + dry-ground sites;
+objectives round-trip + `completed`-literal + cache-drop + zero-warning empty; self-heal; spawn-if-absent
++ idempotent reload + beacon dispose; deposit pedestal/drop/no-op; persistence; phase table).
+`test:first-objective-proof` (SwiftShader 5228/9362: find→equip→carry→deposit→complete + reload-persists;
+wildlife/ambient unaffected; 0 console errors). Arsenal v1–v4 + the foundation sweep + build + qa green.
+Tag `world-builder-first-objective-fp1` (local). Does NOT satisfy FP-4 — `world-builder-first-playable-v0`
+stays reserved (FP-2 proof + FP-3 sweep + go/no-go review pending). `docs/FIRST_PLAYABLE_BUILD.md` FP-1
+marked done + §10/§11 refreshed.
+
+**Non-goals.** No combat, inventory, enemies, dialogue, procedural quest generation, economy, multiple
+objectives, generalized objective/quest engine, AI director, or live deployment; no `src/arsenal/` /
+`/arsenal.html` / recipe-schema / environment-system changes; no `WORLD_DOCUMENT_VERSION` bump.

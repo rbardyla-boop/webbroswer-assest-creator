@@ -108,6 +108,10 @@ export function createWorldDocument(overrides = {}) {
     // load (never baked geometry): currently generated weapons. Each item carries
     // { kind, id, recipe, transform, runtime }.
     runtimeAssets: { version: 1, items: [] },
+    // Gameplay objectives (FP-1) — a single purpose-built goal the world persists across
+    // reload (currently the relic-weapon retrieval). Each item carries
+    // { kind, id, relicId, cache, radius, completed }. NOT a quest engine.
+    objectives: { version: 1, items: [] },
     objects: [],
     assets: {
       version: 1,

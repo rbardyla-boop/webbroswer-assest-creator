@@ -16,6 +16,7 @@ import { PROFILE_IDS } from "../terrain/profiles/index.js";
 import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
+import { sanitizeObjectivesBlock } from "./objectives/ObjectiveTypes.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -70,6 +71,9 @@ export function validateWorldDocument(input) {
   // Runtime assets (Arsenal v2): recipe-backed placed weapons; each item validated +
   // its recipe sanitized, the list capped (defense in depth).
   doc.runtimeAssets = sanitizeRuntimeAssetsBlock(doc.runtimeAssets, warnings);
+  // Gameplay objectives (FP-1): the relic-weapon objective; cache/relicId/completed
+  // whitelisted so they survive save→load, the list capped (zero warnings when empty).
+  doc.objectives = sanitizeObjectivesBlock(doc.objectives, warnings);
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));

@@ -60,6 +60,16 @@
         display: none; pointer-events: none;
       }
 
+      /* First-playable objective banner (top-center, runtime only) */
+      #objective-banner {
+        position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 16;
+        max-width: min(92vw, 640px); padding: 8px 16px; text-align: center;
+        font: 12px/1.5 "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+        letter-spacing: 0.03em; color: var(--text); background: var(--panel-bg);
+        border: 1px solid var(--panel-border); border-radius: 10px; backdrop-filter: blur(8px);
+        display: none; pointer-events: none;
+      }
+
       /* Top-right action buttons */
       #toolbar { position: fixed; right: 16px; top: 14px; z-index: 25; display: flex; gap: 8px; }
       .btn {
@@ -76,6 +86,7 @@
     <div id="app"></div>
 
     <div id="crosshair"></div>
+    <div id="objective-banner"></div>
 
     <div id="toolbar">
       <button id="open-editor" class="btn">▣ World Builder</button>

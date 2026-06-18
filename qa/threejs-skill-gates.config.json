@@ -72,7 +72,11 @@
     "src/world/placement/PlacedWeaponRuntime.js",
     "src/world/placement/WeaponEquipRuntime.js",
     "src/world/placement/WeaponMarkerTransforms.js",
-    "src/world/placement/WeaponEquipSlots.js"
+    "src/world/placement/WeaponEquipSlots.js",
+    "src/world/objectives/ObjectiveTypes.js",
+    "src/world/objectives/ObjectivePersistence.js",
+    "src/world/objectives/RelicWeaponObjective.js",
+    "src/world/objectives/ObjectiveRuntime.js"
   ],
   "docs": [
     "docs/THREEJS_SKILL_ADOPTION.md",
@@ -84,6 +88,7 @@
     "docs/ARSENAL_V3.md",
     "docs/ARSENAL_V4.md",
     "docs/FIRST_PLAYABLE_BUILD.md",
+    "docs/FIRST_OBJECTIVE.md",
     "docs/VISUAL0_TERRAIN.md",
     "docs/VISUAL1_WATER.md",
     "docs/WILDLIFE0.md",

@@ -40,10 +40,13 @@ import { placeWeapon, autoPlacementPoint } from "./world/placement/WeaponPlaceme
 import { WEAPON_PRESETS } from "./arsenal/WeaponPresets.js";
 import { rollConfig } from "./arsenal/WeaponConfig.js";
 import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
+import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
+import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
 const crosshairEl = document.getElementById("crosshair");
+const objectiveBannerEl = document.getElementById("objective-banner");
 const toolbarEl = document.getElementById("toolbar");
 const hintEl = document.getElementById("hint");
 const urlParams = new URLSearchParams(window.location.search);
@@ -119,6 +122,9 @@ const placedWeaponRuntime = new PlacedWeaponRuntime();
 // marker. Needs the per-load store (set in loadRuntimeAssets) + the player (runtime only).
 const weaponEquipRuntime = new WeaponEquipRuntime(placedWeaponRuntime, { scene });
 let placedAssetStore = null; // the current PlacedAssetStore, recreated per world load
+// First-playable objective (FP-1) — the relic retrieval loop. Runtime-only (it needs the
+// player + the per-load store); persists across reloads (its load() clears prior markers).
+const objectiveRuntime = runtimeMode ? new ObjectiveRuntime() : null;
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
 // registered agents (currently animated objects) so far/off-screen ones sleep
@@ -194,6 +200,24 @@ if (import.meta.env.DEV) {
       weaponEquipRuntime.persistEquip = !!on;
       return weaponEquipRuntime.persistEquip;
     },
+    save: () => world?.document && (worldSerializer.save(world.document), true),
+  };
+  // Dev/test-only: relic objective (FP-1) state + deterministic drivers (the proof equips/
+  // teleports/deposits without physical movement). For test:first-objective-proof.
+  window.__OBJECTIVE_DEBUG__ = () => objectiveRuntime?.debugSnapshot() ?? { present: false };
+  window.__OBJECTIVE_DO__ = {
+    relicId: () => objectiveRuntime?.entry?.relicId ?? null,
+    equipRelic: (slot) => weaponEquipRuntime.equip(RELIC_ID, player, slot),
+    teleportToCache: () => {
+      const c = objectiveRuntime?.entry?.cache;
+      if (!c) return false;
+      player.position.set(c.x, getHeight(c.x, c.z) + 0.1, c.z);
+      player.velocityY = 0;
+      player.syncMesh();
+      objectiveRuntime.update(0, player); // recompute inZone now (deterministic for the proof)
+      return true;
+    },
+    deposit: () => objectiveRuntime?.tryDeposit(player) ?? false,
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
@@ -448,6 +472,15 @@ function loadRuntimeAssets(document) {
   if (dropped > 0) worldSerializer.save(document); // persist freshly-dropped weapons
 }
 
+// Load the FP-1 relic objective (runtime only). Spawns the relic + cache if absent (deriving sites
+// from the now-grounded player), then persists that fresh world once. Called from BOTH the initial
+// boot path and the editor world-reload path, after the player is grounded.
+function loadObjective(document) {
+  if (!runtimeMode || !objectiveRuntime || !player) return;
+  const spawnedRelic = objectiveRuntime.load({ player, scene, placedAssetStore, placedWeaponRuntime, weaponEquipRuntime, document });
+  if (spawnedRelic) worldSerializer.save(document);
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -479,6 +512,7 @@ async function applyLoadedWorld(document) {
   player.position.set(resolved.x, resolved.y, resolved.z);
   player.velocityY = 0;
   player.syncMesh();
+  loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -616,6 +650,8 @@ async function boot() {
   const spawn = world.document.player.spawn ?? findGoodSpawn();
   const resolved = resolveSpawn(spawn);
   player.position.set(resolved.x, resolved.y, resolved.z);
+  player.syncMesh();
+  loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -736,7 +772,9 @@ function frame(now) {
   // Arsenal v3 equip: F equips the nearest placed weapon / drops the held one back to the
   // world; G stores (hides) the held one. No firing — just attach/detach.
   if (input.wasPressed("KeyF")) weaponEquipRuntime.toggleNearest(player, "drop");
-  if (input.wasPressed("KeyG")) weaponEquipRuntime.toggleNearest(player, "store");
+  // G deposits the relic when held (in the cache zone → complete; else drop it, never hidden);
+  // otherwise it stores the held weapon as before.
+  if (input.wasPressed("KeyG") && !objectiveRuntime?.tryDeposit(player)) weaponEquipRuntime.toggleNearest(player, "store");
   // Arsenal v4 slots: R cycles the held weapon through rightHand → back → hip (oriented attach).
   if (input.wasPressed("KeyR")) weaponEquipRuntime.cycleSlot(player);
 
@@ -756,6 +794,7 @@ function frame(now) {
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
+  objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer
   ambient?.update(dt, camera); // firefly motes: bounded drift over the wet meadow, scatter from the viewer
 
@@ -765,6 +804,13 @@ function frame(now) {
   // First-person crosshair, only while the mouse is captured.
   const showCross = cameraController.mode === "first" && input.pointerLocked;
   crosshairEl.style.display = showCross ? "block" : "none";
+
+  // Always-on objective banner (runtime only — the editor never reaches this branch).
+  if (objectiveBannerEl) {
+    const text = objectiveRuntime?.bannerText() ?? "";
+    objectiveBannerEl.textContent = text;
+    objectiveBannerEl.style.display = text ? "block" : "none";
+  }
 
   debug.update(dt, {
     grass: grass.stats,

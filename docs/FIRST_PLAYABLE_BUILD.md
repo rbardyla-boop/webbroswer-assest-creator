@@ -172,7 +172,7 @@ items marked **[FP-3]** must be added in the hidden-issue sweep.
 ## 7. First Playable Required Gates
 
 The first playable is accepted only if all gates pass. **Every command below exists today except
-§7.6, which is the FP-2 deliverable.**
+§7.7, which is the FP-2 deliverable.**
 
 ### 7.1 Build gate
 ```bash
@@ -181,7 +181,7 @@ npm run qa
 ```
 Expected: build succeeds; `qa` summary `0 fail`; no console-breaking build warnings. (Pre-existing
 chunk-size advisory on the arsenal recipe bundle is allowed.) `qa:browser` may WARN-skip when
-Playwright is absent — the SwiftShader CDP proofs in §7.3–§7.6 are the real browser gate.
+Playwright is absent — the SwiftShader CDP proofs in §7.3–§7.7 are the real browser gate.
 
 ### 7.2 World regression gate
 ```bash
@@ -219,7 +219,15 @@ npm run test:arsenal-equip-slots
 npm run test:arsenal-v4
 ```
 
-### 7.6 First-playable proof gate — **NOT YET BUILT (FP-2 deliverable)**
+### 7.6 Objective gate (FP-1 — done)
+```bash
+npm run test:first-objective
+npm run test:first-objective-proof
+```
+The relic-weapon objective (find → equip → carry → deposit-on-pedestal → complete) is playable and
+its completion + the relic's pedestal transform persist across reload.
+
+### 7.7 First-playable proof gate — **NOT YET BUILT (FP-2 deliverable)**
 ```bash
 npm run test:first-playable-proof   # to be authored as scripts/browser-first-playable-proof.mjs
 ```
@@ -228,7 +236,7 @@ visible · wildlife active · flocks active · ambient motes active · weapon ca
 slot-cycled · dropped or stored · the objective can be completed · the world can reload · runtime
 asset + objective state persist correctly · **zero console errors**.
 
-### 7.7 Adversarial review gate
+### 7.8 Adversarial review gate
 Before tagging the first playable (FP-4), run a fresh-context review across: determinism ·
 persistence · runtime leaks · player spawn/grounding · terrain/profile single-source ·
 water/wetness/snowline consistency · region streaming · arsenal recipe boundary · browser-proof
@@ -239,7 +247,7 @@ Required outcome: `0 critical, 0 high; all medium fixed or explicitly deferred w
 ## 8. Go / No-Go Criteria
 
 ### GO (may tag `world-builder-first-playable-v0`) — all must hold
-1. All §7 required gates pass (including §7.6 once built).
+1. All §7 required gates pass (including §7.7 once built).
 2. Browser proof passes with zero console errors.
 3. The objective can be completed by a tester.
 4. Save/reload preserves required runtime + objective state.
@@ -265,10 +273,13 @@ Required outcome: `0 critical, 0 high; all medium fixed or explicitly deferred w
 Done when: `docs/FIRST_PLAYABLE_BUILD.md` exists; defines goal, scope, tests, go/no-go, hidden-issue
 targets; and is referenced by the project charter (ADR-031). **Status: DONE.**
 
-### FP-1 — Objective Marker
-Add one simple objective: retrieve / equip / store a generated relic weapon at a marked cache point.
-Done when: the objective marker appears in-world; the player can complete it; completion state is
-deterministic and reload-safe; no inventory/combat added.
+### FP-1 — Objective Marker — **DONE**
+One objective: find → equip → carry → deposit a generated relic weapon on a marked cache pedestal.
+The relic + cache auto-spawn (deterministic, dry ground); an always-on banner names the step;
+depositing in the cache zone leaves the relic as a visible trophy and completes the objective;
+completion + the pedestal transform are reload-safe; no inventory/combat. Commit + tag
+`world-builder-first-objective-fp1`; docs `docs/FIRST_OBJECTIVE.md`, ADR-032. Gates: §7.6
+(`test:first-objective` + `test:first-objective-proof`).
 
 ### FP-2 — First Playable Proof
 Author `test:first-playable-proof` (`scripts/browser-first-playable-proof.mjs`).
@@ -281,40 +292,39 @@ region-border thrash + active-count-over-time; reload duplication; fog/water/ter
 the UX checks in §6.7 are walked by a tester.
 
 ### FP-4 — First Playable Tag
-Done when: all §7 gates pass; §7.7 review passes; the commit is clean; and
+Done when: all §7 gates pass; §7.8 review passes; the commit is clean; and
 `git tag world-builder-first-playable-v0` is created locally. No push without authorization.
 
 ## 10. Current First Playable Status
 
-**Status: Foundation ready — game-loop proof NOT yet ready (NO-GO for FP-4).**
+**Status: Foundation + first objective ready — integrated game-loop proof NOT yet ready (NO-GO for FP-4).**
 
-What's proven (as of Arsenal v4, commit `b602009`): the entire foundation stack in §4 passes its
-gates, and §7.1–§7.5 are all green today.
+What's proven (as of FP-1, commit `world-builder-first-objective-fp1`): the entire foundation stack in
+§4 passes its gates, §7.1–§7.6 are all green today, and the relic objective (find → equip → carry →
+deposit → complete) is playable and reload-safe.
 
 What's still missing before the first playable can be tagged:
-1. A single player-facing objective (FP-1).
-2. A dedicated first-playable browser proof, `test:first-playable-proof` (FP-2).
-3. A reload-complete objective-state proof (part of FP-2).
-4. A final hidden-issue sweep across the integrated loop (FP-3).
-5. A go/no-go review against this document (§7.7).
+
+1. A dedicated first-playable browser proof, `test:first-playable-proof` (FP-2) — the INTEGRATED loop
+   in one session (the FP-1 proof covers the objective in isolation, not the full move-through-world loop).
+2. A final hidden-issue sweep across the integrated loop (FP-3).
+3. A go/no-go review against this document (§7.8).
 
 ## 11. Update Rule
 
 After every accepted stage, replace the "Current entry" block below.
 
 ```text
-Last accepted stage: Arsenal v4 — Oriented Equip Slots & Multi-Slot Attachment
-Commit: b602009
-Tag: world-builder-arsenal-v4-slots
-Tests passed: build, qa (skills 32/0/0, layout 43/0/0; qa:browser skip — Playwright absent),
-  test:world; test:terrain-profile, test:terrain-source, test:water, test:atmosphere;
-  test:wildlife, test:flock, test:ambient, test:streamer (Node sweep);
-  test:visual1, test:wildlife1, test:ambient0 (SwiftShader);
-  test:arsenal, test:arsenal-world, test:arsenal-placement, test:arsenal-v3 (compat, unchanged);
-  test:arsenal-equip-slots (Node), test:arsenal-v4 (SwiftShader, new)
-New risks found: no integrated game-loop proof yet; no player-facing objective yet;
-  objective-state persistence path does not exist yet (FP-1/FP-2)
-Risks retired: position-only equip → full-transform attachment contract; equip-slot persistence
-  (runtime.slot whitelisted at the sanitizer boundary, else silently dropped)
-First playable readiness: foundation ready; first-playable proof + objective not yet built
+Last accepted stage: FP-1 — Relic Weapon Objective Marker
+Commit: tagged world-builder-first-objective-fp1
+Tag: world-builder-first-objective-fp1
+Tests passed: build, qa (skills/layout pass; qa:browser skip — Playwright absent),
+  test:first-objective (Node) + test:first-objective-proof (SwiftShader, new);
+  test:world; foundation sweep (visual0/1, water, atmosphere, wildlife/0/1, flock, ambient/0, streamer);
+  arsenal v1–v4 (test:arsenal, -world, -placement, -v3, -equip-slots, -v4) — compat, unchanged
+New risks found: integrated (move-through-world) first-playable proof still not built (FP-2);
+  hidden-issue sweep over the integrated loop not run (FP-3)
+Risks retired: no completable gameplay loop → the relic objective is playable + reload-safe;
+  objective-state persistence (objectives block whitelisted at the sanitizer, version unbumped)
+First playable readiness: foundation + first objective ready; integrated proof + hidden sweep pending
 ```

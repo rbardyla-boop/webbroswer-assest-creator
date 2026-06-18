@@ -52,6 +52,8 @@
     "test:arsenal-v3": "node scripts/browser-arsenal-v3-proof.mjs",
     "test:arsenal-equip-slots": "node scripts/arsenal-equip-slots-regression.mjs",
     "test:arsenal-v4": "node scripts/browser-arsenal-v4-proof.mjs",
+    "test:first-objective": "node scripts/first-objective-regression.mjs",
+    "test:first-objective-proof": "node scripts/browser-first-objective-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",
