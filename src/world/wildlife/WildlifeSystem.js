@@ -1,9 +1,10 @@
 // Ambient wildlife system — region streaming + instanced render + simulate LOD.
-// Mirrors the BushSystem streaming model (region Map keyed "rx,rz", enqueue within
-// visibleDistance, dispose beyond keepDistance) so the active set is bounded. Each
-// enabled species renders through ONE THREE.InstancedMesh (capacity-capped); the
-// per-animal FSM runs only within simulateDistance (far-but-active regions render a
-// frozen pose). Deterministic spawn set (WildlifePlacement); seeded motion (WildlifeRuntime).
+// Region keep/drop/build + the active-animal budget come from the shared `RegionStreamer`
+// (Wildlife-2 extraction; same nearest-corner hysteresis the streamed systems share). Each
+// enabled species renders through ONE THREE.InstancedMesh (capacity-capped); the per-animal
+// FSM runs only within simulateDistance (far-but-active regions render a frozen pose).
+// Deterministic spawn set (WildlifePlacement); seeded motion (WildlifeRuntime). Aloft flocks
+// are delegated to an internal AloftWildlife.
 
 import * as THREE from "three";
 import { createWildlifeConfig } from "./WildlifeConfig.js";
@@ -11,6 +12,7 @@ import { WILDLIFE_SPECIES } from "./WildlifeSpecies.js";
 import { placeRegion } from "./WildlifePlacement.js";
 import { spawnAnimal, updateAnimal } from "./WildlifeRuntime.js";
 import { AloftWildlife } from "./AloftWildlife.js";
+import { RegionStreamer } from "../streaming/RegionStreamer.js";
 import { getHeight, getWaterLevel, getActiveTerrainProfile } from "../../terrain/terrainSampling.js";
 
 const MAX_INSTANCES_PER_SPECIES = 2048; // InstancedMesh capacity; excess active instances are clipped at render (mesh.count guard)
@@ -22,7 +24,8 @@ export class WildlifeSystem {
     this.cfg = null;
     this.seed = 0;
     this.enabled = false;
-    this.regions = new Map(); // "rx,rz" -> { animals: [], center: {x,z} }
+    this.regions = new Map(); // "rx,rz" -> { animals: [], center: {x,z} } (repointed to the streamer's Map in load)
+    this._streamer = null; // RegionStreamer — owns region keep/drop/build + the active-animal budget
     this._meshes = new Map(); // speciesId -> THREE.InstancedMesh
     this._activeSpecies = []; // GROUNDED species rows enabled by BOTH the row and the document
     this._activeAloftSpecies = []; // aloft species rows (delegated to the internal flock system)
@@ -74,6 +77,22 @@ export class WildlifeSystem {
       this.scene.add(mesh);
     }
 
+    // Region streaming + active-animal budget (shared mechanics; per-animal sim/render below).
+    if (this._activeSpecies.length) {
+      this._streamer = new RegionStreamer({
+        getRegionSize: () => this.cfg.regionSize,
+        getVisibleDistance: () => this.cfg.visibleDistance,
+        getKeepDistance: () => this.cfg.keepDistance,
+        maxItems: MAX_ACTIVE_WILDLIFE,
+        buildRegion: (rx, rz, cx, cz) => ({
+          animals: placeRegion(rx, rz, this.cfg, this.seed).map(spawnAnimal).filter(Boolean),
+          center: { x: cx, z: cz },
+        }),
+        countItems: (region) => region.animals.length,
+      });
+      this.regions = this._streamer.regions; // same Map instance → sim/render/debug reads unchanged
+    }
+
     // Aloft flocks (Wildlife-1) — same config + combined seed, separate streaming/render.
     this._aloft = this._activeAloftSpecies.length ? new AloftWildlife(this.scene) : null;
     this._aloft?.load(cfg, this.seed, this._activeAloftSpecies);
@@ -85,52 +104,11 @@ export class WildlifeSystem {
     const camX = this._camPos.x;
     const camZ = this._camPos.z;
     if (this._activeSpecies.length > 0) {
-      this._streamRegions(camX, camZ);
+      this._streamer?.update(camX, camZ);
       this._simulate(dt, camX, camZ);
       this._render(camX, camZ);
     }
     this._aloft?.update(dt, camX, camZ);
-  }
-
-  // Build regions entering visibleDistance, drop regions leaving keepDistance
-  // (hysteresis). Regions are sparse + cheap to build, so this is synchronous.
-  _streamRegions(camX, camZ) {
-    const size = this.cfg.regionSize;
-    const halfDiag = size * 0.7072;
-    const visSq = this.cfg.visibleDistance * this.cfg.visibleDistance;
-
-    // Drop regions whose NEAREST corner is past keepDistance — the SAME halfDiag-
-    // adjusted metric the add test below uses, so [visibleDistance, keepDistance] is a
-    // clean hysteresis gap. (A raw center-distance keep with a large regionSize would
-    // build-and-drop the same border region every frame.)
-    for (const [key, region] of this.regions) {
-      const near = Math.hypot(region.center.x - camX, region.center.z - camZ) - halfDiag;
-      if (near > this.cfg.keepDistance) this.regions.delete(key);
-    }
-
-    const cx = Math.floor(camX / size);
-    const cz = Math.floor(camZ / size);
-    const r = Math.ceil(this.cfg.visibleDistance / size) + 1;
-    let activeCount = this._countAnimals();
-
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const rx = cx + dx;
-        const rz = cz + dz;
-        const key = rx + "," + rz;
-        if (this.regions.has(key)) continue;
-
-        const centerX = (rx + 0.5) * size;
-        const centerZ = (rz + 0.5) * size;
-        const dist = Math.hypot(centerX - camX, centerZ - camZ) - halfDiag;
-        if (dist * dist > visSq && dist > 0) continue;
-        if (activeCount >= MAX_ACTIVE_WILDLIFE) continue; // hard cap reached
-
-        const animals = placeRegion(rx, rz, this.cfg, this.seed).map(spawnAnimal).filter(Boolean);
-        this.regions.set(key, { animals, center: { x: centerX, z: centerZ } });
-        activeCount += animals.length;
-      }
-    }
   }
 
   // Run the FSM only for regions within simulateDistance (LOD); far-but-active
@@ -185,9 +163,7 @@ export class WildlifeSystem {
   }
 
   _countAnimals() {
-    let n = 0;
-    for (const region of this.regions.values()) n += region.animals.length;
-    return n;
+    return this._streamer ? this._streamer.itemCount() : 0;
   }
 
   // Synchronously fill + render the nearby regions once (used at load/reveal).
@@ -197,7 +173,7 @@ export class WildlifeSystem {
     const camX = this._camPos.x;
     const camZ = this._camPos.z;
     if (this._activeSpecies.length > 0) {
-      this._streamRegions(camX, camZ);
+      this._streamer?.update(camX, camZ);
       this._render(camX, camZ);
     }
     this._aloft?.prewarm(camX, camZ);
@@ -243,7 +219,9 @@ export class WildlifeSystem {
       mesh.material.dispose();
     }
     this._meshes.clear();
-    this.regions.clear();
+    this._streamer?.clear();
+    this._streamer = null;
+    this.regions = new Map(); // fresh empty Map (don't dangle a reference to the disposed streamer's)
     this._activeSpecies = [];
     this._activeAloftSpecies = [];
     this.enabled = false;

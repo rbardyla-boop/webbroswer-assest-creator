@@ -45,6 +45,7 @@
     "test:wildlife0": "node scripts/browser-wildlife0-proof.mjs",
     "test:flock": "node scripts/wildlife-flock-regression.mjs",
     "test:wildlife1": "node scripts/browser-wildlife1-proof.mjs",
+    "test:streamer": "node scripts/region-streamer-regression.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

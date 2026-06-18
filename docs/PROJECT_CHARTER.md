@@ -1151,3 +1151,46 @@ so it picks its first state on frame 1 (deterministic, harmless).
 
 **Deferred (non-goals).** Predators/attacks/damage/drops, inventory, quests, nesting, breeding,
 migration sim, full navmesh, full boids chaos, Arsenal v3 (await user pick).
+
+## ADR-027 — Wildlife-2: Shared RegionStreamer Extraction (behavior-preserving refactor)
+
+**Decision.** Extract the region-streaming mechanics duplicated across `WildlifeSystem` (grounded)
+and `AloftWildlife` (flocks) — `AloftWildlife` literally copied the loop in Wildlife-1 with a
+`TODO(Wildlife-2): extract` marker — into a shared, Node-testable `src/world/streaming/`
+(`RegionStreamer` + `RegionMetrics` + `RegionKey`), retiring the copy before a plausible third
+streamed actor class makes the duplication doctrine. **This is a refactor: the bar is PARITY** —
+identical determinism, identical SwiftShader proof counts (tolerance = 0), identical public APIs.
+No `docs/WILDLIFE2.md` (structural hygiene; this ADR is the record).
+
+**Scope = the two wildlife systems only.** Research found two streaming *families*: Family A
+(wildlife grounded + aloft — plain payload arrays, ONE shared mesh, **synchronous** build,
+**symmetric** nearest-corner keep) and Family B (`BushSystem`/`GrassSystem`/`TreeSystem` —
+heavyweight per-patch objects, **lazy budgeted** build, **asymmetric** raw-centre keep). They share
+only the `0.7072` constant, not the shape. Adopting any Family-B system would change its
+behavior/density → a WRONG-IF, so they are deferred, and the shared `0.7072` is NOT centralized
+into them (identical value → zero correctness win, pure blast-radius across 3 proven systems).
+
+**What moved + what stayed.** `RegionStreamer` owns the `regions` Map + the keep/drop/build pass
+(byte-faithful to the inline loop: drop-before-scan, the `0.7072` LITERAL — never `Math.SQRT1_2`,
+dz-outer/dx-inner grid order, `rx + "," + rz` key, `dist*dist > visSq && dist > 0` gate,
+`activeCount` seeded from `itemCount()` then `>= maxItems` checked BEFORE build / incremented AFTER
+— overshoot-by-one-region preserved). All three cfg reads (regionSize/visible/keep) are getters
+read per-frame. The systems supply `buildRegion` (place→spawn→filter) + `countItems` (the budget
+UNIT: grounded `animals.length`, aloft `Σ flock.members`); they point `this.regions` at
+`streamer.regions` (same Map instance) so the **proven `_simulate`/`_render` bodies stay
+byte-identical**, keeping their raw-centre distance gate (the intentional asymmetry vs the
+nearest-corner stream metric — NOT "fixed", as that would shift counts). `main.js` +
+`WorldRuntimeLoader.js` untouched; public system signatures unchanged.
+
+**Verification.** `test:streamer` — `0.7072` literal guard, deterministic set+order, no-thrash
+idempotency, budget overshoot semantics (both count units), and the decisive **ORACLE**: an
+inlined verbatim transcription of the old `_streamRegions` loop whose key SET + ORDER must match
+the streamer for every camera position, run for BOTH the grounded and aloft payload/budget-unit.
+`test:wildlife` (435 animals / 32 regions) + `test:flock` (72 flocks / 783 birds) + the two
+SwiftShader proofs pass with **byte-identical counts**; full regression sweep + qa green.
+Fresh-context adversarial review (git-diff vs HEAD): APPROVE, 0 critical / 0 high; its MEDIUM
+(add a direct aloft oracle run) and LOW (regionSize per-frame getter for faithfulness) were both
+fixed + re-verified.
+
+**Non-goals.** No new species/behavior, no Family-B adoption, no centralizing `0.7072` into
+Family B, no "fixing" the raw-centre sim/render metric, no ECS migration, no Arsenal v3.

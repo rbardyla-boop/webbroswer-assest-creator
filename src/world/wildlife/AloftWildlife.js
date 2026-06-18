@@ -1,16 +1,16 @@
 // Aloft-flock streaming + instanced render — the sky-life analog of WildlifeSystem, owned
 // INTERNALLY by it (so the world's single `wildlife` handle and main.js stay untouched).
 //
-// The region-streaming skeleton (Map keyed "rx,rz", halfDiag nearest-corner keep/drop
-// hysteresis, simulate-LOD, mesh.count draw-gate) is COPIED from WildlifeSystem rather than
-// extracted: the grounded streaming is proven and must not be perturbed, and the payloads
-// differ (flocks vs animals, per-flock vs per-animal FSM). TODO(Wildlife-2): extract a
-// shared RegionStreamer if a third streamed species type ever appears.
+// Region keep/drop/build + the active-bird budget come from the shared `RegionStreamer`
+// (Wildlife-2 extraction); the budget UNIT here is BIRDS (Σ flock.members), not flocks. The
+// per-flock simulate/render bodies (FSM, mesh.count draw-gate, finite-guards) stay local
+// because they differ from the grounded per-animal path.
 
 import * as THREE from "three";
 import { WILDLIFE_SPECIES } from "./WildlifeSpecies.js";
 import { placeFlockRegion } from "./FlockPlacement.js";
 import { spawnFlock, updateFlock } from "./FlockRuntime.js";
+import { RegionStreamer } from "../streaming/RegionStreamer.js";
 import { getHeight, getWaterLevel } from "../../terrain/terrainSampling.js";
 
 const MAX_INSTANCES_PER_FLOCK_SPECIES = 2048; // InstancedMesh capacity per aloft species
@@ -23,7 +23,8 @@ export class AloftWildlife {
     this.cfg = null;
     this.seed = 0;
     this.species = []; // active aloft species rows
-    this.regions = new Map(); // "rx,rz" -> { flocks: [], center: {x,z} }
+    this.regions = new Map(); // "rx,rz" -> { flocks: [], center: {x,z} } (repointed to the streamer's Map in load)
+    this._streamer = null; // RegionStreamer — owns region keep/drop/build + the active-bird budget
     this._meshes = new Map(); // speciesId -> THREE.InstancedMesh
 
     this._mat = new THREE.Matrix4();
@@ -62,56 +63,39 @@ export class AloftWildlife {
       this._meshes.set(species.id, mesh);
       this.scene.add(mesh);
     }
+
+    // Region streaming + active-bird budget (shared mechanics; per-flock sim/render below).
+    // Same nearest-corner metric as the grounded system; the budget unit here is BIRDS
+    // (Σ flock.members), not flocks.
+    this._streamer = new RegionStreamer({
+      getRegionSize: () => this.cfg.regionSize,
+      getVisibleDistance: () => this.cfg.visibleDistance,
+      getKeepDistance: () => this.cfg.keepDistance,
+      maxItems: MAX_ACTIVE_FLOCK_BIRDS,
+      buildRegion: (rx, rz, cx, cz) => ({
+        flocks: placeFlockRegion(rx, rz, this.cfg, this.seed).map(spawnFlock).filter(Boolean),
+        center: { x: cx, z: cz },
+      }),
+      countItems: (region) => {
+        let n = 0;
+        for (const f of region.flocks) n += f.members.length;
+        return n;
+      },
+    });
+    this.regions = this._streamer.regions; // same Map instance → sim/render/debug reads unchanged
   }
 
   update(dt, camX, camZ) {
     if (this.species.length === 0) return;
-    this._streamRegions(camX, camZ);
+    this._streamer?.update(camX, camZ);
     this._simulate(dt, camX, camZ);
     this._render(camX, camZ);
   }
 
   prewarm(camX, camZ) {
     if (this.species.length === 0) return;
-    this._streamRegions(camX, camZ);
+    this._streamer?.update(camX, camZ);
     this._render(camX, camZ);
-  }
-
-  // Build regions entering visibleDistance, drop regions leaving keepDistance — the SAME
-  // halfDiag nearest-corner metric WildlifeSystem uses, so [visible, keep] is a clean gap.
-  _streamRegions(camX, camZ) {
-    const size = this.cfg.regionSize;
-    const halfDiag = size * 0.7072;
-    const visSq = this.cfg.visibleDistance * this.cfg.visibleDistance;
-
-    for (const [key, region] of this.regions) {
-      const near = Math.hypot(region.center.x - camX, region.center.z - camZ) - halfDiag;
-      if (near > this.cfg.keepDistance) this.regions.delete(key);
-    }
-
-    const cx = Math.floor(camX / size);
-    const cz = Math.floor(camZ / size);
-    const r = Math.ceil(this.cfg.visibleDistance / size) + 1;
-    let activeBirds = this._countBirds();
-
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const rx = cx + dx;
-        const rz = cz + dz;
-        const key = rx + "," + rz;
-        if (this.regions.has(key)) continue;
-
-        const centerX = (rx + 0.5) * size;
-        const centerZ = (rz + 0.5) * size;
-        const dist = Math.hypot(centerX - camX, centerZ - camZ) - halfDiag;
-        if (dist * dist > visSq && dist > 0) continue;
-        if (activeBirds >= MAX_ACTIVE_FLOCK_BIRDS) continue;
-
-        const flocks = placeFlockRegion(rx, rz, this.cfg, this.seed).map(spawnFlock).filter(Boolean);
-        this.regions.set(key, { flocks, center: { x: centerX, z: centerZ } });
-        for (const f of flocks) activeBirds += f.members.length;
-      }
-    }
   }
 
   // Run the flock FSM only within simulateDistance (LOD); far-but-active flocks hold pose.
@@ -169,9 +153,7 @@ export class AloftWildlife {
   }
 
   _countBirds() {
-    let n = 0;
-    for (const region of this.regions.values()) for (const f of region.flocks) n += f.members.length;
-    return n;
+    return this._streamer ? this._streamer.itemCount() : 0;
   }
 
   _countFlocks() {
@@ -213,7 +195,9 @@ export class AloftWildlife {
       mesh.material.dispose();
     }
     this._meshes.clear();
-    this.regions.clear();
+    this._streamer?.clear();
+    this._streamer = null;
+    this.regions = new Map(); // fresh empty Map (don't dangle a reference to the disposed streamer's)
     this.species = [];
     this.stats = emptyStats();
   }
