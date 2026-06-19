@@ -70,6 +70,35 @@
         display: none; pointer-events: none;
       }
 
+      .interaction-prompt {
+        position: fixed; left: 50%; bottom: 54px; z-index: 18; transform: translate(-50%, 10px);
+        display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+        color: var(--text); background: rgba(9, 17, 20, 0.88); border: 1px solid rgba(158, 238, 255, 0.42);
+        border-radius: 9px; opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease;
+        pointer-events: none; font-size: 12px;
+      }
+      .interaction-prompt.visible { opacity: 1; transform: translate(-50%, 0); }
+      .interaction-prompt kbd {
+        min-width: 28px; padding: 4px 7px; text-align: center; color: #d8f8ff;
+        background: rgba(103, 207, 232, 0.18); border: 1px solid rgba(158, 238, 255, 0.55); border-radius: 5px;
+      }
+
+      .completion-card {
+        position: fixed; inset: 0; z-index: 45; display: grid; place-content: center; text-align: center;
+        padding: 24px; background: radial-gradient(circle at 50% 42%, rgba(26, 68, 77, 0.82), rgba(5, 10, 13, 0.9));
+        opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+      }
+      .completion-card.visible { opacity: 1; pointer-events: auto; }
+      .completion-card .eyebrow { color: #9eeeff; letter-spacing: 0.24em; font-size: 11px; }
+      .completion-card h1 { margin: 12px 0 8px; font: 500 clamp(28px, 5vw, 54px)/1.1 Georgia, serif; color: #ecfbff; }
+      .completion-card p { margin: 0 0 22px; color: #b7cbd0; }
+      .completion-actions { display: flex; justify-content: center; gap: 10px; }
+      .completion-actions button {
+        padding: 9px 14px; color: #e8faff; background: rgba(16, 36, 42, 0.9);
+        border: 1px solid rgba(158, 238, 255, 0.42); border-radius: 7px; cursor: pointer; font: inherit;
+      }
+      .completion-actions button:hover { border-color: #9eeeff; color: #9eeeff; }
+
       /* Top-right action buttons */
       #toolbar { position: fixed; right: 16px; top: 14px; z-index: 25; display: flex; gap: 8px; }
       .btn {
@@ -96,7 +125,7 @@
       <b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &nbsp;
       <b>Jump</b> <kbd>Space</kbd> &nbsp; <b>Sprint</b> <kbd>Shift</kbd><br />
       <b>Look</b> click to capture mouse · <kbd>Esc</kbd> release<br />
-      <b>Camera</b> <kbd>V</kbd> first/third person &nbsp; <b>Debug</b> <kbd>H</kbd>
+      <b>Camera</b> <kbd>V</kbd> first/third person &nbsp; <b>Debug</b> <kbd>`</kbd>
     </div>
 
     <div id="loader">

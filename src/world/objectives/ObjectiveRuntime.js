@@ -90,7 +90,8 @@ export class ObjectiveRuntime {
     const dx = player.position.x - c.x;
     const dz = player.position.z - c.z;
     this._inZone = dx * dx + dz * dz < this.entry.radius * this.entry.radius;
-    const relicEquipped = this.equipRuntime?.equippedId === RELIC_ID;
+    // v6: the relic counts as carried in ANY slot (the player may hold other weapons too).
+    const relicEquipped = this.equipRuntime?.slotOf(RELIC_ID) != null;
     this._phase = livePhase({ relicEquipped, completed: this.entry.completed === true, inZone: this._inZone });
     if (this._relicMarker) this._relicMarker.visible = this._phase === "find";
   }
@@ -103,8 +104,8 @@ export class ObjectiveRuntime {
    */
   tryDeposit(player) {
     if (!this.entry || !player?.mesh || !this.equipRuntime) return false;
-    if (this.equipRuntime.equippedId !== RELIC_ID) return false;
-    this.equipRuntime.unequip(player, "drop"); // detach to the world, visible, idle
+    if (this.equipRuntime.slotOf(RELIC_ID) == null) return false;
+    this.equipRuntime.unequipWeapon(RELIC_ID, player, "drop"); // detach the relic specifically (any slot)
     if (!this._inZone) return true; // dropped near the player — re-grabbable
     // in-zone: place the relic on the cache pedestal (idempotent) and mark complete.
     const e = this._relicEntry();
@@ -172,7 +173,7 @@ export class ObjectiveRuntime {
     const relicPos = rd?.transform?.position ?? null;
     // Derive phase LIVE (not the cached this._phase, which only updates on the per-frame update)
     // so a deterministic driver sees the effect of equip/deposit in the same synchronous turn.
-    const relicEquipped = this.equipRuntime?.equippedId === RELIC_ID;
+    const relicEquipped = this.equipRuntime?.slotOf(RELIC_ID) != null;
     const phase = this.entry ? livePhase({ relicEquipped, completed: this.entry.completed === true, inZone: this._inZone }) : "find";
     return {
       present: true,

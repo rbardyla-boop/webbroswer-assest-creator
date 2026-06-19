@@ -156,10 +156,11 @@ const run = await withBrowserProof(
       await runtimeSession(async (rt) => {
         const d = await evalValue(rt.cdp, `window.__DOC_DEBUG__()`);
         assert.equal(d.relicWeapons, 1, `reload ${reload}: exactly one relic weapon (no duplicate)`);
+        assert.equal(d.tutorialWeapons, 1, `reload ${reload}: exactly one tutorial weapon (no duplicate)`);
         assert.equal(d.cacheBeacons, 1, `reload ${reload}: exactly one cache beacon (no leak)`);
         assert.ok(d.relicMarkers <= 1, `reload ${reload}: at most one relic marker (no leak) — got ${d.relicMarkers}`);
         assert.equal(d.objectives, 1, `reload ${reload}: exactly one objective entry (no append)`);
-        assert.equal(d.runtimeAssets, 1, `reload ${reload}: runtime-asset count stable at 1 (only the relic)`);
+        assert.equal(d.runtimeAssets, 2, `reload ${reload}: runtime-asset count stable at 2 (relic + tutorial weapon)`);
 
         const drift = await evalValue(rt.cdp, DRIFT);
         if (drift0 === null) drift0 = drift;
@@ -182,7 +183,7 @@ const run = await withBrowserProof(
       })()`);
       assert.ok(r.id, "placed a weapon to store");
       assert.equal(r.equippedId, null, "the weapon is stored (not equipped) before reload");
-      assert.equal(r.assets, 2, "runtime-asset set now holds the relic + the stored weapon");
+      assert.equal(r.assets, 3, "runtime-asset set now holds the relic + tutorial + stored weapon");
       storedId = r.id;
     });
     await runtimeSession(async (rt) => {
@@ -192,7 +193,7 @@ const run = await withBrowserProof(
       })()`);
       assert.equal(r.equippedId, null, "a stored weapon reloads NOT equipped");
       assert.ok(r.ids.includes(storedId), "the stored weapon still exists in the world after reload");
-      assert.equal(r.assets, 2, "runtime assets persist across the reload (relic + stored weapon)");
+      assert.equal(r.assets, 3, "runtime assets persist across the reload (relic + tutorial + stored weapon)");
       assert.equal(r.relicWeapons, 1, "still exactly one relic after the store/reload cycle");
     });
   }

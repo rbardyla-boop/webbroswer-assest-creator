@@ -35,6 +35,7 @@ import { InteractionOverlay } from "./interaction/InteractionOverlay.js";
 import { ParticleRuntime } from "./particles/ParticleRuntime.js";
 import { PlacedWeaponRuntime } from "./world/placement/PlacedWeaponRuntime.js";
 import { WeaponEquipRuntime } from "./world/placement/WeaponEquipRuntime.js";
+import { WeaponCarryRuntime } from "./world/placement/WeaponCarryRuntime.js";
 import { PlacedAssetStore } from "./world/assets/PlacedAssetStore.js";
 import { placeWeapon, autoPlacementPoint } from "./world/placement/WeaponPlacementTool.js";
 import { WEAPON_PRESETS } from "./arsenal/WeaponPresets.js";
@@ -42,6 +43,7 @@ import { rollConfig } from "./arsenal/WeaponConfig.js";
 import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
 import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
 import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
+import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
 const container = document.getElementById("app");
 const loaderEl = document.getElementById("loader");
@@ -121,10 +123,27 @@ const placedWeaponRuntime = new PlacedWeaponRuntime();
 // Equip-to-hand (Arsenal v3) — reparents a placed weapon onto the player at its `equip`
 // marker. Needs the per-load store (set in loadRuntimeAssets) + the player (runtime only).
 const weaponEquipRuntime = new WeaponEquipRuntime(placedWeaponRuntime, { scene });
+// Multiple carried weapons + holster/draw (Arsenal v6) — the verb layer over the equip engine.
+// rightHand is the drawn/active slot; back + hip are holstered. Owns no state of its own.
+const weaponCarryRuntime = new WeaponCarryRuntime(weaponEquipRuntime);
 let placedAssetStore = null; // the current PlacedAssetStore, recreated per world load
 // First-playable objective (FP-1) — the relic retrieval loop. Runtime-only (it needs the
 // player + the per-load store); persists across reloads (its load() clears prior markers).
 const objectiveRuntime = runtimeMode ? new ObjectiveRuntime() : null;
+const frozenCacheSlice = runtimeMode
+  ? new FrozenCacheSlice({
+      scene,
+      player,
+      objectiveRuntime,
+      weaponCarryRuntime,
+      weaponEquipRuntime,
+      onRestart: () => {
+        localStorage.removeItem(worldSerializer.storageKey);
+        localStorage.removeItem("frozen-cache-tutorial-v1");
+        window.location.href = "/?play=1";
+      },
+    })
+  : null;
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
 // registered agents (currently animated objects) so far/off-screen ones sleep
@@ -210,6 +229,32 @@ if (import.meta.env.DEV) {
     },
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
+  // Dev/test-only: Arsenal v6 carry verbs so the proof can carry multiple weapons + holster/draw
+  // without a canvas raycast (the keyboard F/R/H/G/1-2-3 are the user-facing equivalents). For
+  // test:arsenal-v6.
+  window.__ARSENAL_CARRY_DO__ = {
+    place: ({ x = 0, z = 0 } = {}) => {
+      if (!placedAssetStore) return null;
+      const preset = WEAPON_PRESETS[0];
+      const recipe = generateWeaponRecipe(rollConfig(preset.seed + "-c" + placedWeaponRuntime.entries.size, preset.type));
+      const descriptor = placeWeapon(placedAssetStore, recipe, { x, z, yaw: 0 });
+      if (descriptor) placedWeaponRuntime.add(descriptor);
+      return descriptor?.id ?? null;
+    },
+    equip: (id, slot) => weaponEquipRuntime.equip(id, player, slot),
+    pickUp: () => weaponCarryRuntime.pickUp(player),
+    drawSlot: (slot) => weaponCarryRuntime.drawSlot(slot, player),
+    holsterOrDraw: () => weaponCarryRuntime.holsterOrDraw(player),
+    cycle: () => weaponCarryRuntime.cycle(player),
+    dropActive: () => weaponCarryRuntime.dropActive(player),
+    storeActive: () => weaponCarryRuntime.storeActive(player),
+    setPersist: (on) => {
+      weaponEquipRuntime.persistEquip = !!on;
+      return weaponEquipRuntime.persistEquip;
+    },
+    snapshot: () => weaponCarryRuntime.debugSnapshot(),
+    save: () => world?.document && (worldSerializer.save(world.document), true),
+  };
   // Dev/test-only: relic objective (FP-1) state + deterministic drivers (the proof equips/
   // teleports/deposits without physical movement). For test:first-objective-proof.
   window.__OBJECTIVE_DEBUG__ = () => objectiveRuntime?.debugSnapshot() ?? { present: false };
@@ -226,6 +271,60 @@ if (import.meta.env.DEV) {
       return true;
     },
     deposit: () => objectiveRuntime?.tryDeposit(player) ?? false,
+    save: () => world?.document && (worldSerializer.save(world.document), true),
+  };
+  window.__FROZEN_CACHE_DEBUG__ = () => frozenCacheSlice?.debugSnapshot() ?? { present: false };
+  window.__FROZEN_CACHE_DO__ = {
+    teleportTo: (id) => {
+      const descriptor = placedAssetStore?.list().find((item) => item.id === id);
+      const p = descriptor?.transform?.position;
+      if (!p) return false;
+      player.position.set(p.x, getHeight(p.x, p.z) + 0.1, p.z);
+      player.velocityY = 0;
+      player.syncMesh();
+      objectiveRuntime?.update(0, player);
+      frozenCacheSlice?.update(0);
+      return true;
+    },
+    tutorialWeaponId: () => TUTORIAL_WEAPON_ID,
+    relicId: () => RELIC_ID,
+    teleportToCache: () => {
+      const c = objectiveRuntime?.entry?.cache;
+      if (!c) return false;
+      player.position.set(c.x, getHeight(c.x, c.z) + 0.1, c.z);
+      player.velocityY = 0;
+      player.syncMesh();
+      objectiveRuntime.update(0, player);
+      frozenCacheSlice?.update(0);
+      return true;
+    },
+    pickUp: () => {
+      const result = weaponCarryRuntime.pickUp(player);
+      frozenCacheSlice?.noteAction("F", result !== false);
+      objectiveRuntime?.update(0, player);
+      frozenCacheSlice?.update(0);
+      return result;
+    },
+    cycle: () => {
+      const result = weaponCarryRuntime.cycle(player);
+      frozenCacheSlice?.noteAction("R", result);
+      frozenCacheSlice?.update(0);
+      return result;
+    },
+    holster: () => {
+      const result = weaponCarryRuntime.holsterOrDraw(player);
+      frozenCacheSlice?.noteAction("H", result);
+      frozenCacheSlice?.update(0);
+      return result;
+    },
+    deposit: () => {
+      const result = objectiveRuntime?.tryDeposit(player) ?? false;
+      frozenCacheSlice?.noteAction("G", result);
+      objectiveRuntime?.update(0, player);
+      frozenCacheSlice?.update(0);
+      if (objectiveRuntime?.entry?.completed && world?.document) worldSerializer.save(world.document);
+      return result;
+    },
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
   // Dev/test-only: physical-movement driver so a proof can WALK the player through the world
@@ -276,6 +375,7 @@ if (import.meta.env.DEV) {
       objectives: objectives.length,
       runtimeAssets: items.length,
       relicWeapons: items.filter((i) => i.id === RELIC_ID).length,
+      tutorialWeapons: items.filter((i) => i.id === TUTORIAL_WEAPON_ID).length,
       cacheBeacons,
       relicMarkers,
     };
@@ -538,7 +638,8 @@ function loadRuntimeAssets(document) {
 function loadObjective(document) {
   if (!runtimeMode || !objectiveRuntime || !player) return;
   const spawnedRelic = objectiveRuntime.load({ player, scene, placedAssetStore, placedWeaponRuntime, weaponEquipRuntime, document });
-  if (spawnedRelic) worldSerializer.save(document);
+  const spawnedTutorial = frozenCacheSlice?.load({ document, placedAssetStore, placedWeaponRuntime }) ?? false;
+  if (spawnedRelic || spawnedTutorial) worldSerializer.save(document);
 }
 
 async function applyLoadedWorld(document) {
@@ -826,17 +927,35 @@ function frame(now) {
 
   elapsed += dt;
 
-  // Global toggles.
-  if (input.wasPressed("KeyH")) debug.toggle();
+  // Global toggles. (Debug moved to Backquote in v6 so H is free for holster/draw.)
+  if (input.wasPressed("Backquote")) debug.toggle();
   if (input.wasPressed("KeyB")) budgetHUD?.toggle();
-  // Arsenal v3 equip: F equips the nearest placed weapon / drops the held one back to the
-  // world; G stores (hides) the held one. No firing — just attach/detach.
-  if (input.wasPressed("KeyF")) weaponEquipRuntime.toggleNearest(player, "drop");
-  // G deposits the relic when held (in the cache zone → complete; else drop it, never hidden);
-  // otherwise it stores the held weapon as before.
-  if (input.wasPressed("KeyG") && !objectiveRuntime?.tryDeposit(player)) weaponEquipRuntime.toggleNearest(player, "store");
-  // Arsenal v4 slots: R cycles the held weapon through rightHand → back → hip (oriented attach).
-  if (input.wasPressed("KeyR")) weaponEquipRuntime.cycleSlot(player);
+  // Arsenal v6 carry: F picks up the nearest placed weapon into a free slot / drops the active one;
+  // R rotates carried weapons through the slots (next weapon to hand); H holsters the drawn weapon
+  // to a free slot, or draws a holstered one back; 1/2/3 select rightHand/back/hip. No firing.
+  if (input.wasPressed("KeyF")) {
+    const changed = weaponCarryRuntime.pickUpOrDrop(player);
+    frozenCacheSlice?.noteAction("F", changed);
+  }
+  if (input.wasPressed("KeyR")) {
+    const changed = weaponCarryRuntime.cycle(player);
+    frozenCacheSlice?.noteAction("R", changed);
+  }
+  if (input.wasPressed("KeyH")) {
+    const changed = weaponCarryRuntime.holsterOrDraw(player);
+    frozenCacheSlice?.noteAction("H", changed);
+  }
+  // G deposits the relic when carried (in the cache zone → complete; else drop it, never hidden);
+  // otherwise it stores the drawn weapon.
+  if (input.wasPressed("KeyG")) {
+    const deposited = objectiveRuntime?.tryDeposit(player) ?? false;
+    const changed = deposited || weaponCarryRuntime.storeActive(player);
+    frozenCacheSlice?.noteAction("G", changed);
+    if (deposited && objectiveRuntime?.entry?.completed && world?.document) worldSerializer.save(world.document);
+  }
+  if (input.wasPressed("Digit1")) weaponCarryRuntime.selectSlot("rightHand", player);
+  if (input.wasPressed("Digit2")) weaponCarryRuntime.selectSlot("back", player);
+  if (input.wasPressed("Digit3")) weaponCarryRuntime.selectSlot("hip", player);
 
   // Update order: camera (yaw/pitch + mode) → movement → grass streaming.
   cameraController.update(dt);
@@ -855,6 +974,7 @@ function frame(now) {
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
+  frozenCacheSlice?.update(dt);
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer
   ambient?.update(dt, camera); // firefly motes: bounded drift over the wet meadow, scatter from the viewer
 
@@ -867,7 +987,7 @@ function frame(now) {
 
   // Always-on objective banner (runtime only — the editor never reaches this branch).
   if (objectiveBannerEl) {
-    const text = objectiveRuntime?.bannerText() ?? "";
+    const text = frozenCacheSlice?.bannerText() ?? objectiveRuntime?.bannerText() ?? "";
     objectiveBannerEl.textContent = text;
     objectiveBannerEl.style.display = text ? "block" : "none";
   }
