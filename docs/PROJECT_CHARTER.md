@@ -22,14 +22,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (Slice-0 accepted; implementation commit `464c4a2`).**
-- **50 stages shipped** (+ a Gate Repair-0 repair tag; latest release tag records Arsenal v6 + Slice-0).
-  Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-19 (Slice-0A accepted; tag `world-builder-slice0a-human-ux`).**
+- **51 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-0 — The Frozen Cache**, the first
-  authored 5–10 minute experience on the first-playable foundation; Arsenal v6 is its accepted prerequisite.
-- **Node regression baseline: 41/41 gates GREEN** (prior 39/39 sweep plus the new isolated
-  `test:arsenal-carry` and `test:frozen-cache` gates). No known red or fragile gate remains.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-0A — Human-UX Hardening +
+  Instrumentation** (ADR-040): closed by a clean no-coaching operator walk; added a ▶ Play entry, replay-primary
+  completion card, hidden-in-play-mode controls bar, arrival ControlsHint, and a SliceTrace friction log.
+- **Node regression baseline: 41/41 gates GREEN** (`test:arsenal-carry`, `test:frozen-cache`, …); browser
+  proofs incl. `test:slice0a` green this session. No known red or fragile gate remains.
+- **Next per ADR-039 roadmap: Editor UX-1** (hierarchy, selection, snapping, layers, autosave).
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -92,7 +93,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | | FP-2 integrated proof | `…first-playable-proof-fp2` | `test:first-playable-proof` | ✅ |
 | | FP-3 hidden-issue sweep | `…first-playable-hidden-fp3` | `test:first-playable-hidden` (+proof) | ✅ |
 | | **FP-4 go/no-go + tag** | **`…first-playable-v0`** | full gate sweep + review | ✅ **MILESTONE: GAME IS PLAYABLE** |
-| 8 · Authored play slices | **Slice-0 — The Frozen Cache** | **`…slice0-frozen-cache`** | `test:frozen-cache` `test:frozen-cache-proof` | ✅ **LATEST** |
+| 8 · Authored play slices | Slice-0 — The Frozen Cache | `…slice0-frozen-cache` | `test:frozen-cache` `test:frozen-cache-proof` | ✅ |
+| | **Slice-0A — Human-UX Hardening** | **`…slice0a-human-ux`** | `test:slice0a` | ✅ **LATEST** (ADR-040; reversible) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
@@ -1859,11 +1861,15 @@ outside explanation before Combat-0 begins.
 
 ## ADR-040 — Slice-0A: Human-UX Hardening + Instrumentation (the human walk is the OPEN gate)
 
-**Status: OPEN — intentionally not tagged.** Slice-0A's completion gate is a real fresh-player walk recorded by
-the operator. This stage ships the *hardening + instrumentation* that makes that walk productive and
-observable; it does NOT claim human comprehension is proven. No milestone tag is applied until the operator
-records a fresh-player completion-without-coaching. (Evidence bar chosen by the operator: "harden + instrument
-for me," not an automated self-guided proxy.)
+**Status: ACCEPTED — tag `world-builder-slice0a-human-ux`.** Slice-0A's completion gate is a real fresh-player
+walk recorded by the operator, and it is now met: across three walks the operator drove the slice to a clean,
+no-coaching completion (session log: `discovery → F pick-up → return → deposit → G → complete @ 20.2s`, zero
+`stuck` events), and the three friction items found along the way (see the friction log) were fixed. This stage
+ships the *hardening + instrumentation* that made that walk productive and observable; it does NOT claim
+human comprehension is *proven* for every newcomer — the operator had played it several times by the accepting
+walk, so a brand-new person's cold first-contact remains the only stronger evidence, and the tag is therefore
+**reversible** if a fresh tester later trips on something. (Evidence bar chosen by the operator: "harden +
+instrument for me," not an automated self-guided proxy.)
 
 **Why a different shape.** "Can a fresh player finish without coaching?" cannot be self-graded — an automated
 proof asserts UI *state*, not human *understanding*. So Slice-0A does what automation legitimately can: (1) a
