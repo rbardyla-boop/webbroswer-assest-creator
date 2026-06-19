@@ -57,6 +57,9 @@ const runtimeMode = urlParams.has("runtime") || urlParams.has("play");
 // human-UX instrumentation (controls hint + friction trace) shows only in play mode, so it never
 // perturbs the arsenal/visibility/first-playable proofs that drive ?runtime=1.
 const playMode = urlParams.has("play");
+// Mark the body so CSS can hide the full editor controls bar in play mode (the compact arrival
+// ControlsHint is the single teacher) — a guarantee independent of the JS load path.
+if (playMode) document.body.classList.add("play-mode");
 const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
 const worldpackParam = urlParams.get("worldpack"); // url of an exported .worldpack.json
 const modParam = urlParams.get("mod"); // id of an installed mod package to play

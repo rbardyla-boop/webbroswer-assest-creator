@@ -51,6 +51,9 @@
         background: rgba(127, 220, 160, 0.12); border: 1px solid var(--panel-border);
         border-radius: 4px; color: var(--accent); font-size: 10px; text-align: center;
       }
+      /* Slice-0A: in play mode the full editor controls bar must NOT leak in — the compact arrival
+         ControlsHint is the single controls teacher. A CSS guarantee, independent of JS timing/paths. */
+      body.play-mode #hint { display: none !important; }
 
       /* Crosshair (first-person) */
       #crosshair {
@@ -92,11 +95,21 @@
       .completion-card .eyebrow { color: #9eeeff; letter-spacing: 0.24em; font-size: 11px; }
       .completion-card h1 { margin: 12px 0 8px; font: 500 clamp(28px, 5vw, 54px)/1.1 Georgia, serif; color: #ecfbff; }
       .completion-card p { margin: 0 0 22px; color: #b7cbd0; }
-      .completion-actions { display: flex; justify-content: center; gap: 10px; }
+      .completion-actions { display: flex; justify-content: center; gap: 12px; margin-bottom: 14px; }
       .completion-actions button {
-        padding: 9px 14px; color: #e8faff; background: rgba(16, 36, 42, 0.9);
-        border: 1px solid rgba(158, 238, 255, 0.42); border-radius: 7px; cursor: pointer; font: inherit;
+        padding: 10px 18px; border-radius: 8px; cursor: pointer; font: inherit; transition: all 0.15s ease;
       }
+      /* Play Again is the primary/obvious action; Keep Exploring is a quieter secondary. */
+      .completion-actions button.primary {
+        color: #06222b; background: #67e8ff; border: 1px solid #9eeeff; font-weight: 600;
+      }
+      .completion-actions button.primary:hover { background: #8af0ff; transform: translateY(-1px); }
+      .completion-actions button.secondary {
+        color: #b7cbd0; background: rgba(16, 36, 42, 0.6); border: 1px solid rgba(158, 238, 255, 0.28);
+      }
+      .completion-actions button.secondary:hover { color: #e8faff; border-color: rgba(158, 238, 255, 0.5); }
+      .completion-hint { color: #7f99a0; font-size: 11px; line-height: 1.5; max-width: 380px; margin: 0 auto; }
+      .completion-hint b { color: #aee6f2; font-weight: 600; }
 
       /* Slice-0A: arrival controls hint (teaches movement first; fades on first move) */
       .controls-hint {

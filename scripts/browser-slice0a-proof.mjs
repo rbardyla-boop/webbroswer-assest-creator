@@ -47,6 +47,15 @@ const run = await withBrowserProof(
       assert.equal(arrival.controlsHintDismissed, false, "controls hint not yet dismissed");
       assert.ok(arrival.trace && arrival.trace.total > 0, "friction trace is recording");
 
+      // --- the full editor controls bar must NOT leak into play mode (one clean controls teacher) --
+      const hint = await evalValue(rt.cdp, `(() => {
+        const el = document.getElementById('hint');
+        return { playModeClass: document.body.classList.contains('play-mode'),
+                 hintDisplay: el ? getComputedStyle(el).display : 'missing' };
+      })()`);
+      assert.equal(hint.playModeClass, true, "body marked play-mode");
+      assert.equal(hint.hintDisplay, "none", "editor #hint is hidden in play mode (no leak)");
+
       // --- the hint DISMISSES on the player's first movement, logging firstMove ----------------
       const afterMove = await evalValue(rt.cdp, `(() => {
         window.__FROZEN_CACHE_DO__.nudgePlayer(1.5, 0);
@@ -90,6 +99,22 @@ const run = await withBrowserProof(
       }
       const actions = done.trace.entries.filter((e) => e.type === "action").map((e) => e.detail);
       assert.ok(actions.includes("F") && actions.includes("G"), "trace logs the essential F (pick up) and G (deposit) actions");
+
+      // --- replay must be the OBVIOUS action on the completion card (a fresh tester wanted to replay)
+      const card = await evalValue(rt.cdp, `(() => {
+        const c = document.querySelector('.completion-card.visible');
+        if (!c) return { visible: false };
+        const primary = c.querySelector('.completion-actions button.primary');
+        const secondary = c.querySelector('.completion-actions button.secondary');
+        return { visible: true, primaryText: primary?.textContent ?? null,
+                 primaryAction: primary?.dataset.action ?? null, secondaryAction: secondary?.dataset.action ?? null,
+                 hasHint: !!c.querySelector('.completion-hint') };
+      })()`);
+      assert.equal(card.visible, true, "completion card visible");
+      assert.equal(card.primaryAction, "restart", "the PRIMARY action restarts/replays the slice");
+      assert.match(card.primaryText ?? "", /Play Again/, "primary button reads 'Play Again'");
+      assert.equal(card.secondaryAction, "explore", "Keep Exploring is the secondary action");
+      assert.equal(card.hasHint, true, "the card explains what each choice does");
 
       if (rt.consoleErrors.length) throw new Error(`console errors:\n${rt.consoleErrors.join("\n")}`);
       console.log(`  trace events: ${done.trace.entries.length}; actions: ${actions.join(",")}; stuck: ${done.dbg.trace.stuckCount}`);

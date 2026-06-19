@@ -35,7 +35,10 @@ export class FrozenCacheSlice {
     this.prompts = new SlicePrompts();
     this.promptView = new InteractionPrompt();
     this.beacon = new ObjectiveBeacon(scene);
-    this.card = new CompletionCard({ onRestart });
+    this.card = new CompletionCard({
+      onRestart,
+      onExplore: () => this.trace?.record("explore", "kept exploring the finished valley", this.elapsed),
+    });
     this.completion = new SliceCompletion(this.card, this.audio);
     this.elapsed = 0;
     this.beat = "arrival";

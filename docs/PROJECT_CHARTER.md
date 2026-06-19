@@ -1902,3 +1902,16 @@ session log, and play the slice as a fresh player WITHOUT looking at code or thi
 trace (or `__SLICE_TRACE__()`): a long gap before the first `action`, a high `firstMove` time, or any `stuck`
 event marks real friction. Report what confused you; those become the hardening backlog. When a walk completes
 without coaching, tag `world-builder-slice0a-...` and flip this ADR to accepted.
+
+**Friction log — walk #1 (operator, 2026-06-19): completed the slice; 2 friction items found + fixed.**
+
+1. *Replay path was missable.* On completion the operator wanted to replay, but "Keep Exploring" sat FIRST and
+   was silently unwired (`onExplore` undefined → it just hid the card with no feedback), and the reset lived in
+   the second button. Fix: the card now leads with a primary **"↻ Play Again"** (restart), demotes **Keep
+   Exploring** to a labelled secondary that records an `explore` trace event, and adds a one-line explanation of
+   each choice. (`CompletionCard` + completion-card CSS.)
+2. *The editor controls bar leaked into play mode.* The full `#hint` bar (Move/Jump/Sprint/Look/Camera/Debug)
+   stayed up the whole session, redundant with the compact arrival `ControlsHint`. Fix: `body.play-mode #hint {
+   display: none }` plus a `play-mode` body class — a CSS guarantee independent of JS load path, so the arrival
+   hint is the single controls teacher. `test:slice0a` now asserts `#hint` is hidden in play mode and that the
+   card's primary action is Play Again. Stage remains OPEN pending a clean no-coaching walk.
