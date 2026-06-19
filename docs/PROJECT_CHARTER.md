@@ -15,6 +15,106 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 
 ---
 
+## Build Status Ledger
+
+> Single source of truth for "where are we and is it tested." Every shipped stage is committed
+> **and tagged locally** (no push). Each stage's cadence required its gate to pass before tagging,
+> so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
+> stage** using the prompt at the end of this section.
+
+**Health snapshot — as of 2026-06-19 (post Arsenal v5, commit `f772f07`).**
+- **48 stages shipped + tagged.** Milestone reached: **Glacial Valley First Playable**
+  (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage Arsenal v5 (relic identity) — full v5 gate green.
+- **Node regression sweep: 47/48 stage gates pass in isolation.** Known issues:
+  - ⚠️ **`test:visibility` (Stage 17A) FAILS in isolation** — stale assertion `expected 2 animated rigs, got 3`.
+    **Pre-existing** (also fails at the FP-4 commit), unrelated to recent Arsenal/objective work: a later stage
+    registers a 3rd animated rig the test's hardcoded count never absorbed. The kernel works; the count is stale.
+    Fix = re-baseline the count or scope the fixture (small, ~1 line). **Not yet fixed — surfaced for a decision.**
+  - ⓘ **`test:undo`, `test:connectors`, `test:visual0`** pass alone but fail in a *back-to-back* sweep →
+    test-isolation fragility (a shared on-disk artifact between sequential Node runs). Code is correct;
+    the sweep harness needs per-test tmp cleanup. Low priority (no shipped-code defect).
+- **Browser proofs (SwiftShader):** the Arsenal + first-playable proofs ran green this session; `qa:browser`
+  (Playwright) WARN-skips in this environment (Playwright absent) — acceptable per the gate.
+
+**Stage ledger (chronological by phase; tag = local milestone, gate = primary regression/proof).**
+
+| Phase | Stage | Tag | Primary gate(s) | Status |
+|---|---|---|---|---|
+| 1 · Editor & World foundation | Perf pass | `…stage1-lag-pass` | (foundation) | ✅ |
+| | Trees v0 | `…stage2-trees-v0` | (foundation) | ✅ |
+| | WorldDocument v2 | `…stage3-worlddoc-v2` | `test:world` | ✅ |
+| | Runtime proof | `…stage3b-runtime-proof` | browser proof | ✅ |
+| | Asset Library v1 | `…stage4-assetlib-v1-alpha` / `…stage4b-assetlib-proof` | regression + proof | ✅ |
+| | Prefabs v1 | `…stage5-prefabs-v1` | regression | ✅ |
+| | Multiselect + Kits | `…stage6a-multiselect` / `…stage6b-kits-v1` | regression | ✅ |
+| | Vertical slice v1 | `…stage7-vertical-slice-v1` | regression | ✅ |
+| 2 · Runtime / export / editor systems | Playable build (worldpack) | `…stage8-playable-build-v1` | export regression | ✅ |
+| | Mod packages | `…stage9-mod-package-v1` | mod regression | ✅ |
+| | Rigged runtime | `…stage10-rigged-runtime-v1` / `…stage10b-animation-fixture-v1` | `test:anim` | ✅ |
+| | Undo/redo | `…stage11-undo-redo-v1` | `test:undo` | ✅ (sweep-fragile) |
+| | Interactions | `…stage12-interactions-v1` | `test:interaction` | ✅ |
+| 3 · Visual & spatial systems | Lighting | `…stage13a-lighting-v1` | `test:lighting` | ✅ |
+| | Particles | `…stage13b-particles-v1` | `test:particles` | ✅ |
+| | Vegetation v2 (grass/bush/terrain) | `…stage14a-grass-v2` / `…stage14b-bush-v1` / `…stage14c-terrain-v2` | `test:vegetation` `test:bush` `test:terrain` | ✅ |
+| | Reverse-Z depth | `…stage15-reverse-z` | `test:reversez` | ✅ |
+| | Voxel debug lab | `…stage16-voxel-lab` | `test:voxel` | ✅ |
+| | Visibility kernel | `…stage17a-visibility-kernel` | `test:visibility` | ⚠️ **fails (stale count)** |
+| 4 · Procedural generation | Procedural build v1 | `…stage17c-procedural-v1` | `test:procedural` | ✅ |
+| | Instancing | `…stage17c2-instancing` | `test:instancing` | ✅ |
+| | Prefab generator | `…stage19-prefab-generator` | `test:prefabgen` | ✅ |
+| | Generator library | `…stage18-generator-library` | `test:genlib` | ✅ |
+| | Connectors (roads/plazas) | `…stage18b-connectors` | `test:connectors` | ✅ (sweep-fragile) |
+| | Settlement standard | `…stage18c-settlement-standard` | `test:settlement-layout` | ✅ |
+| | Budget HUD | `…stage20a-budget-hud` | `test:budget` | ✅ |
+| 5 · Glacial environment & wildlife | Glacial valley (visual-0) | `…visual0-glacial-valley` | `test:terrain-profile` `test:terrain-source` `test:visual0` | ✅ (sweep-fragile) |
+| | Glacial water & atmosphere (visual-1) | `…visual1-glacial-water` | `test:water` `test:atmosphere` `test:visual1` | ✅ |
+| | Ambient wildlife (wildlife-0) | `…wildlife0-ambient` | `test:wildlife` `test:wildlife0` | ✅ |
+| | Aloft flocks (wildlife-1) | `…wildlife1-flocks` | `test:flock` `test:wildlife1` | ✅ |
+| | Shared RegionStreamer (wildlife-2) | `…wildlife2-streamer` | `test:streamer` | ✅ |
+| | Firefly motes (ambient-0) | `…ambient0-motes` | `test:ambient` `test:ambient0` | ✅ |
+| 6 · Arsenal (procedural weapons) | Arsenal Lab v1 | `…arsenal-lab-v1` | `test:arsenal` (+proof) | ✅ |
+| | Arsenal v2 (world placement) | `…arsenal-lab-v2` | `test:arsenal-world` (+proof) | ✅ |
+| | Arsenal v3 (place + equip) | `…arsenal-v3-equip` | `test:arsenal-placement` `test:arsenal-v3` | ✅ |
+| | Arsenal v4 (oriented slots) | `…arsenal-v4-slots` | `test:arsenal-equip-slots` `test:arsenal-v4` | ✅ |
+| | **Arsenal v5 (relic identity)** | `…arsenal-v5` | `test:arsenal-identity` | ✅ **(latest)** |
+| 7 · First Playable gate 🏁 | FP-0 gate doc | `…first-playable-doc-v0.1` | doc | ✅ |
+| | FP-1 relic objective | `…first-objective-fp1` | `test:first-objective` (+proof) | ✅ |
+| | FP-2 integrated proof | `…first-playable-proof-fp2` | `test:first-playable-proof` | ✅ |
+| | FP-3 hidden-issue sweep | `…first-playable-hidden-fp3` | `test:first-playable-hidden` (+proof) | ✅ |
+| | **FP-4 go/no-go + tag** | **`…first-playable-v0`** | full gate sweep + review | ✅ **MILESTONE: GAME IS PLAYABLE** |
+
+(All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
+
+**Roadmap ahead (not yet started — each builds ON `…first-playable-v0`, does not reopen the gate):**
+Arsenal v6 (holster / multiple carried weapons) → Combat-0 (combat seam only, no enemies) →
+Enemy-0 (one non-networked test enemy) → Encounter-0 (first real combat objective). Or: deeper environment.
+
+**How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
+
+```text
+Update the Build Status Ledger at the top of docs/PROJECT_CHARTER.md to reflect current reality. Do this:
+1. List every local tag chronologically: `git tag --sort=creatordate`. Each tag is a shipped stage —
+   add any new tag as a row in the correct phase (tag, stage name, primary gate, status).
+2. Establish CURRENT test health honestly — do not trust "passed at tag time":
+   a. Run every non-browser gate once (the test:* / qa:* scripts that don't invoke a browser proof) and
+      record pass/fail.
+   b. For EACH failure, re-run it IN ISOLATION. If it passes alone but failed in the sweep, mark the stage
+      "✅ (sweep-fragile)" and note it as test-isolation debt (not a code defect). If it fails alone too,
+      it is a REAL regression — mark the stage ⚠️, and run it at HEAD~1 to state whether it is pre-existing
+      or introduced by the latest stage.
+   c. Run `npm run build`, `npm run qa:skills`, `npm run qa:layout` and record the summaries.
+3. Rewrite the "Health snapshot" block: stage count, latest stage + commit, milestone reached, the
+   build/qa numbers, the Node-sweep pass ratio, and an explicit bullet for EACH known-failing or fragile
+   gate (what it asserts, pre-existing vs new, severity, suggested fix). Never silently claim "all green."
+4. Update the snapshot date to today's date.
+5. Keep the table compact (one row per stage/sub-stage group). Do NOT delete ADR entries; the ledger
+   summarizes, the ADRs are the detail. Commit the charter edit locally (no push); do not bundle unrelated
+   code changes into that commit.
+```
+
+---
+
 ## ADR-011 — Editor undo/redo via object-retention command stack (Stage 11)
 
 **Decision.** Add a bounded, in-memory undo/redo `CommandStack` to the World
