@@ -253,13 +253,19 @@ byte-stable across sessions (no drift); and a stored weapon round-trips a real r
 errors. The sweep found **no defect** — every invariant already held; only two additive DEV hooks
 (`__DOC_DEBUG__`, `poisonEquipMarker`) were needed to make the live scene/markers observable.
 
-### 7.9 Adversarial review gate
-Before tagging the first playable (FP-4), run a fresh-context review across: determinism ·
+### 7.9 Adversarial review gate — **DONE (FP-4) — GO**
+A fresh-context review (four independent reviewers) ran across all ten dimensions: determinism ·
 persistence · runtime leaks · player spawn/grounding · terrain/profile single-source ·
 water/wetness/snowline consistency · region streaming · arsenal recipe boundary · browser-proof
 validity · user-facing objective clarity.
 
-Required outcome: `0 critical, 0 high; all medium fixed or explicitly deferred with a reason`.
+Result: **0 critical, 0 high, 0 medium; 1 LOW** (the WASD `#hint` panel is hidden in runtime mode, but
+F/G are discoverable via the context-sensitive banner — accepted by design). The manual UX walk was
+substantiated with live on-screen evidence: the always-on `#objective-banner` narrates every step
+(`…find the marked relic weapon and equip it (F)` → `…carry the relic to the glowing cache marker` →
+`…press G to deposit the relic on the cache` → `…COMPLETE. The relic rests on the cache.`), with a
+visible relic marker, a glowing cache beacon + deposit ring, and the relic left as a visible trophy.
+Required outcome (`0 critical, 0 high; all medium fixed`) met.
 
 ## 8. Go / No-Go Criteria
 
@@ -321,44 +327,47 @@ DEV-only hooks (`__DOC_DEBUG__`, `poisonEquipMarker`); FP-2 proof unchanged. Com
 `world-builder-first-playable-hidden-fp3`; ADR-034. Gate: §7.8. (Does **not** satisfy FP-4 — only the
 §7.9 review remains.)
 
-### FP-4 — First Playable Tag
-Done when: all §7 gates pass; §7.9 review passes; the commit is clean; and
-`git tag world-builder-first-playable-v0` is created locally. No push without authorization.
+### FP-4 — First Playable Tag — **DONE (GO)**
+All §7 gates pass (§7.1–§7.9 green); the §7.9 fresh-context review returned 0 critical / 0 high / 0
+medium (1 LOW accepted); the manual UX walk is substantiated by live banner/marker evidence; the tree is
+clean (only `sword forge.html` untracked); and the milestone is tagged **`world-builder-first-playable-v0`**
+locally (no push). ADR-035. **The Glacial Valley First Playable is GO.**
 
 ## 10. Current First Playable Status
 
-**Status: Foundation + first objective + integrated proof + hidden-issue sweep all done — only the go/no-go review remains (NO-GO for FP-4 until it passes).**
+**Status: GO — the Glacial Valley First Playable is TAGGED (`world-builder-first-playable-v0`, local, no push).**
 
-What's proven (as of FP-3, tag `world-builder-first-playable-hidden-fp3`): the entire foundation stack
-in §4 passes its gates, **§7.1–§7.8 are all green today**, the relic objective (find → equip → carry →
-deposit → complete) is playable and reload-safe, and the INTEGRATED first-playable loop — load → living
-world → weapon interaction → **physically walk** the relic to the cache → deposit → reload-persist — now
-passes end-to-end in one SwiftShader session with zero console errors (`test:first-playable-proof`), and
-the hostile/edge sweep (`test:first-playable-hidden` + `-proof`) found no defect — spawn-in-water,
-poisoned markers, hostile dt, region thrash, reload duplication, proof drift, and store/equip reload all
-hold.
+All gates closed (as of FP-4): the entire foundation stack in §4 passes; **§7.1–§7.9 are all green**; the
+relic objective (find → equip → carry → deposit → complete) is playable and reload-safe; the INTEGRATED
+first-playable loop passes end-to-end in one SwiftShader session with zero console errors
+(`test:first-playable-proof`); the hostile/edge sweep (`test:first-playable-hidden` + `-proof`) found no
+defect; and the §7.9 fresh-context review returned **0 critical / 0 high / 0 medium (1 LOW accepted)**
+with the manual UX walk substantiated by live banner/marker evidence. Every §8 GO criterion holds; no
+NO-GO condition holds.
 
-What's still missing before the first playable can be tagged:
-
-1. A go/no-go review against this document (§7.9) — the only remaining gate.
+The first-playable target is met. Subsequent feature work (weapon variety, holster, combat seam, deeper
+environment) builds ON this tag — it does not re-open it. A human play-session is welcome as a final
+confirmation; the tag is local + reversible if that session ever disagrees.
 
 ## 11. Update Rule
 
 After every accepted stage, replace the "Current entry" block below.
 
 ```text
-Last accepted stage: FP-3 — Hidden-Issue Sweep
-Commit: tagged world-builder-first-playable-hidden-fp3
-Tag: world-builder-first-playable-hidden-fp3
-Tests passed: build, qa (skills 32/0/0 + layout pass; qa:browser skip — Playwright absent),
-  test:first-playable-hidden (Node, NEW) + test:first-playable-hidden-proof (SwiftShader, NEW — the
-  nine hostile/edge probes, 0 console errors); test:first-playable-proof (FP-2, UNCHANGED, still green);
-  test:first-objective(+proof); test:world; foundation sweep (visual0/1, water, atmosphere, wildlife/0/1,
-  flock, ambient/0, streamer); arsenal v1–v4 (test:arsenal, -world, -placement, -v3, -equip-slots, -v4)
-New risks found: none — the hostile sweep found NO defect (spawn-in-water/poisoned-marker/hostile-dt/
-  region-thrash/reload-dup/proof-drift/store-equip-reload all hold). NaN dt is documented out-of-scope
-  (unreachable past the frame clamp). Only the §7.9 go/no-go review remains before FP-4
-Risks retired: silent state corruption under hostile inputs — every first-playable invariant is now
-  adversarially proven (no bad spawn, no orphaned/duplicated/lost assets, no NaN propagation, no thrash)
-First playable readiness: §7.1–§7.8 green; FP-4 tag gated ONLY on the §7.9 go/no-go review
+Last accepted stage: FP-4 — First Playable Go/No-Go Review and Tag
+Commit: the FP-4 doc/charter commit, tagged world-builder-first-playable-v0
+Tag: world-builder-first-playable-v0  (the Glacial Valley First Playable — local, no push)
+Tests passed: the FULL gate sweep, all green — build, qa (skills 32/0/0 + layout; qa:browser skip,
+  Playwright absent), test:world; test:first-playable-proof + test:first-playable-hidden(+proof);
+  test:first-objective(+proof); foundation sweep (visual0/1, water, atmosphere, wildlife/0/1, flock,
+  ambient/0, streamer); arsenal v1–v4 (test:arsenal, -world(+proof), -placement, -v3, -equip-slots, -v4)
+Review: §7.9 fresh-context review (4 independent reviewers, all ten dimensions) → 0 critical / 0 high /
+  0 medium; 1 LOW accepted (WASD #hint panel hidden in runtime mode — F/G discoverable via the
+  context-sensitive banner). Manual UX walk substantiated by live banner/marker/trophy evidence.
+New risks found: none. Residual: the literal naive-human UX session is proxied by live on-screen evidence
+  (banner narrates every step incl. F/G) + reviewer confirmation, not a human run — the tag is reversible
+  if a human session ever disagrees. persistEquip defaults false by design (a mid-carry reload reloads the
+  relic idle, not equipped) — the gate only requires completion + trophy to persist, which they do
+Risks retired: ALL §8 GO criteria hold; no §8 NO-GO condition holds. First playable is GO + tagged
+First playable readiness: COMPLETE — §7.1–§7.9 green; world-builder-first-playable-v0 applied locally
 ```

@@ -1522,3 +1522,42 @@ additive). Tag `world-builder-first-playable-hidden-fp3` (local, no push). Does 
 **Non-goals.** No Arsenal v5, weapon variety, new objective, combat/inventory, live deploy, schema bump,
 or gameplay-logic change (none was needed); no FP-2 proof change beyond shared-helper hardening; do NOT
 apply `world-builder-first-playable-v0` (FP-4 only).
+
+## ADR-035 — FP-4: First Playable Go/No-Go Review + Tag (the Glacial Valley First Playable is GO)
+
+**Decision.** Run the §7.9 go/no-go review against `docs/FIRST_PLAYABLE_BUILD.md`, substantiate the manual
+UX walk, verify the tree, and — since every §8 GO criterion holds and no NO-GO condition does — apply the
+reserved milestone tag **`world-builder-first-playable-v0`** locally (no push). No gameplay was added;
+FP-4 is judgment + tagging only. This CLOSES the first-playable gate (FP-0 → FP-4).
+
+**Evidence.** (1) The full gate sweep is green: build, qa (skills 32/0/0 + layout; `qa:browser` WARN-skips
+— Playwright absent), `test:world`, `test:first-playable-proof` (FP-2) + `test:first-playable-hidden`(+
+`-proof`) (FP-3), `test:first-objective`(+proof), the foundation sweep (visual0/1, water, atmosphere,
+wildlife/0/1, flock, ambient/0, streamer), and arsenal v1–v4 — 29/29. (2) The §7.9 fresh-context review
+used FOUR independent reviewers across the ten dimensions (determinism · persistence · runtime leaks ·
+spawn/grounding · terrain/profile single-source · water/wetness/snowline · region streaming · arsenal
+boundary · browser-proof validity · UX clarity): **0 critical / 0 high / 0 medium; 1 LOW** (the WASD
+`#hint` panel is hidden in runtime mode — F/G remain discoverable via the context-sensitive banner;
+accepted by design). Reviewers independently confirmed the FP-2 walk is a REAL movement-pipeline traversal
+(not teleport/state-write), the FP-3 reloads are real fresh pages, the single terrain source-of-truth holds
+(the lone out-of-module `profile.height()` call is visual-only fog), the persistence whitelist drops no
+field, no runtime path appends instead of replacing, and the arsenal boundary is airtight (recipe-only,
+no baked geometry, no UI leak). (3) **Manual UX walk** — substantiated with LIVE on-screen evidence: the
+always-on `#objective-banner` narrates every step (`…find the marked relic weapon and equip it (F)` →
+`…carry the relic to the glowing cache marker` → `…press G to deposit the relic on the cache` →
+`…COMPLETE. The relic rests on the cache.`), with a visible relic marker, a glowing cache beacon + deposit
+ring, and the relic left as a visible trophy (`relicOnPedestal:true`, one beacon, completion latched). A
+player needs only basic controls (WASD+mouse), which the gate permits.
+
+**Honesty note (the one proxy).** The literal naive-human play-session is the only piece that cannot be
+fully automated; it is proxied here by the live banner/marker/trophy evidence + four fresh-context reviews.
+The tag is local + reversible (`git tag -d`) if a human session ever disagrees. The first-playable target —
+*find → equip → carry → deposit a generated relic in the glacial valley, reload-safe* — is met.
+
+**Tree + tag discipline.** The tree is clean except the known untracked `sword forge.html` (left
+untracked). The FP-4 commit contains only the intentional first-playable files (this charter +
+`docs/FIRST_PLAYABLE_BUILD.md`). Tag `world-builder-first-playable-v0` applied locally on that commit. NO
+push, NO deploy.
+
+**Non-goals.** No new gameplay, weapon variety, Arsenal v5, combat/inventory, new objective, schema bump,
+or public deploy; no push without explicit authorization. Subsequent feature work builds ON this tag.
