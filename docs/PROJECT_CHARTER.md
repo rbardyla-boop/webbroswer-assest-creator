@@ -22,18 +22,20 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (Editor UX-1 accepted; tag `world-builder-editor-ux1`).**
-- **52 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-19 (Performance Contract-1 accepted; tag `world-builder-performance-contract-1`).**
+- **53 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Editor UX-1 — First Usable Authoring
-  Surface** (ADR-041): hierarchy/outliner, two-way selection, numeric transform inspector, grid snap, layer
-  visibility/lock, debounced autosave with status, and the Play↔Editor round-trip. Layer/snap state is
-  editor-session-only — never persisted, never seen by a player (no schema bump).
-- **Node regression GREEN incl. new `test:editor-ux1-unit`**; browser proofs re-run this session: `test:editor-ux1`,
-  `test:undo`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-objective-proof`,
-  `test:first-playable-proof`, plus the Node subset (`test:arsenal-carry`, `…-identity`, `test:first-objective`,
-  `test:first-playable-hidden`) — all green. No known red or fragile gate remains.
-- **Next per ADR-039 roadmap: Performance Contract-1.**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Performance Contract-1 — Performance as a
+  Tested Gate** (ADR-042): four canonical deterministic benchmark scenes + a per-scene budget gate (reusing the
+  Stage 20A classifier) that FAILS on a breach, in play and editor mode. Reuse-heavy — Stage 20A's
+  `PERFORMANCE_BUDGETS`/BudgetHUD/`test:budget` left byte-stable; the only runtime edit was 3 additive `__PERF__`
+  fields. See the **Performance Contract** budgets + baseline table in ADR-042 below.
+- **Node regression GREEN incl. new `test:performance-contract` + `test:editor-ux1-unit`**; browser proofs re-run
+  this session: `test:performance-contract-proof`, `test:budget` (Stage 20A — confirms it stays green),
+  `test:editor-ux1`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-playable-proof`,
+  plus the Node subset — all green. `test:budget` flaked once on a CDP transport hiccup under back-to-back load
+  and passed in isolation (transient, re-run not re-fix).
+- **Next per ADR-039 roadmap: Procedural Authoring-1.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -98,7 +100,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | | **FP-4 go/no-go + tag** | **`…first-playable-v0`** | full gate sweep + review | ✅ **MILESTONE: GAME IS PLAYABLE** |
 | 8 · Authored play slices | Slice-0 — The Frozen Cache | `…slice0-frozen-cache` | `test:frozen-cache` `test:frozen-cache-proof` | ✅ |
 | | Slice-0A — Human-UX Hardening | `…slice0a-human-ux` | `test:slice0a` | ✅ (ADR-040; reversible) |
-| 9 · Editor as the product surface | **Editor UX-1 — First Usable Authoring Surface** | **`…editor-ux1`** | `test:editor-ux1-unit` `test:editor-ux1` | ✅ **LATEST** (ADR-041) |
+| 9 · Editor as the product surface | Editor UX-1 — First Usable Authoring Surface | `…editor-ux1` | `test:editor-ux1-unit` `test:editor-ux1` | ✅ (ADR-041) |
+| 10 · Performance & scale | **Performance Contract-1 — Performance as a Tested Gate** | **`…performance-contract-1`** | `test:performance-contract` `test:performance-contract-proof` | ✅ **LATEST** (ADR-042) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
@@ -2000,3 +2003,71 @@ visual glitch, no persistence impact); now cleared in the same throw-safe block.
 persisted fields/schema bump, no generalized asset browser, no complex gizmos. `relicRecipe()` and all runtime
 proofs byte-unaffected (Editor UX-1 adds editor-session view tooling only). Next per ADR-039: Performance
 Contract-1.
+
+## ADR-042 — Performance Contract-1: Performance as a Tested Gate
+
+**Status: ACCEPTED — tag `world-builder-performance-contract-1`.** Editor UX-1 made the product *authorable*,
+which changes the risk profile: the next failure mode is silent performance collapse as authored worlds grow
+(Procedural Authoring-1 will multiply objects), so a tested performance contract comes first. The bar: *how large
+can a Frozen-Cache-style authored scene get before the editor or play mode becomes unreliable, and how do we
+catch that automatically?*
+
+**Reuse-heavy by design (the suggested module shape largely duplicated existing infra).** Stage 20A already
+ships the measurement plumbing — `src/perf/PerformanceBudget.js` (the pure `classify`/`evaluateBudget` +
+calibrated `PERFORMANCE_BUDGETS`), the `__BUDGET__`/`__PERF__` DEV hooks, `perf:report`, `test:budget`, and a
+`.stats`/`debugSnapshot()` on every system. This stage did NOT re-plumb measurement; it turned the measurements
+into a **gate**. Stage 20A's `PerformanceBudget.js`, `BudgetHUD.js`, and `browser-budget-proof.mjs` are
+byte-stable (verified by review + `test:budget` staying green). The new modules live in `src/perf/` beside them.
+
+**New modules (PURE).** `src/perf/BenchmarkScenes.js` — four deterministic, reusable benchmark scenes
+(`emptyScene`, `frozenCacheScene`, `denseAuthoredScene(n)`, `streamingBorderScene`) returning plain
+WorldDocuments via `createWorldDocument` + the city generator; no RNG/wall-clock (statically scanned). Each
+carries a `gated` per-scene ceiling map. `src/perf/PerformanceContract.js` — `CONTRACT_BUDGETS` (spreads
+`...PERFORMANCE_BUDGETS` + four contract-only metrics: `objects`, `runtimeAssets`, `memGeometries`,
+`memTextures`), `extractMetrics({perf,budget})`, `evaluateContract`, and the hard gate `assertWithinBudget` (a
+per-scene ceiling breach OR a global RED-ceiling breach throws; **yellow is a warning, never a failure**, so
+vegetation's intended triangle pressure does not false-fail).
+
+**Only additive runtime edit.** `__PERF__.snapshot()` gained three read-only fields (`wildlife`/`ambient`/
+`arsenal` actor counts from existing `.stats`) inside the existing DEV gate, null-guarded. No schema/persistence
+change (`WORLD_DOCUMENT_VERSION` stays 2).
+
+**Two gates (TDD).** `test:performance-contract` (pure Node, 8 checks): contract logic + scene determinism +
+headless load/unload stability (object + geometry counts return to baseline across 5 reloads) + save/load
+round-trip no-duplication. `test:performance-contract-proof` (SwiftShader): per-scene authoring → capture
+`__PERF__`+`__BUDGET__` → `assertWithinBudget` (fails on breach) → reload stability (objects/runtime-assets/
+geometry don't grow) → streaming-border boundedness → a software-raster liveness/stall smoke → editor-mode
+autosave bounds (~2 ms serialize / ~9 ms write for 500 objects). The per-scene ceilings are the measured baseline
+plus ~30-45 % headroom (captured by running the proof once, then locked just above) — empirically non-vacuous:
+the gate failed during calibration when a ceiling sat below the real number.
+
+**Performance Contract — budgets + measured baseline (SwiftShader, structural / GPU-independent):**
+
+| Scene | draws | triangles | objects | inst.batches | veg.patches | runtime-assets | ceiling (draws / tris) |
+|---|---|---|---|---|---|---|---|
+| empty (fresh editor, default grass) | ~89–110 | ~504–516k | 0 | 0 | ~56–62 | 2 | 160 / 700k |
+| frozen-cache (slice base) | ~89–110 | ~504–516k | 0 | 0 | ~56–62 | 2 | 160 / 700k |
+| dense-authored (500 cubes, grass↓) | ~111 | ~381k | 500 | 1 | ~62 | 2 | 160 / 560k |
+| streaming-border (city, default grass) | ~113 | ~488k | 114 | 3 | ~62 | 2 | 160 / 620k |
+
+Global RED design ceilings (the scene-independent backstop, from `PERFORMANCE_BUDGETS`): draws 240, triangles
+1.4M, instanced batches 120, generated objects 1000, veg patches 320; contract-only: objects 2500, runtime
+assets 150, geometries 6000. Key reading (unchanged from the Stage 20A report): **triangles are the dominant
+budget driver — default grass alone puts the "empty" scene near the green/yellow line; draw calls stay flat
+because instancing collapses repeated primitives** (500 cubes → 1 batch).
+
+**Review (2 fresh-context reviewers, adversarial).** Verdict: 0 critical / 0 high / 0 medium. Reviewer A
+confirmed the structural gate (draws/triangles/objects/batches/reload-stability) is genuinely load-bearing and
+catches the named regressions; flagged four weak checks that read as coverage they didn't provide — all
+hardened: the frame check now has a real multi-second **stall detector** (`worstMs < 2000`) and the rest is
+honestly labelled a software-raster liveness smoke (not a frame-budget gate); the streaming check now requires
+grass to be **actually streaming** (`grass1 > 0`) before bounding it, and gates wildlife thrash only when live;
+the geometry-growth check asserts the metric is measured (it is `renderer.info`-sourced, always present).
+Reviewer B confirmed no system weakening (the `denseAuthoredScene` grass↓ is a fixture authoring choice, not a
+default change; empty/frozen-cache/streaming run default density), Stage 20A byte-stable, the main.js edit
+additive, and no schema impact (1 LOW — the streaming scene was running sub-default density — fixed by removing
+the override so it measures player-facing cost).
+
+**Non-goals (held).** No renderer rewrite, no WebGPU, no HLOD, no asset compression, no procedural authoring, no
+combat, no gameplay change. **No weakening of visual/world systems to fit a budget** (the gate measures the real
+scene). Stage 20A budget infra byte-stable. Next per ADR-039: Procedural Authoring-1.

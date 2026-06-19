@@ -469,6 +469,11 @@ if (import.meta.env.DEV) {
         trees: trees?.stats ? { visiblePatches: trees.stats.visiblePatches, activePatches: trees.stats.activePatches, drawCalls: trees.stats.drawCalls ?? null } : null,
         bushes: bushes?.stats ? { visiblePatches: bushes.stats.visiblePatches, activePatches: bushes.stats.activePatches, drawCalls: bushes.stats.drawCalls ?? null } : null,
         visibility: visibilityKernel?.stats ?? null,
+        // Performance Contract-1: per-system actor counts (bounded-per-system +
+        // no-actor-growth-after-reload checks). Read existing .stats; no new compute.
+        wildlife: wildlife?.stats ? { activeRegions: wildlife.stats.activeRegions, activeAnimals: wildlife.stats.activeAnimals, renderedInstances: wildlife.stats.renderedInstances } : null,
+        ambient: ambient?.stats ? { activeRegions: ambient.stats.activeRegions, activeMotes: ambient.stats.activeMotes, renderedInstances: ambient.stats.renderedInstances } : null,
+        arsenal: placedWeaponRuntime?.stats ? { count: placedWeaponRuntime.stats.count, awake: placedWeaponRuntime.stats.awake } : null,
       };
     },
     // Time animation frames; `turn` forces a continuous camera pan to catch

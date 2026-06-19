@@ -65,6 +65,8 @@
     "test:slice0a": "node scripts/browser-slice0a-proof.mjs",
     "test:editor-ux1-unit": "node scripts/editor-ux1-regression.mjs",
     "test:editor-ux1": "node scripts/browser-editor-ux1-proof.mjs",
+    "test:performance-contract": "node scripts/performance-contract-regression.mjs",
+    "test:performance-contract-proof": "node scripts/browser-performance-contract-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",
