@@ -112,6 +112,10 @@ export function createWorldDocument(overrides = {}) {
     // reload (currently the relic-weapon retrieval). Each item carries
     // { kind, id, relicId, cache, radius, completed }. NOT a quest engine.
     objectives: { version: 1, items: [] },
+    // Procedural authoring (Procedural Authoring-1) — editable splines/masks and the
+    // modifiers that consume them. The modifier VISUALS are re-derived each load (never
+    // baked into `objects`); this block is the source of truth. NOT a node graph.
+    authoring: { version: 1, splines: [], masks: [], modifiers: [] },
     objects: [],
     assets: {
       version: 1,

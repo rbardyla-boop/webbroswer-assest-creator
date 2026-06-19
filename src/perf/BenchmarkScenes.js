@@ -133,7 +133,53 @@ export function streamingBorderScene() {
   );
 }
 
-/** All four canonical scenes, in gate order. */
+/**
+ * A procedurally-authored scene (Procedural Authoring-1): one beacon-trail modifier over
+ * a 5-point spline gated by a circle mask. The modifier VISUALS are derived at load (not
+ * baked into `objects`), so this gates the derived-geometry path — triangles / drawCalls /
+ * instancedBatches — while `objects` stays at the empty baseline. Default grass density so
+ * the gate measures real player-facing cost.
+ */
+export function authoredProceduralScene() {
+  const authoring = {
+    version: 1,
+    splines: [
+      {
+        id: "trail-path",
+        name: "Trail",
+        enabled: true,
+        locked: false,
+        points: [
+          { x: -24, y: 0, z: -8 },
+          { x: -10, y: 0, z: 4 },
+          { x: 2, y: 0, z: -2 },
+          { x: 16, y: 0, z: 6 },
+          { x: 28, y: 0, z: -4 },
+        ],
+        tension: 0.5,
+        closed: false,
+      },
+    ],
+    masks: [{ id: "trail-area", name: "Area", enabled: true, locked: false, shape: "circle", center: { x: 2, y: 0, z: 0 }, radius: 40, half: { x: 40, z: 40 }, falloff: 0.4 }],
+    modifiers: [{ id: "trail-1", name: "Beacon trail", enabled: true, type: "beacon-trail", splineId: "trail-path", maskId: "trail-area", seed: "trail-1", markerCount: 24, markerScale: 1, ring: true }],
+  };
+  // Baseline (captured then locked, SwiftShader): draws 112, tris 516k, objs 0, batches 0,
+  // vegPatch 62 → overall yellow (default grass dominates triangles, like the empty floor).
+  // drawCalls/triangles/visibleVegetationPatches ceilings = baseline + ~35-45% headroom
+  // (the gate FAILED during calibration when set below the real number). objects (4) and
+  // instancedBatches (4) have a measured baseline of 0 — the derived trail is NOT a placed
+  // object and does NOT route through the WorldObject instancer — so they are small ABSOLUTE
+  // guards: a regression that baked the trail into `objects`/instancing would breach them.
+  return scene("authored-procedural", "Authored procedural (beacon trail)", { metadata: { name: "Authored Procedural" }, authoring, objects: [] }, {
+    drawCalls: 160,
+    triangles: 700_000,
+    objects: 4,
+    instancedBatches: 4,
+    visibleVegetationPatches: 120,
+  });
+}
+
+/** All canonical scenes, in gate order. */
 export function allBenchmarkScenes() {
-  return [emptyScene(), frozenCacheScene(), denseAuthoredScene(), streamingBorderScene()];
+  return [emptyScene(), frozenCacheScene(), denseAuthoredScene(), streamingBorderScene(), authoredProceduralScene()];
 }

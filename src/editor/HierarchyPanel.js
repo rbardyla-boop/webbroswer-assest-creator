@@ -43,14 +43,15 @@ export class HierarchyPanel {
    * @param {Array<{id:string,name:string,generated:boolean}>} data.objects
    * @param {Array<{id:string,name:string}>} [data.weapons]
    * @param {Array<{id:string,name:string}>} [data.objectives]
+   * @param {Array<{id:string,name:string}>} [data.authoring]
    * @param {Set<string>} [data.selectedIds]
    */
-  render({ objects = [], weapons = [], objectives = [], selectedIds = new Set() } = {}) {
+  render({ objects = [], weapons = [], objectives = [], authoring = [], selectedIds = new Set() } = {}) {
     this.root.replaceChildren();
     const placed = objects.filter((o) => !o.generated);
     const generated = objects.filter((o) => o.generated);
 
-    const total = objects.length + weapons.length + objectives.length;
+    const total = objects.length + weapons.length + objectives.length + authoring.length;
     if (total === 0) {
       this.root.appendChild(this._empty);
       return;
@@ -60,6 +61,7 @@ export class HierarchyPanel {
     if (generated.length) this.root.appendChild(this._section(`Generated (${generated.length})`, generated, selectedIds, true));
     if (weapons.length) this.root.appendChild(this._section(`Weapons (${weapons.length})`, weapons, selectedIds, false));
     if (objectives.length) this.root.appendChild(this._section(`Objective (${objectives.length})`, objectives, selectedIds, false));
+    if (authoring.length) this.root.appendChild(this._section(`Authoring (${authoring.length})`, authoring, selectedIds, false));
   }
 
   _section(title, rows, selectedIds, selectable) {

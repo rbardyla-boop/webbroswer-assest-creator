@@ -16,6 +16,7 @@ import { GlacialWater } from "./water/GlacialWater.js";
 import { ValleyAtmosphere } from "./atmosphere/ValleyAtmosphere.js";
 import { WildlifeSystem } from "./wildlife/WildlifeSystem.js";
 import { AmbientSystem } from "./ambient/AmbientSystem.js";
+import { AuthoringRuntime } from "./authoring/AuthoringRuntime.js";
 
 export class WorldRuntimeLoader {
   constructor({ scene, lights, fog, colliderSystem = null, assetLibrary = null, animationRuntime = null } = {}) {
@@ -33,6 +34,7 @@ export class WorldRuntimeLoader {
     this.bushes = null;
     this.wildlife = null;
     this.ambient = null;
+    this.authoring = null;
     this.manager = null;
     this.document = null;
     this.warnings = [];
@@ -107,6 +109,13 @@ export class WorldRuntimeLoader {
     this.ambient = new AmbientSystem(this.scene);
     this.ambient.load(document, this.scene);
 
+    // Procedural authoring (Procedural Authoring-1) — derive the modifier visuals
+    // (beacon trails) from the persisted `authoring` block. Source of truth is the
+    // block; the visuals re-derive here every load (never baked into `objects`). An
+    // empty block is a no-op. Runs in both editor preview and play (single load path).
+    this.authoring = new AuthoringRuntime(this.scene);
+    this.authoring.load(document, this.scene);
+
     return {
       document,
       warnings: this.warnings,
@@ -118,6 +127,7 @@ export class WorldRuntimeLoader {
       bushes: this.bushes,
       wildlife: this.wildlife,
       ambient: this.ambient,
+      authoring: this.authoring,
       objectManager: this.manager,
       colliderSystem: this.colliderSystem,
     };
@@ -144,6 +154,7 @@ export class WorldRuntimeLoader {
 
   dispose() {
     this.animationRuntime?.clear();
+    this.authoring?.dispose();
     this.ambient?.dispose();
     this.wildlife?.dispose();
     this.atmosphere?.dispose();
@@ -170,6 +181,7 @@ export class WorldRuntimeLoader {
     this.bushes = null;
     this.wildlife = null;
     this.ambient = null;
+    this.authoring = null;
     this.manager = null;
     this.terrain = null;
   }

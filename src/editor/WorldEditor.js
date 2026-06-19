@@ -48,6 +48,14 @@ import { LayerModel } from "./LayerModel.js";
 import { SnapSettings, snapVec3 } from "./SnapSettings.js";
 import { EditorAutosave } from "./EditorAutosave.js";
 import { weaponIdentity } from "../arsenal/WeaponIdentity.js";
+// Procedural Authoring-1: editable spline/mask/modifier primitives. The panel + in-scene
+// tools author the document's `authoring` block via undoable pure-data commands; the
+// AuthoringRuntime (owned by the loader) re-derives the visuals.
+import { AuthoringPanel } from "./AuthoringPanel.js";
+import { SplineEditTool } from "./SplineEditTool.js";
+import { MaskEditTool } from "./MaskEditTool.js";
+import { AddAuthoringItemCommand, RemoveAuthoringItemCommand, UpdateAuthoringItemCommand } from "./commands/AuthoringCommands.js";
+import { createSpline, createMask, createModifier } from "../world/authoring/AuthoringTypes.js";
 
 export class WorldEditor {
   constructor({
@@ -70,6 +78,7 @@ export class WorldEditor {
     water,
     wildlife,
     ambient,
+    authoring,
     getGrassStats,
     getTreeStats,
     prefabLibrary,
@@ -102,6 +111,12 @@ export class WorldEditor {
     this.water = water ?? null;
     this.wildlife = wildlife ?? null;
     this.ambient = ambient ?? null;
+    // Procedural Authoring-1: the AuthoringRuntime (derived trail visuals) is owned by
+    // the loader and repointed per world load via setWorldContext. The edit tools are
+    // editor-only previews; the panel reflects the document's `authoring` block.
+    this.authoringRuntime = authoring ?? null;
+    this.splineTool = new SplineEditTool({ scene: this.scene });
+    this.maskTool = new MaskEditTool({ scene: this.scene });
     this.assetLibrary = assetLibrary ?? new AssetLibrary();
     this.assetImporter = new AssetImporter(this.assetLibrary);
     this.getGrassStats = getGrassStats;
@@ -213,7 +228,7 @@ export class WorldEditor {
     return this.selection.primary;
   }
 
-  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, water, wildlife, ambient, getGrassStats, getTreeStats, placedAssetStore, placedWeaponRuntime }) {
+  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, water, wildlife, ambient, authoring, getGrassStats, getTreeStats, placedAssetStore, placedWeaponRuntime }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
     this.grassSystem = grassSystem ?? this.grassSystem;
@@ -221,6 +236,8 @@ export class WorldEditor {
     this.water = water ?? this.water;
     this.wildlife = wildlife ?? this.wildlife;
     this.ambient = ambient ?? this.ambient;
+    // Procedural Authoring-1: the derived-trail runtime is rebuilt per world load.
+    this.authoringRuntime = authoring ?? this.authoringRuntime;
     // Arsenal placement store/runtime are recreated per world load — keep the current ones.
     this.placedAssetStore = placedAssetStore ?? this.placedAssetStore;
     this.placedWeaponRuntime = placedWeaponRuntime ?? this.placedWeaponRuntime;
@@ -253,6 +270,12 @@ export class WorldEditor {
     this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
     // Restore the procedural panel from the reloaded world's generator instances.
     this.proceduralPanel?.setFromDocument(this.worldLoader?.document);
+    // Procedural Authoring-1: cancel any in-progress spline/mask edit (its preview
+    // referenced the torn-down scene) and refresh the panel from the new world.
+    this.splineTool?.deactivate();
+    this.maskTool?.deactivate();
+    this.authoringPanel?.setSplineMode(false, 0);
+    this.authoringPanel?.refresh();
     // Rebuild the particle preview for the new world's emitters (if open).
     if (this.isOpen) this.particlePreview?.load(this.manager);
     this.treeSystem = treeSystem ?? this.treeSystem;
@@ -580,6 +603,22 @@ export class WorldEditor {
       onChanged: () => { this._refreshPerf(); this._markDirty(); },
     });
     root.appendChild(this._section("Procedural (city / camp / ruin / forest / road / plaza / connector)", this.proceduralPanel.root));
+
+    // Procedural Authoring-1: spline/mask/modifier authoring. Buttons route to editor
+    // methods that record undoable commands + drive the in-scene edit tools.
+    this.authoringPanel = new AuthoringPanel({
+      getDocument: () => this.worldLoader?.document,
+      onNewSpline: () => this.beginSplineEdit(),
+      onFinishSpline: () => this.finishSplineEdit(),
+      onUndoPoint: () => this.undoSplinePoint(),
+      onCancelSpline: () => this.cancelSplineEdit(),
+      onNewMask: () => this.beginMaskEdit(),
+      onCreateModifier: ({ splineId, maskId }) => this.createBeaconTrail(splineId, maskId),
+      onDelete: (kind, id) => this.deleteAuthoringItem(kind, id),
+      onToggle: (kind, id, enabled) => this.setAuthoringItemEnabled(kind, id, enabled),
+      onRegenerate: (id) => this.regenerateModifier(id),
+    });
+    root.appendChild(this._section("Authoring (spline / mask / beacon trail)", this.authoringPanel.root));
 
     this.selectionLabel = document.createElement("div");
     Object.assign(this.selectionLabel.style, { marginTop: "auto", color: "#8fa899", fontSize: "11px" });
@@ -914,6 +953,15 @@ export class WorldEditor {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    // Procedural Authoring-1: while a spline/mask edit tool is active, terrain clicks
+    // feed the tool (add a control point / set a mask center) and suppress placement +
+    // selection — the same precedence the weapon/prefab arming below uses.
+    if (this.splineTool?.isActive || this.maskTool?.isActive) {
+      const toolHits = this.raycaster.intersectObject(this.terrain.mesh, false);
+      if (toolHits.length) this._handleAuthoringClick(toolHits[0].point);
+      return;
+    }
 
     // When a weapon is armed, terrain clicks place a generated weapon (repeatedly,
     // re-rolling so each is distinct) — the same placeWeapon→store→runtime path the
@@ -1294,6 +1342,7 @@ export class WorldEditor {
   _markDirty() {
     this.autosave?.markDirty();
     this._refreshHierarchy();
+    this.authoringPanel?.refresh(); // undo/redo + edits keep the authoring list current
   }
 
   // Force-persist now (no debounce) — used before entering Play so it tests the
@@ -1408,6 +1457,180 @@ export class WorldEditor {
     this.layersPanel?.render(this.layers.layers());
   }
 
+  // --- Procedural Authoring-1: spline / mask / modifier authoring -------------
+
+  // Route a terrain click to the active edit tool: add a spline point, or set a mask
+  // center (then commit the mask). Suppresses placement/selection (handled upstream).
+  _handleAuthoringClick(point) {
+    if (this.splineTool?.isActive) {
+      this.devAddSplinePoint(point.x, point.z);
+      return;
+    }
+    if (this.maskTool?.isActive) {
+      const center = { x: point.x, y: getHeight(point.x, point.z), z: point.z };
+      this.maskTool.preview(center);
+      this._addMask(center, this.maskTool.radius);
+      this.maskTool.deactivate();
+    }
+  }
+
+  beginSplineEdit() {
+    this.maskTool?.deactivate();
+    this.splineTool.activate(this.scene);
+    this.authoringPanel?.setSplineMode(true, 0);
+    this.authoringPanel?.setStatus("Click terrain to drop 3–8 path points, then Finish.");
+  }
+
+  // DEV/proof + click path: ground a point on the terrain and add it to the live spline.
+  devAddSplinePoint(x, z) {
+    if (!this.splineTool?.isActive) return 0;
+    const n = this.splineTool.addPoint({ x, y: getHeight(x, z), z });
+    this.authoringPanel?.setSplineMode(true, n);
+    return n;
+  }
+
+  undoSplinePoint() {
+    this.splineTool?.removeLastPoint();
+    this.authoringPanel?.setSplineMode(true, this.splineTool?.pointCount ?? 0);
+  }
+
+  cancelSplineEdit() {
+    this.splineTool?.deactivate();
+    this.authoringPanel?.setSplineMode(false, 0);
+    this.authoringPanel?.setStatus("Spline cancelled.");
+  }
+
+  // Commit the in-progress spline (≥3 points) as an undoable add; returns the new id.
+  finishSplineEdit() {
+    const points = this.splineTool?.commitPoints();
+    this.splineTool?.deactivate();
+    this.authoringPanel?.setSplineMode(false, 0);
+    if (!points) {
+      this.authoringPanel?.setStatus("Need at least 3 points — spline discarded.");
+      return null;
+    }
+    return this.devAddSpline(points);
+  }
+
+  // DEV/proof: add a spline directly from a point array (bypasses interactive clicks).
+  devAddSpline(points, { name } = {}) {
+    const id = this._authoringId("spline");
+    const spline = createSpline({ id, name: name ?? `Path ${id}`, points });
+    if (!spline) {
+      this.authoringPanel?.setStatus("Invalid spline (need 3–8 finite points).");
+      return null;
+    }
+    this._execAuthoring(new AddAuthoringItemCommand(this._authoringCtx(), "splines", spline));
+    this.authoringPanel?.setStatus(`Added ${spline.name}.`);
+    return spline.id;
+  }
+
+  beginMaskEdit(radius = 12) {
+    this.splineTool?.deactivate();
+    this.authoringPanel?.setSplineMode(false, 0);
+    this.maskTool.activate(this.scene, { radius });
+    this.authoringPanel?.setStatus("Click terrain to place the area center.");
+  }
+
+  // DEV/proof: add a circle mask directly at a center.
+  devAddMask(center, radius = 12) {
+    return this._addMask(center, radius);
+  }
+
+  _addMask(center, radius) {
+    const id = this._authoringId("mask");
+    const mask = createMask({ id, name: `Area ${id}`, center, radius });
+    if (!mask) {
+      this.authoringPanel?.setStatus("Invalid mask.");
+      return null;
+    }
+    this._execAuthoring(new AddAuthoringItemCommand(this._authoringCtx(), "masks", mask));
+    this.authoringPanel?.setStatus(`Added ${mask.name}.`);
+    return mask.id;
+  }
+
+  // Create a beacon-trail modifier binding a spline (+ optional mask).
+  createBeaconTrail(splineId, maskId = null) {
+    const a = this.worldLoader?.document?.authoring;
+    if (!splineId || !a?.splines?.some((s) => s.id === splineId)) {
+      this.authoringPanel?.setStatus("Pick a path first.");
+      return null;
+    }
+    const id = this._authoringId("trail");
+    const modifier = createModifier({ id, name: `Beacon trail ${id}`, splineId, maskId: maskId || null, seed: id, markerCount: 16 });
+    if (!modifier) {
+      this.authoringPanel?.setStatus("Invalid modifier.");
+      return null;
+    }
+    this._execAuthoring(new AddAuthoringItemCommand(this._authoringCtx(), "modifiers", modifier));
+    this.authoringPanel?.setStatus(`Created ${modifier.name}.`);
+    return modifier.id;
+  }
+
+  deleteAuthoringItem(kind, id) {
+    const descriptor = (this.worldLoader?.document?.authoring?.[kind] ?? []).find((it) => it.id === id);
+    if (!descriptor) return;
+    this._execAuthoring(new RemoveAuthoringItemCommand(this._authoringCtx(), kind, descriptor));
+    this.authoringPanel?.setStatus(`Removed ${descriptor.name || id}.`);
+  }
+
+  setAuthoringItemEnabled(kind, id, enabled) {
+    const item = (this.worldLoader?.document?.authoring?.[kind] ?? []).find((it) => it.id === id);
+    if (!item) return;
+    this._execAuthoring(new UpdateAuthoringItemCommand(this._authoringCtx(), kind, id, { enabled: item.enabled !== false }, { enabled: !!enabled }));
+  }
+
+  // Pick a fresh seed and re-derive (authoring-only randomness; the layout from the
+  // chosen seed stays fully deterministic).
+  regenerateModifier(id) {
+    const item = (this.worldLoader?.document?.authoring?.modifiers ?? []).find((it) => it.id === id);
+    if (!item) return;
+    // Bump the seed's `-r<N>` suffix monotonically, reading N from the CURRENT (persisted)
+    // seed — not a session counter (which resets on reload and would reproduce the same
+    // seed after a reload, making the first regenerate a silent no-op).
+    const current = String(item.seed ?? id);
+    const base = current.replace(/-r\d+$/, "");
+    const n = (Number.parseInt(current.match(/-r(\d+)$/)?.[1] ?? "0", 10) || 0) + 1;
+    const after = { seed: `${base}-r${n}` };
+    this._execAuthoring(new UpdateAuthoringItemCommand(this._authoringCtx(), "modifiers", id, { seed: item.seed }, after));
+    this.authoringPanel?.setStatus(`Regenerated ${item.name || id}.`);
+  }
+
+  _authoringCtx() {
+    return { doc: this.worldLoader?.document, runtime: this.authoringRuntime };
+  }
+
+  _execAuthoring(cmd) {
+    // execute() runs do() (which rebuilds the derived visuals) then fires the stack's
+    // onChange → _markDirty (autosave + outliner + panel refresh).
+    this.history.execute(cmd);
+    this._refreshPerf();
+  }
+
+  // Generate an authoring id unique against the current document's ids.
+  _authoringId(prefix) {
+    const a = this.worldLoader?.document?.authoring ?? {};
+    const used = new Set([...(a.splines ?? []), ...(a.masks ?? []), ...(a.modifiers ?? [])].map((it) => it.id));
+    let n = (this._authoringCounter = (this._authoringCounter ?? 0) + 1);
+    let id = `${prefix}-${n}`;
+    while (used.has(id)) id = `${prefix}-${++n}`;
+    this._authoringCounter = n;
+    return id;
+  }
+
+  // Serializable authoring snapshot for the DEV proof hook.
+  authoringSnapshot() {
+    const a = this.worldLoader?.document?.authoring ?? { splines: [], masks: [], modifiers: [] };
+    return {
+      splines: a.splines?.length ?? 0,
+      masks: a.masks?.length ?? 0,
+      modifiers: a.modifiers?.length ?? 0,
+      splineEditing: this.splineTool?.isActive ?? false,
+      splinePoints: this.splineTool?.pointCount ?? 0,
+      runtime: this.authoringRuntime?.stats?.() ?? null,
+    };
+  }
+
   // --- Editor UX-1: hierarchy -------------------------------------------------
 
   _refreshHierarchy() {
@@ -1421,7 +1644,18 @@ export class WorldEditor {
       generated: !!object.userData.generatorId,
     }));
     const selectedIds = new Set(this.selection.objects.map((o) => o.userData.objectId));
-    return { objects, weapons: this._weaponRows(), objectives: this._objectiveRows(), selectedIds };
+    return { objects, weapons: this._weaponRows(), objectives: this._objectiveRows(), authoring: this._authoringRows(), selectedIds };
+  }
+
+  // Authored splines/masks/modifiers from the document (read-only outliner rows; the
+  // interactive list lives in the Authoring panel).
+  _authoringRows() {
+    const a = this.worldLoader?.document?.authoring ?? {};
+    const rows = [];
+    for (const s of a.splines ?? []) rows.push({ id: s.id, name: `path · ${s.name || s.id}` });
+    for (const m of a.masks ?? []) rows.push({ id: m.id, name: `area · ${m.name || m.id}` });
+    for (const mod of a.modifiers ?? []) rows.push({ id: mod.id, name: `trail · ${mod.name || mod.id}${mod.enabled === false ? " (off)" : ""}` });
+    return rows;
   }
 
   // Placed weapons named by their derived identity (Arsenal v5) — read-only rows.
@@ -1451,7 +1685,7 @@ export class WorldEditor {
   // Serializable hierarchy snapshot for the DEV proof (Set → array).
   getHierarchy() {
     const data = this._hierarchyData();
-    return { objects: data.objects, weapons: data.weapons, objectives: data.objectives, selectedIds: [...data.selectedIds] };
+    return { objects: data.objects, weapons: data.weapons, objectives: data.objectives, authoring: data.authoring, selectedIds: [...data.selectedIds] };
   }
 
   selectFromHierarchy(id) {

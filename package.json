@@ -67,6 +67,8 @@
     "test:editor-ux1": "node scripts/browser-editor-ux1-proof.mjs",
     "test:performance-contract": "node scripts/performance-contract-regression.mjs",
     "test:performance-contract-proof": "node scripts/browser-performance-contract-proof.mjs",
+    "test:authoring-procedural": "node scripts/authoring-procedural-regression.mjs",
+    "test:authoring-procedural-proof": "node scripts/browser-authoring-procedural-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

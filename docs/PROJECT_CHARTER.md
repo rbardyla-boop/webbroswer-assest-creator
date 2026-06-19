@@ -22,20 +22,20 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (Performance Contract-1 accepted; tag `world-builder-performance-contract-1`).**
-- **53 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-19 (Procedural Authoring-1 accepted; tag `world-builder-procedural-authoring-1`).**
+- **54 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Performance Contract-1 — Performance as a
-  Tested Gate** (ADR-042): four canonical deterministic benchmark scenes + a per-scene budget gate (reusing the
-  Stage 20A classifier) that FAILS on a breach, in play and editor mode. Reuse-heavy — Stage 20A's
-  `PERFORMANCE_BUDGETS`/BudgetHUD/`test:budget` left byte-stable; the only runtime edit was 3 additive `__PERF__`
-  fields. See the **Performance Contract** budgets + baseline table in ADR-042 below.
-- **Node regression GREEN incl. new `test:performance-contract` + `test:editor-ux1-unit`**; browser proofs re-run
-  this session: `test:performance-contract-proof`, `test:budget` (Stage 20A — confirms it stays green),
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Procedural Authoring-1 — Editable Spline /
+  Mask / Modifier Primitives** (ADR-043): the first way to shape a *region* without placing objects one by one — an
+  editable spline (3–8 pts), a circle/box mask, and one non-destructive `beacon-trail` modifier. KEY DESIGN: the
+  authored block is the persisted source of truth; the modifier VISUALS are RE-DERIVED each load by an
+  `AuthoringRuntime` (owned by `WorldRuntimeLoader`, like `wildlife`/`ambient`) and are NEVER baked into `objects`
+  (the runtimeAssets idiom). No `WORLD_DOCUMENT_VERSION` bump (stays 2). See ADR-043 below.
+- **Node regression GREEN incl. new `test:authoring-procedural` (9 checks)**; browser proofs re-run this session:
+  `test:authoring-procedural-proof`, `test:performance-contract(+proof)` (now 5 scenes — authored-procedural added),
   `test:editor-ux1`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-playable-proof`,
-  plus the Node subset — all green. `test:budget` flaked once on a CDP transport hiccup under back-to-back load
-  and passed in isolation (transient, re-run not re-fix).
-- **Next per ADR-039 roadmap: Procedural Authoring-1.**
+  plus the Node subset + `qa` — all green.
+- **Next per ADR-039 roadmap: Asset Pipeline-1.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -101,14 +101,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | 8 · Authored play slices | Slice-0 — The Frozen Cache | `…slice0-frozen-cache` | `test:frozen-cache` `test:frozen-cache-proof` | ✅ |
 | | Slice-0A — Human-UX Hardening | `…slice0a-human-ux` | `test:slice0a` | ✅ (ADR-040; reversible) |
 | 9 · Editor as the product surface | Editor UX-1 — First Usable Authoring Surface | `…editor-ux1` | `test:editor-ux1-unit` `test:editor-ux1` | ✅ (ADR-041) |
-| 10 · Performance & scale | **Performance Contract-1 — Performance as a Tested Gate** | **`…performance-contract-1`** | `test:performance-contract` `test:performance-contract-proof` | ✅ **LATEST** (ADR-042) |
+| 10 · Performance & scale | Performance Contract-1 — Performance as a Tested Gate | `…performance-contract-1` | `test:performance-contract` `test:performance-contract-proof` | ✅ (ADR-042) |
+| 10 · Performance & scale | **Procedural Authoring-1 — Editable Spline / Mask / Modifier** | **`…procedural-authoring-1`** | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ **LATEST** (ADR-043) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
+**Asset Pipeline-1 (next)** → Combat-0 → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -2071,3 +2072,81 @@ the override so it measures player-facing cost).
 **Non-goals (held).** No renderer rewrite, no WebGPU, no HLOD, no asset compression, no procedural authoring, no
 combat, no gameplay change. **No weakening of visual/world systems to fit a budget** (the gate measures the real
 scene). Stage 20A budget infra byte-stable. Next per ADR-039: Procedural Authoring-1.
+
+## ADR-043 — Procedural Authoring-1: Editable Spline / Mask / Modifier Primitives
+
+**Context.** Editor UX-1 made the world authorable and Performance Contract-1 put a measured ceiling under it, but
+*everything a user could place was still hand-placed* — there was no way to shape a *region* (a guided path, an
+influence area) without dropping objects one at a time. The smallest tool that changes that, and that improves
+player readability of a Frozen-Cache-style space, is a **spline-guided trail/landmark modifier**.
+
+**Decision — derived, non-destructive output (NOT baked).** Add three editable primitives behind one new additive
+document block `authoring: { version, splines[], masks[], modifiers[] }`. The decisive architecture call (it
+resolved a real fork in the design research): **the authored splines/masks/modifiers are the persisted source of
+truth; the modifier's VISUALS are re-derived every load and never written into `document.objects`.** This is the
+existing **`runtimeAssets` idiom** ("rebuilt from a recipe each load") applied to authoring — the faithful reading
+of "non-destructive" — NOT the generator idiom (which bakes emitted objects into `objects`). Consequences:
+`document.objects` stays clean, editing the spline + re-deriving never accumulates baked geometry, and the perf
+gate watches the derived-geometry path (triangles/draws/batches) rather than the object count.
+
+**Mechanism.**
+
+- **Source of truth + whitelist** — `src/world/authoring/AuthoringTypes.js` is the validation boundary (mirrors
+  `ObjectiveTypes`/`RuntimeAssetTypes`): `sanitizeAuthoringBlock` whitelists every field, caps the lists, ALWAYS
+  emits the `enabled`/`locked`/`ring` booleans (so falsey survives save→load), drops a descriptor on any
+  non-finite point/radius (never silently repaired to origin), enforces 3..8 spline points and mask-radius bounds,
+  and keeps a modifier's spline/mask references syntactically (resolved + skipped at runtime, never crashed). One
+  line wires it into `WorldValidation` after `objectives`. **No `WORLD_DOCUMENT_VERSION` bump** (stays 2);
+  zero warnings on an empty block.
+- **Derivation (pure, deterministic)** — `BeaconTrailModifier.deriveBeaconTrail` samples the spline (a THREE-free
+  uniform Catmull-Rom), gates samples by the mask (circle/box with a falloff band), and returns marker transforms
+  plus an optional ground ring. Seeded by `mulberry32(stringToSeed(seed))` — no `Math.random`/wall-clock; a jitter
+  draw is consumed for EVERY sample so the seeded stream stays stable regardless of which samples the mask gates
+  out (byte-identical across reloads).
+- **Runtime (re-derived visuals)** — `AuthoringRuntime` is owned by `WorldRuntimeLoader` exactly like
+  `wildlife`/`ambient` (built in `load()`, torn down in `dispose()`, returned in the result). Because **both**
+  runtime load paths call `WorldRuntimeLoader.load()`, this single wiring covers editor preview AND play — the
+  recurring "two load paths" gotcha is sidestepped. One `THREE.Group` per enabled modifier; markers are a single
+  InstancedMesh (flat draw calls), the mask edge one Torus. Markers reuse the ObjectiveRuntime `beaconMat` idiom +
+  `getHeight` grounding. `updateDocumentFromRuntime` is intentionally left untouched (the block is authored data,
+  current in place — the lighting persistence pattern).
+- **Editor surface** — `AuthoringPanel` + editor-only `SplineEditTool`/`MaskEditTool` (reuse the existing
+  raycaster; previews are never serialized, never in play). Edits are **pure-data commands** on the block
+  (`AuthoringCommands`: Add/Remove/Update) executed through the existing `CommandStack`, so undo/redo + autosave +
+  the outliner all work; each `do/undo` mutates the block and calls `authoringRuntime.rebuild()`. `dispose()` is a
+  no-op (no parked GPU objects — the runtime owns the derived geometry). The block also lists in the Editor UX-1
+  hierarchy.
+- **Perf gate** — a 5th canonical benchmark `authoredProceduralScene()` (one beacon trail over a 5-point spline +
+  circle mask) joins `allBenchmarkScenes()`; the contract proof asserts it within budget. Because output is
+  derived geometry not `objects`, the per-scene ceiling gates triangles/draws/batches; `objects`(4)/`batches`(4)
+  are small absolute guards that would breach if the trail ever leaked into placed objects.
+
+**Performance — captured then locked (SwiftShader, structural / GPU-independent).** authored-procedural: draws
+112, triangles 516k, objects 0, instanced batches 0, veg patches 62 → overall **yellow** (default grass dominates
+triangles, like the empty floor; the ~16-marker trail adds only a few hundred triangles + zero placed objects).
+Ceilings: draws 160 / tris 700k / objects 4 / batches 4 / veg 120. The gate is non-vacuous (the proof asserts the
+trail actually derived markers, and `objects 0` confirms nothing is baked).
+
+**Gates (TDD).** `test:authoring-procedural` (pure Node, 9 checks): validation drop/clamp/cap rules, falsey
+survival, derivation determinism + mask gating + getHeight grounding, `WorldSerializer` round-trip with no schema
+bump + idempotent re-validation, dangling-reference tolerance, benchmark determinism + a no-RNG static scan.
+`test:authoring-procedural-proof` (SwiftShader): author spline→mask→trail in the editor → derived trail renders →
+undo/redo restores exactly → **regenerate yields a fresh seed even across reload** → autosave + reload PERSISTS →
+the trail shows in PLAY (and the editor — hence any edit gizmo — does not exist in runtime) → the authored
+benchmark stays within the performance contract → an authored trail coexists with the relic objective on the
+Frozen Cache base. 0 console errors. (Full slice completion is the unchanged `test:first-playable-proof`.)
+
+**Review (5 fresh-context reviewers, adversarial; each critical/high verified by a skeptic).** Net **0 unresolved
+critical/high**. Three reviewers flagged disposal double-free / use-after-free as critical/high; the verify phase
+plus the actual three.js **r0.169.0 source settled it — `InstancedMesh.dispose()` frees only `morphTexture` + the
+per-instance buffer, never the shared geometry/material** — so those were confirmed FALSE POSITIVES (the shared
+geo/mat are freed exactly once in `dispose()`; the disposal comment now documents the verified semantics). One
+genuine HIGH was confirmed and FIXED: `regenerateModifier` used a session counter that reset on reload, so the
+first post-reload regenerate reproduced the same seed (a silent no-op) — now the suffix is parsed from the
+persisted seed and bumped monotonically, with a dedicated proof assertion. Medium/low items (benchmark-comment
+precision; an explicit play-mode no-editor assertion) addressed.
+
+**Non-goals (held).** No road system, settlement grammar, terrain erosion/overhaul, asset import, node graph,
+combat, WebGPU, or live deploy. No `WORLD_DOCUMENT_VERSION` bump. No new persisted visuals in `objects`. Mote-
+density boost (would fold into the ambient seed) and a fog-thinning corridor (no local/volumetric fog) were
+explicitly deferred. Next per ADR-039: **Asset Pipeline-1**.

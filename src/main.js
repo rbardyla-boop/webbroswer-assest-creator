@@ -99,6 +99,7 @@ let water = null;
 let atmosphere = null;
 let wildlife = null;
 let ambient = null;
+let authoring = null;
 let grass = null;
 let trees = null;
 let bushes = null;
@@ -474,6 +475,8 @@ if (import.meta.env.DEV) {
         wildlife: wildlife?.stats ? { activeRegions: wildlife.stats.activeRegions, activeAnimals: wildlife.stats.activeAnimals, renderedInstances: wildlife.stats.renderedInstances } : null,
         ambient: ambient?.stats ? { activeRegions: ambient.stats.activeRegions, activeMotes: ambient.stats.activeMotes, renderedInstances: ambient.stats.renderedInstances } : null,
         arsenal: placedWeaponRuntime?.stats ? { count: placedWeaponRuntime.stats.count, awake: placedWeaponRuntime.stats.awake } : null,
+        // Procedural Authoring-1: derived beacon-trail visuals (groups + total markers).
+        authoring: authoring ? authoring.stats() : null,
       };
     },
     // Time animation frames; `turn` forces a continuous camera pan to catch
@@ -684,6 +687,7 @@ async function applyLoadedWorld(document) {
   atmosphere = world.atmosphere;
   wildlife = world.wildlife;
   ambient = world.ambient;
+  authoring = world.authoring;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -723,6 +727,7 @@ async function applyLoadedWorld(document) {
     water, // Editor UX-1: rebuilt-per-load layer targets
     wildlife,
     ambient,
+    authoring, // Procedural Authoring-1: derived-trail runtime (rebuilt per load)
     getGrassStats: () => grass.stats,
     getTreeStats: () => trees.stats,
     placedAssetStore, // the store was recreated by loadRuntimeAssets above
@@ -759,6 +764,18 @@ const budgetHUD = import.meta.env.DEV
     })
   : null;
 if (budgetHUD) window.__BUDGET__ = () => budgetHUD.snapshot();
+// Procedural Authoring-1: dev/test-only authoring snapshot (stripped from production).
+// Reports the persisted block counts + the derived-trail runtime stats — works in both
+// editor and play so the proof can assert the trail renders + persists across reload.
+if (import.meta.env.DEV) {
+  window.__AUTHORING__ = () => {
+    const a = world?.document?.authoring ?? {};
+    return {
+      doc: { splines: a.splines?.length ?? 0, masks: a.masks?.length ?? 0, modifiers: a.modifiers?.length ?? 0 },
+      runtime: authoring?.stats?.() ?? null,
+    };
+  };
+}
 
 // Count placed objects emitted by a generator (they carry a generatorId) — the
 // budget's "generated objects" metric. Runs at the HUD's throttle, not per frame.
@@ -829,6 +846,7 @@ async function boot() {
   atmosphere = world.atmosphere;
   wildlife = world.wildlife;
   ambient = world.ambient;
+  authoring = world.authoring;
   grass = world.grass;
   trees = world.trees;
   bushes = world.bushes;
@@ -888,6 +906,7 @@ async function boot() {
       water, // Editor UX-1 layer targets (refreshed per world load via setWorldContext)
       wildlife,
       ambient,
+      authoring, // Procedural Authoring-1: derived-trail runtime (refreshed per load)
       getTreeStats: () => trees.stats,
       prefabLibrary,
       modRegistry,
