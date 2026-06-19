@@ -175,12 +175,23 @@ export class WeaponEquipRuntime {
    * detached here — the caller is responsible for dropping/storing them first.
    */
   applyOccupancy(target, player) {
+    const prior = this._bySlot; // who was carried before (to catch a relocate that fails to re-attach)
     this._bySlot = createOccupancy();
     let ok = true;
     for (const slot of SLOT_CYCLE) {
       const id = target?.[slot];
       if (id == null) continue;
       if (!this._attachOne(id, player, slot)) ok = false;
+    }
+    // Never-orphan safety net: a weapon that WAS carried but did not land in any slot (e.g. its
+    // attach failed on a poisoned marker mid-swap) is still parented to the player yet absent from
+    // the map. Drop it to the world so it stays tracked + recoverable instead of stuck on the avatar.
+    for (const s of SLOT_CYCLE) {
+      const id = prior[s];
+      if (id != null && this.slotOf(id) == null) {
+        const entry = this.placedRuntime?.getEntry(id);
+        if (entry) this._dropToWorld(entry, id, player);
+      }
     }
     return ok;
   }
@@ -198,13 +209,13 @@ export class WeaponEquipRuntime {
     const slot = this.slotOf(weaponId);
     if (slot == null) return false; // not carried
     const entry = this.placedRuntime?.getEntry(weaponId);
-    this._bySlot[slot] = null; // free the slot
+    this._bySlot[slot] = null; // free the slot (also clears a stale ref if the entry is already gone)
     if (!entry) return false;
 
-    const d = this._descriptor(weaponId);
     if (mode === "store") {
       entry.group.visible = false; // hide BEFORE reparenting — never a visible frame at the wrong spot
       this.scene?.add(entry.group); // reparent player → scene (invisible)
+      const d = this._descriptor(weaponId);
       if (d) {
         d.runtime.state = "stored";
         d.runtime.owner = null;
@@ -214,6 +225,14 @@ export class WeaponEquipRuntime {
       return true;
     }
     // drop: ground at the player's feet and persist that as the new placed transform
+    this._dropToWorld(entry, weaponId, player);
+    return true;
+  }
+
+  /** Reparent a weapon's group from the player back into the world at the player's feet and persist
+   *  it as a dropped (idle, visible) placed weapon. Shared by unequipWeapon('drop') and the
+   *  applyOccupancy orphan-safety net. Does NOT touch the occupancy map — the caller owns that. */
+  _dropToWorld(entry, weaponId, player) {
     this.scene?.add(entry.group); // reparent player → scene, then position in scene space
     const px = player?.position?.x ?? 0;
     const pz = player?.position?.z ?? 0;
@@ -222,6 +241,7 @@ export class WeaponEquipRuntime {
     entry.group.rotation.set(0, player?.facing ?? 0, 0);
     entry.group.scale.set(1, 1, 1);
     entry.group.visible = true;
+    const d = this._descriptor(weaponId);
     if (d) {
       d.transform.position = { x: px, y: py, z: pz };
       d.transform.rotation = { x: 0, y: player?.facing ?? 0, z: 0 };
@@ -230,7 +250,6 @@ export class WeaponEquipRuntime {
       d.runtime.visible = true;
       d.runtime.slot = null;
     }
-    return true;
   }
 
   /** Detach the PRIMARY equipped weapon (v4 surface — the first occupied slot in cycle order). */

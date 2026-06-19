@@ -282,6 +282,25 @@ function placeNamed(store, runtime, seed, type, x, z) {
   assert.equal(runtime.getEntry(bad.id).group.parent, scene, "poisoned weapon stays placed");
 }
 
+// --- 9b. never-orphan: an attach that fails mid-swap drops the weapon, never strands it on the player
+{
+  const w = freshWorld();
+  const player = fakePlayer(2, 2);
+  w.scene.add(player.mesh);
+  const a = placeNamed(w.store, w.runtime, "orph-a", "sidearm", 1, 0);
+  const b = placeNamed(w.store, w.runtime, "orph-b", "longarm", 2, 0);
+  w.equip.equip(a, player, "rightHand");
+  w.equip.equip(b, player, "back");
+  // poison A's marker, then trigger a swap that must re-attach A to back — its attach now fails
+  w.runtime.getEntry(a).group.userData.markers.equip = [NaN, 0, 0];
+  assert.doesNotThrow(() => w.carry.drawSlot("back", player), "drawSlot tolerates a poisoned re-attach");
+  assert.equal(w.equip.slotOf(a), null, "the un-attachable weapon left the occupancy map");
+  assert.equal(w.runtime.getEntry(a).group.parent, w.scene, "it was dropped to the world — NOT orphaned on the player");
+  assert.notEqual(w.runtime.getEntry(a).group.parent, player.mesh, "the failed weapon is not stuck on the avatar");
+  assert.equal(w.equip.slotOf(b), "rightHand", "the other weapon drew to hand as intended");
+  assert.equal(w.runtime.getEntry(b).group.parent, player.mesh, "B still carried on the player");
+}
+
 // --- 10. isolation: no src/world OR src/editor file imports the arsenal UI ---------------------
 {
   const offenders = [...walk("src/world"), ...walk("src/editor")].filter((f) => /WeaponWorkbench|arsenalMain/.test(fs.readFileSync(f, "utf8")));
