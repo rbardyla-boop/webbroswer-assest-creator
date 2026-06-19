@@ -97,6 +97,33 @@
         padding: 9px 14px; color: #e8faff; background: rgba(16, 36, 42, 0.9);
         border: 1px solid rgba(158, 238, 255, 0.42); border-radius: 7px; cursor: pointer; font: inherit;
       }
+
+      /* Slice-0A: arrival controls hint (teaches movement first; fades on first move) */
+      .controls-hint {
+        position: fixed; left: 50%; bottom: 96px; z-index: 17; transform: translate(-50%, 8px);
+        display: flex; align-items: center; gap: 16px; padding: 8px 16px;
+        color: var(--text); background: rgba(9, 17, 20, 0.82); border: 1px solid rgba(158, 238, 255, 0.3);
+        border-radius: 9px; opacity: 0; transition: opacity 0.35s ease, transform 0.35s ease;
+        pointer-events: none; font-size: 12px; backdrop-filter: blur(8px);
+      }
+      .controls-hint.visible { opacity: 1; transform: translate(-50%, 0); }
+      .controls-hint b { color: #9eeeff; font-weight: 600; letter-spacing: 0.04em; }
+      .controls-hint kbd {
+        min-width: 20px; padding: 3px 6px; margin: 0 1px; text-align: center; color: #d8f8ff;
+        background: rgba(103, 207, 232, 0.16); border: 1px solid rgba(158, 238, 255, 0.45); border-radius: 4px;
+      }
+
+      /* Slice-0A: toggleable friction trace / session log (press L in play mode) */
+      .slice-trace {
+        position: fixed; left: 14px; top: 14px; z-index: 19; width: min(300px, 42vw);
+        max-height: 46vh; overflow: hidden; padding: 10px 12px;
+        color: #bfeefc; background: rgba(6, 12, 15, 0.9); border: 1px solid rgba(158, 238, 255, 0.32);
+        border-radius: 9px; opacity: 0; pointer-events: none; backdrop-filter: blur(6px);
+        font: 11px/1.55 "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+      }
+      .slice-trace.visible { opacity: 1; }
+      .slice-trace-title { color: #9eeeff; letter-spacing: 0.16em; font-size: 9px; margin-bottom: 6px; }
+      .slice-trace-row span { color: #6fb9cc; }
       .completion-actions button:hover { border-color: #9eeeff; color: #9eeeff; }
 
       /* Top-right action buttons */

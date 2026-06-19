@@ -53,6 +53,10 @@ const toolbarEl = document.getElementById("toolbar");
 const hintEl = document.getElementById("hint");
 const urlParams = new URLSearchParams(window.location.search);
 const runtimeMode = urlParams.has("runtime") || urlParams.has("play");
+// Play mode (?play=1) is the actual player experience; ?runtime=1 is the bare test harness. Slice-0A
+// human-UX instrumentation (controls hint + friction trace) shows only in play mode, so it never
+// perturbs the arsenal/visibility/first-playable proofs that drive ?runtime=1.
+const playMode = urlParams.has("play");
 const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
 const worldpackParam = urlParams.get("worldpack"); // url of an exported .worldpack.json
 const modParam = urlParams.get("mod"); // id of an installed mod package to play
@@ -142,6 +146,7 @@ const frozenCacheSlice = runtimeMode
         localStorage.removeItem("frozen-cache-tutorial-v1");
         window.location.href = "/?play=1";
       },
+      instrument: playMode,
     })
   : null;
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
@@ -325,8 +330,28 @@ if (import.meta.env.DEV) {
       if (objectiveRuntime?.entry?.completed && world?.document) worldSerializer.save(world.document);
       return result;
     },
+    // Slice-0A instrumentation drivers: advance the slice clock, nudge the player a step, toggle the
+    // friction-trace panel — so test:slice0a can prove the controls hint dismisses on movement and the
+    // stuck nudge fires after a long dwell, without the real-time rAF throttle.
+    advance: (seconds = 1) => {
+      const step = 1 / 30;
+      for (let t = 0; t < seconds; t += step) frozenCacheSlice?.update(step);
+      return frozenCacheSlice?.elapsed ?? 0;
+    },
+    nudgePlayer: (dx = 1, dz = 0) => {
+      player.position.x += dx;
+      player.position.z += dz;
+      player.syncMesh?.();
+      frozenCacheSlice?.update(1 / 30);
+      return true;
+    },
+    toggleTrace: () => (frozenCacheSlice?.toggleTrace(), true),
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
+  window.__SLICE_TRACE__ = () => ({
+    entries: frozenCacheSlice?.trace?.entries() ?? [],
+    summary: frozenCacheSlice?.trace?.summary() ?? null,
+  });
   // Dev/test-only: physical-movement driver so a proof can WALK the player through the world
   // (no teleport). It only injects input intent — camera yaw + held movement keys, exactly what a
   // real keyboard would — and `step` advances ONE fixed simulation tick using the SAME per-frame
@@ -930,6 +955,7 @@ function frame(now) {
   // Global toggles. (Debug moved to Backquote in v6 so H is free for holster/draw.)
   if (input.wasPressed("Backquote")) debug.toggle();
   if (input.wasPressed("KeyB")) budgetHUD?.toggle();
+  if (input.wasPressed("KeyL")) frozenCacheSlice?.toggleTrace(); // Slice-0A friction log (play mode only)
   // Arsenal v6 carry: F picks up the nearest placed weapon into a free slot / drops the active one;
   // R rotates carried weapons through the slots (next weapon to hand); H holsters the drawn weapon
   // to a free slot, or draws a holstered one back; 1/2/3 select rightHand/back/hip. No firing.

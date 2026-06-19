@@ -1856,3 +1856,49 @@ survives reloads, holds frame rate on target hardware, and rebuilds repeatedly w
 state), but Slice-0A answers the product question automated gates cannot: **can a fresh player understand and
 finish the slice without being coached?** It records a real tester's friction and proves completion without
 outside explanation before Combat-0 begins.
+
+## ADR-040 — Slice-0A: Human-UX Hardening + Instrumentation (the human walk is the OPEN gate)
+
+**Status: OPEN — intentionally not tagged.** Slice-0A's completion gate is a real fresh-player walk recorded by
+the operator. This stage ships the *hardening + instrumentation* that makes that walk productive and
+observable; it does NOT claim human comprehension is proven. No milestone tag is applied until the operator
+records a fresh-player completion-without-coaching. (Evidence bar chosen by the operator: "harden + instrument
+for me," not an automated self-guided proxy.)
+
+**Why a different shape.** "Can a fresh player finish without coaching?" cannot be self-graded — an automated
+proof asserts UI *state*, not human *understanding*. So Slice-0A does what automation legitimately can: (1) a
+rigorous friction audit, (2) hardening of the genuine gaps, (3) instrumentation so the operator's own walk is
+recorded and friction is visible — then hands the comprehension judgment to a human.
+
+**Friction audit → hardening (shipped).**
+
+- *Controls discoverability* (the top gap): the slice teaches F/H/R/G contextually but NOTHING taught
+  movement/look/camera, and the editor controls hint is hidden in play mode — a fresh player could stall at
+  "how do I move?" New `ControlsHint` shows Move/Look/Camera on arrival and fades on the player's first
+  demonstrable movement (or after an 8s window).
+- *Quiet navigation stretches*: a `_maybeStuckNudge` surfaces a gentle "follow the beacon" prompt only after a
+  long (18s) unproductive dwell in a navigation beat — far beyond any scripted run, so it guides a genuinely
+  lost player without masking normal play. It is always logged as friction even though it also helps.
+
+**Instrumentation (shipped).** `SliceTrace` records the walk — `load`, `beat` transitions, `prompt` changes,
+`action` (F/H/R/G), `firstMove` (time-to-first-movement), `stuck`, `complete` — timestamped by the slice's
+deterministic `elapsed` (no wall-clock). A toggleable on-screen session log (press **L** in play mode), a
+`__SLICE_TRACE__()` debug hook, and a `debugSnapshot` summary let the operator review exactly where the slice
+helped or lost them.
+
+**Boundaries.** Play-mode only (`instrument = ?play`); the bare `?runtime=1` harness never renders the hint or
+trace, so the arsenal/visibility/first-playable proofs are untouched. No document-schema change, no new world
+system, no combat/inventory. Additive UI + telemetry; the existing objective/slice completion logic is
+unchanged (the friction trace never affects gameplay).
+
+**Verification.** NEW `test:slice0a` (SwiftShader): the controls hint is visible on arrival and DISMISSES on
+first movement (logging `firstMove`); the trace records `load/beat/action/stuck/complete`; the stuck nudge +
+`stuck` event fire after a long dwell; the slice still completes end to end. `test:frozen-cache`(+proof),
+`test:first-objective`, `test:first-playable-hidden`, `build`, `qa:skills` 32/0/0, `qa:layout` 43/0/0 all
+remain green. Committed locally; **no tag** (the human walk is the gate); `sword forge.html` untracked.
+
+**Operator hand-off (how to close this gate).** Open `/?play=1` with a cleared profile, press **L** to show the
+session log, and play the slice as a fresh player WITHOUT looking at code or this doc. After the walk, read the
+trace (or `__SLICE_TRACE__()`): a long gap before the first `action`, a high `firstMove` time, or any `stuck`
+event marks real friction. Report what confused you; those become the hardening backlog. When a walk completes
+without coaching, tag `world-builder-slice0a-...` and flip this ADR to accepted.

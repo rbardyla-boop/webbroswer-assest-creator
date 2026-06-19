@@ -62,6 +62,7 @@
     "test:first-playable-hidden-proof": "node scripts/browser-first-playable-hidden-proof.mjs",
     "test:frozen-cache": "node scripts/frozen-cache-regression.mjs",
     "test:frozen-cache-proof": "node scripts/browser-frozen-cache-proof.mjs",
+    "test:slice0a": "node scripts/browser-slice0a-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",
