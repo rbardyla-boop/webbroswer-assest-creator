@@ -31,6 +31,13 @@ const run = await withBrowserProof(
     try {
       await waitForReady(editor.cdp, "editor", 45000);
       assert.equal(await evalValue(editor.cdp, AUTHOR_WORLD), true);
+      // The sandbox landing must offer Play as a primary one-click entry (no ?play=1 to memorise).
+      const playBtn = await evalValue(editor.cdp, `(() => {
+        const b = document.getElementById('enter-play');
+        return { present: !!b, primary: b?.classList.contains('btn-primary') ?? false };
+      })()`);
+      assert.equal(playBtn.present, true, "sandbox landing has a Play button (no need to type ?play=1)");
+      assert.equal(playBtn.primary, true, "Play is the primary toolbar action");
     } finally {
       await editor.close();
     }

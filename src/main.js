@@ -882,6 +882,10 @@ async function boot() {
       },
     });
     document.getElementById("open-editor").addEventListener("click", () => editor.open());
+    // Slice-0A: a fresh player should never have to know about ?play=1 — Play is one click.
+    document.getElementById("enter-play")?.addEventListener("click", () => {
+      window.location.href = "/?play=1";
+    });
     // Dev/test-only hook (stripped from production builds): drive and inspect the
     // editor + undo history.
     if (import.meta.env.DEV) window.__WORLD_EDITOR__ = editor;

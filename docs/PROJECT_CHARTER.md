@@ -1915,3 +1915,13 @@ without coaching, tag `world-builder-slice0a-...` and flip this ADR to accepted.
    display: none }` plus a `play-mode` body class — a CSS guarantee independent of JS load path, so the arrival
    hint is the single controls teacher. `test:slice0a` now asserts `#hint` is hidden in play mode and that the
    card's primary action is Play Again. Stage remains OPEN pending a clean no-coaching walk.
+
+**Friction log — walk #2 (operator, 2026-06-19): the biggest gap — no way to PLAY.** The operator kept landing
+on `localhost:5173` (the editor/sandbox), where the slice does not run: pressing **L** did nothing, there was
+no quest, just the leftover deposited relic from the earlier completed save, and the full editor controls bar
+showed. Root cause: the slice/quest/session-log all require `?play=1`, but the only toolbar button was "▣ World
+Builder" — **there was no Play entry at all**, so a player had to know to type `?play=1`. Fix: a primary
+**▶ Play** button in the toolbar (`#enter-play` → `/?play=1`), so entering the game is one click and the
+`?play=1` URL is never something a player must discover. `test:slice0a` asserts the Play button is present and
+primary on the sandbox landing. (Lesson: the play-mode fixes from walk #1 were correct but invisible because
+the operator was never in play mode — the discoverability of *play itself* was the real first-contact gap.)
