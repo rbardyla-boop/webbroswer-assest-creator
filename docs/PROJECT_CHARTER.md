@@ -22,12 +22,14 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (post Gate Repair-0; latest feature Arsenal v5, commit `f772f07`).**
-- **48 stages shipped + tagged** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-19 (Slice-0 accepted; implementation commit `464c4a2`).**
+- **50 stages shipped** (+ a Gate Repair-0 repair tag; latest release tag records Arsenal v6 + Slice-0).
+  Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest feature Arsenal v5 (relic identity) — full v5 gate green.
-- **Node regression sweep: 39/39 gates GREEN — both in isolation and in a single back-to-back run.** The suite
-  is fully green; no known red or fragile gate remains.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-0 — The Frozen Cache**, the first
+  authored 5–10 minute experience on the first-playable foundation; Arsenal v6 is its accepted prerequisite.
+- **Node regression baseline: 41/41 gates GREEN** (prior 39/39 sweep plus the new isolated
+  `test:arsenal-carry` and `test:frozen-cache` gates). No known red or fragile gate remains.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -37,8 +39,11 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
   - ✅ **`test:undo`, `test:connectors`, `test:visual0`** — these never had a code defect; they were collateral
     from the *crashing* visibility proof leaving residue in a back-to-back run. With visibility exiting cleanly,
     the full sweep is green. No separate change was needed.
-- **Browser proofs (SwiftShader):** the Arsenal + first-playable + visibility proofs ran green this session;
-  `qa:browser` (Playwright) WARN-skips in this environment (Playwright absent) — acceptable per the gate.
+- **Browser proofs (SwiftShader):** `test:arsenal-v6`, `test:frozen-cache-proof`, and
+  `test:first-playable-hidden-proof` ran green this session with zero console errors; `qa:browser`
+  (Playwright) WARN-skips in this environment (Playwright absent) — acceptable per the gate.
+- **Review:** 0 critical / 0 high / 0 medium findings after implementation review and proof-driven fixes.
+  Slice-0A human UX validation remains intentionally open; it is validation debt, not a claim of proven usability.
 
 **Stage ledger (chronological by phase; tag = local milestone, gate = primary regression/proof).**
 
@@ -80,18 +85,20 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | | Arsenal v2 (world placement) | `…arsenal-lab-v2` | `test:arsenal-world` (+proof) | ✅ |
 | | Arsenal v3 (place + equip) | `…arsenal-v3-equip` | `test:arsenal-placement` `test:arsenal-v3` | ✅ |
 | | Arsenal v4 (oriented slots) | `…arsenal-v4-slots` | `test:arsenal-equip-slots` `test:arsenal-v4` | ✅ |
-| | **Arsenal v5 (relic identity)** | `…arsenal-v5` | `test:arsenal-identity` | ✅ **(latest)** |
+| | Arsenal v5 (relic identity) | `…arsenal-v5` | `test:arsenal-identity` | ✅ |
+| | Arsenal v6 (multi-carry + holster/draw) | `…slice0-frozen-cache` | `test:arsenal-carry` `test:arsenal-v6` | ✅ |
 | 7 · First Playable gate 🏁 | FP-0 gate doc | `…first-playable-doc-v0.1` | doc | ✅ |
 | | FP-1 relic objective | `…first-objective-fp1` | `test:first-objective` (+proof) | ✅ |
 | | FP-2 integrated proof | `…first-playable-proof-fp2` | `test:first-playable-proof` | ✅ |
 | | FP-3 hidden-issue sweep | `…first-playable-hidden-fp3` | `test:first-playable-hidden` (+proof) | ✅ |
 | | **FP-4 go/no-go + tag** | **`…first-playable-v0`** | full gate sweep + review | ✅ **MILESTONE: GAME IS PLAYABLE** |
+| 8 · Authored play slices | **Slice-0 — The Frozen Cache** | **`…slice0-frozen-cache`** | `test:frozen-cache` `test:frozen-cache-proof` | ✅ **LATEST** |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (not yet started — each builds ON `…first-playable-v0`, does not reopen the gate):**
-Arsenal v6 (holster / multiple carried weapons) → Combat-0 (combat seam only, no enemies) →
-Enemy-0 (one non-networked test enemy) → Encounter-0 (first real combat objective). Or: deeper environment.
+Slice-0A (human UX hardening) → Combat-0 (combat seam only, no enemies) → Enemy-0 (one non-networked
+test enemy) → Encounter-0 (first real combat objective).
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1755,3 +1762,36 @@ locally; `sword forge.html` left untracked.
 **Why this before Arsenal v6.** A first playable plus a *truthful* ledger is the asset; allowing the ledger to
 normalize a known red gate ("green except for known stuff") is the debt this repair prevents. Feature work
 resumes on a fully green baseline.
+
+## ADR-038 — Arsenal v6 + Slice-0: The Frozen Cache Authored Experience
+
+**Decision.** Accept Arsenal v6 multi-carry/holster behavior as the prerequisite for Slice-0, then layer the
+first authored 5–10 minute experience over the existing FP-1 relic objective. `ObjectiveRuntime` remains the
+sole completion authority; `FrozenCacheSlice` observes it and owns only authored presentation: arrival and
+route beats, three landmarks, contextual F/R/H/G prompts, an optional tutorial weapon, a stronger guidance
+beacon, procedural WebAudio feedback, and the completion card. Completion is saved at deposit and restores
+the trophy/card after reload. No generalized quest system or new document schema was introduced.
+
+**Boundaries held.** No combat, enemies, damage, inventory screen, crafting, dialogue, economy, live service,
+or new procedural world system. The tutorial weapon uses the existing recipe/runtime-asset path. The slice
+composes from the runtime-resolved player spawn so dry-ground relocation cannot separate the tutorial from
+the player. First-run teaching state is local UI preference data; objective/trophy truth remains in the
+validated world document.
+
+**Evidence.** Implementation commit `464c4a2`. New gates `test:arsenal-carry`, `test:arsenal-v6`,
+`test:frozen-cache`, and `test:frozen-cache-proof` pass. The Frozen Cache proof verifies arrival banner,
+beacon, authored landmarks, contextual F/H/R/G sequence, relic deposit, completion card, trophy, reload
+persistence, and zero console errors. `test:first-objective`, `test:first-playable-hidden` and its six-session
+SwiftShader proof remain green. Build and aggregate QA pass (`qa:skills` 32/0/0, `qa:layout` 43/0/0;
+`qa:browser` WARN-skips because Playwright is absent).
+
+**Review.** 0 critical / 0 high / 0 medium. Proof-driven fixes aligned authored placement with the resolved
+spawn and separated the optional pickup from the relic interaction radius so F and H teach as distinct beats.
+The hidden proof now asserts exactly one relic plus exactly one tutorial weapon across reloads rather than the
+obsolete “only relic” total.
+
+**Known caveats / next gate.** Browser audio begins only after user activation. The production build retains
+its pre-existing large-chunk warning. Automated clarity assertions prove UI state, not human comprehension;
+Slice-0A must record a fresh tester's friction and prove completion without outside explanation before
+Combat-0 begins. Tag `world-builder-slice0-frozen-cache` locally; no push/deploy; `sword forge.html` remains
+untracked.

@@ -354,22 +354,16 @@ confirmation; the tag is local + reversible if that session ever disagrees.
 After every accepted stage, replace the "Current entry" block below.
 
 ```text
-Last accepted stage: Arsenal v5 — Relic Weapon Variety & Identity (first feature ON the tag; ADR-036)
-Commit: the Arsenal v5 commit, tagged world-builder-arsenal-v5 (local, no push)
+Last accepted stage: Slice-0 — The Frozen Cache authored play slice (includes Arsenal v6 prerequisite; ADR-038)
+Implementation commit: 464c4a2 (local, no push)
+Release tag: world-builder-slice0-frozen-cache (local, no push)
 Tag: world-builder-first-playable-v0 REMAINS the first-playable milestone (unchanged; gate stays CLOSED).
-  Arsenal v5 ADVANCES the target (the relic now has a derived name/tier/hash + tier-coloured trophy) —
-  it does NOT reopen the gate.
-Tests passed: build, qa (skills 32/0/0 + layout 43/0/0), test:world; NEW test:arsenal-identity; arsenal
-  v1–v4 (test:arsenal, -world(+proof), -placement, -v3, -equip-slots, -v4); test:first-objective(+proof —
-  now asserts the relic's derived name + hash + tier 5 and that they survive a reload);
-  test:first-playable-proof + test:first-playable-hidden(+proof). All green.
-Review: 3 fresh-context reviewers (arsenal pure modules · world integration · tests) → 0 critical, 1 HIGH,
-  4 MEDIUM, 2 LOW. HIGH + 3 MEDIUM fixed (exotic equip anchor → haft; relicProfile identity.tier; banner
-  text now tested; distinctness 80→90% + structural pattern + double-sanitize idempotency); 2 LOW accepted.
-New risks found: none affecting the first-playable loop. Identity is DERIVED (recomputed from the persisted
-  recipe), so it adds NO persisted field, NO schema bump (WORLD_DOCUMENT_VERSION stays 2); relicRecipe()
-  determinism unchanged; markers stay position-only arrays (v4 equip math untouched).
-Risks retired: the derived-identity-survives-reload claim is proven (test:arsenal-identity round-trip +
-  the live first-objective-proof name/hash-across-reload assertion).
-First playable readiness: COMPLETE and still green; gate CLOSED. Feature work continues on top of the tag.
+  Slice-0 ADVANCES the target from verified engine loop to authored experience; it does NOT reopen the gate.
+Tests passed: build; qa skills 32/0/0; qa layout 43/0/0; test:arsenal-carry; test:arsenal-v6;
+  test:frozen-cache; test:frozen-cache-proof; test:first-objective; test:first-playable-hidden(+proof).
+Review: implementation review → 0 critical, 0 high, 0 medium. Proof-driven UX fixes aligned composition to
+  the resolved spawn and separated the F/H teaching beats before acceptance.
+Known caveats: Slice-0A human UX testing is still required; WebAudio starts after user activation;
+  qa:browser WARN-skips without Playwright; the pre-existing large-bundle build warning remains.
+First playable readiness: COMPLETE and still green; gate CLOSED. Next stage is Slice-0A, not combat/enemies.
 ```
