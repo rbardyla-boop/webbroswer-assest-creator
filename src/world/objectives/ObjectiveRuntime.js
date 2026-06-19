@@ -10,7 +10,8 @@ import * as THREE from "three";
 import { getHeight } from "../../terrain/terrainSampling.js";
 import { placeWeapon } from "../placement/WeaponPlacementTool.js";
 import { ObjectiveStore } from "./ObjectivePersistence.js";
-import { RELIC_ID, OBJECTIVE_KIND, relicRecipe, deriveSites, livePhase, bannerText } from "./RelicWeaponObjective.js";
+import { RELIC_ID, OBJECTIVE_KIND, relicRecipe, deriveSites, livePhase } from "./RelicWeaponObjective.js";
+import { relicBannerText, relicTrophyStyle } from "./RelicPresentation.js";
 
 const PILLAR_H = 1.6; // cache beacon pillar height
 const BEAM_H = 2.2; // relic marker beam height
@@ -29,6 +30,9 @@ export class ObjectiveRuntime {
     this.entry = null; // the live objective descriptor (mutated in place → persists on save)
     this._cacheBeacon = null;
     this._relicMarker = null;
+    this._trophyAura = null; // tier-coloured halo around the deposited relic (claimed only)
+    this._relicRecipe = null; // the relic's recipe (descriptor's, or the deterministic fallback)
+    this._relicStyle = null; // derived presentation: { name, hash, tier, label, color, auraIntensity }
     this._inZone = false;
     this._phase = "find";
     this._spawned = false;
@@ -60,7 +64,14 @@ export class ObjectiveRuntime {
       this._spawned = true;
     }
     this.entry = entry;
-    if (this.entry) this._buildMarkers();
+    if (this.entry) {
+      // Derive the relic's presentation identity from its (sanitized) recipe — the descriptor's
+      // when present, else the deterministic fallback (byte-identical hash either way). relicGrade
+      // forces the top-tier gold "Relic" framing regardless of the recipe's rolled rarity.
+      this._relicRecipe = this._relicDescriptor()?.recipe ?? relicRecipe();
+      this._relicStyle = relicTrophyStyle(this._relicRecipe, { relicGrade: true });
+      this._buildMarkers();
+    }
     return this._spawned;
   }
 
@@ -121,7 +132,7 @@ export class ObjectiveRuntime {
 
   /** Current banner copy for the on-screen objective line (empty when no objective). */
   bannerText() {
-    return this.entry ? bannerText(this._phase) : "";
+    return this.entry ? relicBannerText(this._phase, this._relicRecipe, { relicGrade: true }) : "";
   }
 
   // --- markers ---------------------------------------------------------------------------------
@@ -136,14 +147,24 @@ export class ObjectiveRuntime {
     const rd = this._relicDescriptor();
     const rx = rd?.transform?.position?.x ?? c.x;
     const rz = rd?.transform?.position?.z ?? c.z;
-    this._relicMarker = buildRelicMarker(rx, getHeight(rx, rz), rz);
+    this._relicMarker = buildRelicMarker(rx, getHeight(rx, rz), rz, this._relicStyle?.color ?? RELIC_COLOR);
     this._relicMarker.visible = !completed;
     this.scene.add(this._relicMarker);
+    if (completed) this._showTrophyAura(); // restore the claimed-trophy halo on reload
   }
 
   _setClaimed() {
     if (this._cacheBeacon) recolor(this._cacheBeacon, CLAIMED_COLOR);
     if (this._relicMarker) this._relicMarker.visible = false;
+    this._showTrophyAura();
+  }
+
+  /** Build (idempotently) the tier-coloured halo framing the deposited relic on the pedestal. */
+  _showTrophyAura() {
+    if (this._trophyAura || !this.entry || !this.scene) return;
+    const c = this.entry.cache;
+    this._trophyAura = buildTrophyAura(c.x, getHeight(c.x, c.z), c.z, this._relicStyle?.color ?? RELIC_COLOR);
+    this.scene.add(this._trophyAura);
   }
 
   debugSnapshot() {
@@ -165,6 +186,9 @@ export class ObjectiveRuntime {
       radius: this.entry?.radius ?? null,
       beaconPresent: !!this._cacheBeacon,
       relicMarkerVisible: !!this._relicMarker?.visible,
+      relicName: this._relicStyle?.name ?? null,
+      relicHash: this._relicStyle?.hash ?? null,
+      relicTier: this._relicStyle?.tier ?? null,
     };
   }
 
@@ -172,8 +196,12 @@ export class ObjectiveRuntime {
   clear() {
     disposeGroup(this._cacheBeacon);
     disposeGroup(this._relicMarker);
+    disposeGroup(this._trophyAura);
     this._cacheBeacon = null;
     this._relicMarker = null;
+    this._trophyAura = null;
+    this._relicRecipe = null;
+    this._relicStyle = null;
     this.entry = null;
     this._inZone = false;
     this._phase = "find";
@@ -212,16 +240,33 @@ function buildCacheBeacon(x, groundY, z, radius, claimed) {
   return g;
 }
 
-function buildRelicMarker(x, groundY, z) {
+function buildRelicMarker(x, groundY, z, color = RELIC_COLOR) {
   const g = new THREE.Group();
   g.name = "ObjectiveRelicMarker";
   g.position.set(x, groundY, z);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, BEAM_H, 10), beaconMat(RELIC_COLOR, 0.7));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, BEAM_H, 10), beaconMat(color, 0.7));
   beam.position.y = BEAM_H / 2;
   g.add(beam);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), beaconMat(RELIC_COLOR, 0.95));
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), beaconMat(color, 0.95));
   gem.position.y = BEAM_H + 0.3;
   g.add(gem);
+  return g;
+}
+
+// Tier-coloured halo framing the deposited relic on the pedestal (Arsenal v5). Two concentric
+// rings just above the cache pillar top, around where the relic comes to rest.
+function buildTrophyAura(x, groundY, z, color = RELIC_COLOR) {
+  const g = new THREE.Group();
+  g.name = "ObjectiveTrophyAura";
+  g.position.set(x, groundY, z);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.05, 8, 32), beaconMat(color, 1.0));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = PEDESTAL_OFFSET;
+  g.add(ring);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.04, 8, 28), beaconMat(color, 0.9));
+  halo.rotation.x = Math.PI / 2;
+  halo.position.y = PEDESTAL_OFFSET + 0.3;
+  g.add(halo);
   return g;
 }
 

@@ -60,6 +60,8 @@ const run = await withBrowserProof(
       await editor.close();
     }
 
+    let relicIdentity = null; // captured in session 1, re-checked after the reload
+
     // --- session 1: find → equip → carry → deposit → complete + save -------------------------
     const rt = await openPage(CDP_PORT, `${BASE}/?runtime=1`);
     try {
@@ -74,6 +76,13 @@ const run = await withBrowserProof(
       assert.equal(r.start.relicExists, true, "relic spawned in the world");
       assert.equal(r.start.beaconPresent, true, "cache beacon present");
       assert.equal(r.start.completed, false, "objective starts incomplete");
+
+      // Arsenal v5: the relic carries a derived identity (name + recipe hash) shown in debug,
+      // and presents as relic-grade (tier 5). Capture it to prove it survives the reload below.
+      assert.ok(typeof r.start.relicName === "string" && r.start.relicName.length > 0, "relic has a derived name");
+      assert.ok(Number.isFinite(r.start.relicHash), "relic exposes its recipe hash in debug");
+      assert.equal(r.start.relicTier, 5, "objective relic presents as relic-grade (tier 5)");
+      relicIdentity = { name: r.start.relicName, hash: r.start.relicHash };
 
       assert.equal(r.carrying.phase, "carry", "equipping the relic → carry phase");
       assert.equal(r.atCache.inZone, true, "teleport puts the player in the cache zone");
@@ -104,6 +113,9 @@ const run = await withBrowserProof(
       assert.equal(e.relicExists, true, "relic rebuilt on reload");
       assert.equal(e.beaconPresent, true, "cache beacon rebuilt on reload");
       assert.ok(distXZ(e.relicPos, e.cache) < 0.5, "relic still on the pedestal after reload");
+      // Identity is DERIVED from the (persisted) recipe, not stored — so it recomputes identically.
+      assert.equal(e.relicName, relicIdentity.name, "relic name survives reload (derived, not persisted)");
+      assert.equal(e.relicHash, relicIdentity.hash, "relic recipe hash stable across reload");
       if (rt2.consoleErrors.length) throw new Error(`console errors (session 2):\n${rt2.consoleErrors.join("\n")}`);
     } finally {
       await rt2.close();

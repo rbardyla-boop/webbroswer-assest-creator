@@ -1561,3 +1561,57 @@ push, NO deploy.
 
 **Non-goals.** No new gameplay, weapon variety, Arsenal v5, combat/inventory, new objective, schema bump,
 or public deploy; no push without explicit authorization. Subsequent feature work builds ON this tag.
+
+## ADR-036 — Arsenal v5: Relic Weapon Variety & Identity (the first feature ON the first-playable tag)
+
+**Decision.** Make the central artifact of the first-playable loop — the generated relic weapon — feel
+worth finding, by giving every generated weapon a **deterministic derived identity** (name / type / tier /
+hash), stronger and more distinct silhouettes, and relic presentation that uses that identity. This is the
+first feature stage built ON `world-builder-first-playable-v0`; it advances, and does not reopen, the gate.
+
+**Key architectural decision — identity is DERIVED, never persisted.** `weaponIdentity(recipe)` recomputes
+`{id, name, type, family, rarity, tier, hash}` from fields the recipe already carries and that
+`sanitizeWeaponRecipe` preserves (seed/type/family/rarity/material.energyColor/parts, with `counts`
+recomputed from parts). Because the recipe already round-trips through the runtimeAssets persistence
+whitelist, identity recomputed on load is byte-identical → **"survives reload" for free, with ZERO whitelist
+edits, ZERO `WORLD_DOCUMENT_VERSION` bump (stays 2), ZERO new persisted fields.** The namer seeds off the
+canonical `recipeHash` (a stable 32-bit int), so it is stable under the persistence path's 3-decimal part
+rounding. The canonical id/hash (`weaponAssetId`/`recipeHash`) are reused — no second id scheme. Naming is
+**fully procedural** (the relic's name too — user decision) in an **arcane / energy-tech** aesthetic; the
+relic still reads special via **forced relic-grade presentation** (top-tier gold aura/label) while its name
+stays a pure function of its recipe.
+
+**Surface.** New PURE arsenal modules `WeaponIdentity.js` (tier + arcane/energy-tech namer),
+`WeaponRelicProfiles.js` (tier palette/labels + relic-grade-forcing `relicProfile`), and
+`WeaponVariantGrammar.js` (the strengthened per-type silhouette kit, lifted out of `WeaponGrammar.js` which
+now only orchestrates). New world-layer `src/world/objectives/RelicPresentation.js` (pure glue: name-enriched
+banner + tier-coloured trophy style), consumed by `ObjectiveRuntime` (named banner, tier-coloured relic
+marker + a new claimed-trophy aura, `relicName/relicHash/relicTier` in `debugSnapshot`). The Arsenal Lab
+studio status shows name/tier/hash. No change to `relicRecipe()` determinism; markers stay position-only
+arrays (v4 equip math untouched).
+
+**Evidence.** Full gate green: build, qa (skills 32/0/0 + layout 43/0/0), `test:world`, arsenal v1–v4, the
+NEW `test:arsenal-identity` (determinism, reload-stability across single + double sanitize, name distinctness
+≥90% + well-formed, tier mapping/clamp, relic-grade forcing, strengthened-grammar invariants, no-random scan
+of the 3 new modules), `test:first-objective`(+proof; the proof now asserts the relic carries a derived
+name + recipe hash, presents as tier 5, and that name+hash survive a reload — proving derived-not-persisted),
+`test:first-playable-proof`, `test:first-playable-hidden`(+proof), arsenal v3/v4/world proofs. The banner
+substitution is asserted in `test:first-objective`.
+
+**Adversarial review.** Three fresh-context reviewers (arsenal pure modules · world integration · tests):
+**0 critical, 1 HIGH, 4 MEDIUM, 2 LOW.** Fixed: HIGH — `buildExotic` had no grip so the equip anchor fell on
+a stray floating blade; the blade fan is now biased to non-negative Y so the haft (first part, y=0) is the
+equip anchor (also a nicer upward crown). MEDIUM — `relicProfile` now overrides `identity.tier` to match the
+forced presentation tier; the banner substitution is now tested; distinctness tightened 80%→90% + structural
+name pattern; a double-sanitize idempotency assertion added. LOW ×2 accepted (mixed numeric/string colour
+param — THREE accepts both; alias-blind static scan — acceptable). World-integration reviewer returned
+APPROVE (0/0/0).
+
+**Gotcha (the recurring prose-in-comment scan trap).** Two boundary scans tripped on COMMENT prose in
+`RelicPresentation.js`, not on real code: the isolation grep matched the literal `arsenalMain`, and the
+no-random scan matched `performance.now (` (token + space + paren). Reworded the comment to describe the
+constraints without spelling the forbidden tokens. Same class as the Wildlife-0 / Ambient-0 scan false-matches.
+
+**Non-goals (held).** No damage/firing/ammo/combat/enemies/inventory/loot economy; no persisted geometry; no
+new persisted fields / no schema bump; no change to `relicRecipe()` determinism; no push/deploy. Commit +
+tag `world-builder-arsenal-v5` locally; `sword forge.html` left untracked.

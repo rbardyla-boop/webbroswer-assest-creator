@@ -20,7 +20,9 @@ import { getHeight } from "../src/terrain/terrainSampling.js";
 import { normalizeObjectiveDescriptor, sanitizeObjectivesBlock } from "../src/world/objectives/ObjectiveTypes.js";
 import { ObjectiveStore } from "../src/world/objectives/ObjectivePersistence.js";
 import { ObjectiveRuntime } from "../src/world/objectives/ObjectiveRuntime.js";
-import { RELIC_ID, OBJECTIVE_KIND, relicRecipe, deriveSites, isWalkable, livePhase } from "../src/world/objectives/RelicWeaponObjective.js";
+import { RELIC_ID, OBJECTIVE_KIND, relicRecipe, deriveSites, isWalkable, livePhase, bannerText } from "../src/world/objectives/RelicWeaponObjective.js";
+import { relicBannerText } from "../src/world/objectives/RelicPresentation.js";
+import { weaponName } from "../src/arsenal/WeaponIdentity.js";
 
 const approx = (a, b, eps = 1e-4) => Math.abs(a - b) <= eps;
 
@@ -156,5 +158,19 @@ assert.equal(livePhase({ relicEquipped: true }), "carry");
 assert.equal(livePhase({ relicEquipped: true, inZone: true }), "atCache");
 assert.equal(livePhase({ completed: true }), "complete");
 assert.equal(livePhase({ relicEquipped: true, inZone: true, completed: true }), "complete", "completed wins");
+
+// --- 9. relic banner presentation (Arsenal v5) ------------------------------------------------
+{
+  const rRecipe = relicRecipe();
+  const name = weaponName(rRecipe);
+  const banner = relicBannerText("find", rRecipe, { relicGrade: true });
+  assert.ok(banner.startsWith("Relic · "), "banner leads with the relic-grade tier label");
+  assert.ok(banner.includes(name), "banner contains the derived relic name");
+  assert.ok(banner.includes("equip it (F)"), "banner preserves the phase action copy");
+  assert.ok(!banner.startsWith("Relic Objective"), "the canonical prefix is replaced, not duplicated");
+  // No recipe → graceful fall back to the plain canonical phase copy (no name, no crash).
+  assert.equal(relicBannerText("carry", null), bannerText("carry"), "missing recipe → plain phase copy");
+  assert.equal(relicBannerText("complete", undefined), bannerText("complete"), "undefined recipe → plain phase copy");
+}
 
 console.log("first-objective regression passed (deterministic relic + dry sites; objectives round-trip + completed-literal; self-heal; spawn-if-absent + idempotent reload + beacon dispose; deposit pedestal/drop/no-op; persistence; phase table)");

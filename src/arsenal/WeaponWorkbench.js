@@ -8,6 +8,7 @@ import { createWeaponConfig, rollConfig, PARAM_RANGES, WEAPON_TYPES } from "./We
 import { WEAPON_PRESETS } from "./WeaponPresets.js";
 import { hashSeed } from "./WeaponSeed.js";
 import { weaponAssetId } from "./WeaponRecipe.js";
+import { weaponIdentity } from "./WeaponIdentity.js";
 
 // Cross-entry handoff: /arsenal.html writes world-asset JSON to this localStorage key;
 // the world app drains it on load. Keeps the two entries decoupled (no shared imports).
@@ -43,9 +44,12 @@ export class WeaponWorkbench {
   }
 
   snapshot() {
+    const id = this._lastRecipe ? weaponIdentity(this._lastRecipe) : null;
     return {
       type: this.config.type,
       recipe: this._lastRecipe ? { type: this._lastRecipe.type, family: this._lastRecipe.family, rarity: this._lastRecipe.rarity, counts: this._lastRecipe.counts } : null,
+      name: id?.name ?? null,
+      tier: id?.tier ?? null,
       meshCount: this.generator.stats.parts,
       triangles: this.generator.stats.triangles,
       vertices: this.generator.stats.vertices,
@@ -186,8 +190,10 @@ export class WeaponWorkbench {
   _syncStatus(recipe) {
     if (!recipe) return;
     const s = this.generator.stats;
+    const id = weaponIdentity(recipe);
     this.statusEl.textContent =
-      `${recipe.type} · ${recipe.family} · ${recipe.rarity}\n` +
+      `${id.name}\n` +
+      `${recipe.type} · ${recipe.family} · ${recipe.rarity} · tier ${id.tier} · #${id.hash.toString(36)}\n` +
       `parts ${s.parts} (energy ${s.energy}) · ${s.triangles} tris · ${s.vertices} verts`;
   }
 
