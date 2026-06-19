@@ -96,9 +96,10 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
-**Roadmap ahead (not yet started — each builds ON `…first-playable-v0`, does not reopen the gate):**
-Slice-0A (human UX hardening) → Combat-0 (combat seam only, no enemies) → Enemy-0 (one non-networked
-test enemy) → Encounter-0 (first real combat objective).
+**Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
+builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
+Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
+Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1795,3 +1796,63 @@ its pre-existing large-chunk warning. Automated clarity assertions prove UI stat
 Slice-0A must record a fresh tester's friction and prove completion without outside explanation before
 Combat-0 begins. Tag `world-builder-slice0-frozen-cache` locally; no push/deploy; `sword forge.html` remains
 untracked.
+
+**Post-acceptance hardening.** A later fresh-context adversarial review of the carry engine found a latent
+orphan in `WeaponEquipRuntime.applyOccupancy`: it clears the slot map then re-attaches each weapon, so an
+attach that fails mid-swap (a non-finite marker) would leave a previously-carried weapon parented to the
+player yet absent from the occupancy map — unreachable in normal play (markers are finite + immutable), but a
+violation of the explicit never-orphan invariant. Fixed by a safety net that drops any such weapon to the
+world instead, plus a `_dropToWorld` extraction and a deterministic `test:arsenal-carry` §9b
+(poisoned-marker-mid-swap → dropped, not orphaned). A small `fix(arsenal)` commit on shipped v6; no behavior
+change for valid input.
+
+## ADR-039 — Focused Procedural World Editor, Not "Unreal-in-a-Tab" (product doctrine)
+
+**Decision.** Lock the product identity: this is a **specialized, browser-native procedural environment +
+encounter editor**, not a general-purpose engine clone. The honest target is AAA-*grade* quality within a
+focused niche — excellent interaction design, fast deterministic generation, strong terrain/atmosphere/
+vegetation/composition, reliable export + playable previews, professional debugging/validation/undo/profiling/
+persistence. It is explicitly **not** an attempt to match Unreal's full renderer, animation stack, physics,
+cinematic tooling, and decades of asset-ecosystem investment. "Unreal-in-a-tab" is a losing comparison that
+would dilute what makes this promising; a focused editor that authors playable spaces quickly, deterministically,
+and beautifully is a real product.
+
+**Division of labor (the doctrine).**
+
+```text
+Math owns structure.        (terrain, placement, roads, vegetation, settlements, visibility, LOD, validation)
+Art direction owns identity.(characters, architecture kits, hero props, animation, sound, textures)
+The browser owns reach.     (portable, collaborative, instant-launch — scope is the constraint, not the browser)
+The editor owns usability.  (selection, snapping, layers, non-destructive modifiers, autosave, crash recovery)
+The gate owns truth.        (every "done" is backed by a command/proof, never a vibe)
+```
+
+Pure procedural geometry looks technically impressive but visually homogeneous; AAA presentation comes from
+**art direction + procedural composition**, not mathematics replacing artists.
+
+**Browser reality.** WebGL carries this project much further than its current use; memory limits, shader
+compilation, file access, threading, and mobile GPUs shape the product but are not fatal. **WebGPU** is a
+future feasibility gate (see roadmap), not a permanent ideological exclusion.
+
+**Roadmap (supersedes the short list above; each builds ON `…first-playable-v0` + `…slice0-frozen-cache`).**
+
+```text
+1. Slice-0A           — Human UX hardening (fresh-player completion without coaching)  ← IMMEDIATE NEXT
+2. Editor UX-1        — hierarchy, selection, snapping, layers, autosave
+3. Performance Contract-1 — explicit CPU/GPU/memory/draw-call budgets + benchmark scenes
+4. Procedural Authoring-1 — editable splines, biome masks, non-destructive modifiers
+5. Asset Pipeline-1   — GLB import + validation, LOD/collision gen, material templates, provenance/budgets
+6. Combat-0           — combat seam only (no enemies)
+7. Enemy-0            — one non-networked test enemy
+8. Encounter Editor-0 — authored encounter placement
+9. Visual Benchmark-1 — one compact area polished to shipping quality
+10. WebGPU Feasibility Gate
+```
+
+**Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
+survives reloads, holds frame rate on target hardware, and rebuilds repeatedly without developer intervention.
+
+**Immediate next = Slice-0A (do not skip).** Frozen Cache works *technically* (automated proofs assert UI
+state), but Slice-0A answers the product question automated gates cannot: **can a fresh player understand and
+finish the slice without being coached?** It records a real tester's friction and proves completion without
+outside explanation before Combat-0 begins.
