@@ -22,20 +22,23 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (post Arsenal v5, commit `f772f07`).**
-- **48 stages shipped + tagged.** Milestone reached: **Glacial Valley First Playable**
-  (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage Arsenal v5 (relic identity) — full v5 gate green.
-- **Node regression sweep: 47/48 stage gates pass in isolation.** Known issues:
-  - ⚠️ **`test:visibility` (Stage 17A) FAILS in isolation** — stale assertion `expected 2 animated rigs, got 3`.
-    **Pre-existing** (also fails at the FP-4 commit), unrelated to recent Arsenal/objective work: a later stage
-    registers a 3rd animated rig the test's hardcoded count never absorbed. The kernel works; the count is stale.
-    Fix = re-baseline the count or scope the fixture (small, ~1 line). **Not yet fixed — surfaced for a decision.**
-  - ⓘ **`test:undo`, `test:connectors`, `test:visual0`** pass alone but fail in a *back-to-back* sweep →
-    test-isolation fragility (a shared on-disk artifact between sequential Node runs). Code is correct;
-    the sweep harness needs per-test tmp cleanup. Low priority (no shipped-code defect).
-- **Browser proofs (SwiftShader):** the Arsenal + first-playable proofs ran green this session; `qa:browser`
-  (Playwright) WARN-skips in this environment (Playwright absent) — acceptable per the gate.
+**Health snapshot — as of 2026-06-19 (post Gate Repair-0; latest feature Arsenal v5, commit `f772f07`).**
+- **48 stages shipped + tagged** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+  Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest feature Arsenal v5 (relic identity) — full v5 gate green.
+- **Node regression sweep: 39/39 gates GREEN — both in isolation and in a single back-to-back run.** The suite
+  is fully green; no known red or fragile gate remains.
+- **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
+  - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
+    runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
+    `relic-weapon-fp1`, the relic the objective auto-spawns in any runtime world since FP-1 (registered ONCE —
+    `relicWeapons:1`, no double-registration). Rebaselined the proof to the intended set and STRENGTHENED it
+    (now explicitly asserts the relic agent is registered + `total === 3`). No runtime/visual behavior changed.
+  - ✅ **`test:undo`, `test:connectors`, `test:visual0`** — these never had a code defect; they were collateral
+    from the *crashing* visibility proof leaving residue in a back-to-back run. With visibility exiting cleanly,
+    the full sweep is green. No separate change was needed.
+- **Browser proofs (SwiftShader):** the Arsenal + first-playable + visibility proofs ran green this session;
+  `qa:browser` (Playwright) WARN-skips in this environment (Playwright absent) — acceptable per the gate.
 
 **Stage ledger (chronological by phase; tag = local milestone, gate = primary regression/proof).**
 
@@ -52,22 +55,22 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | 2 · Runtime / export / editor systems | Playable build (worldpack) | `…stage8-playable-build-v1` | export regression | ✅ |
 | | Mod packages | `…stage9-mod-package-v1` | mod regression | ✅ |
 | | Rigged runtime | `…stage10-rigged-runtime-v1` / `…stage10b-animation-fixture-v1` | `test:anim` | ✅ |
-| | Undo/redo | `…stage11-undo-redo-v1` | `test:undo` | ✅ (sweep-fragile) |
+| | Undo/redo | `…stage11-undo-redo-v1` | `test:undo` | ✅ |
 | | Interactions | `…stage12-interactions-v1` | `test:interaction` | ✅ |
 | 3 · Visual & spatial systems | Lighting | `…stage13a-lighting-v1` | `test:lighting` | ✅ |
 | | Particles | `…stage13b-particles-v1` | `test:particles` | ✅ |
 | | Vegetation v2 (grass/bush/terrain) | `…stage14a-grass-v2` / `…stage14b-bush-v1` / `…stage14c-terrain-v2` | `test:vegetation` `test:bush` `test:terrain` | ✅ |
 | | Reverse-Z depth | `…stage15-reverse-z` | `test:reversez` | ✅ |
 | | Voxel debug lab | `…stage16-voxel-lab` | `test:voxel` | ✅ |
-| | Visibility kernel | `…stage17a-visibility-kernel` | `test:visibility` | ⚠️ **fails (stale count)** |
+| | Visibility kernel | `…stage17a-visibility-kernel` | `test:visibility` | ✅ (rebaselined, Gate Repair-0) |
 | 4 · Procedural generation | Procedural build v1 | `…stage17c-procedural-v1` | `test:procedural` | ✅ |
 | | Instancing | `…stage17c2-instancing` | `test:instancing` | ✅ |
 | | Prefab generator | `…stage19-prefab-generator` | `test:prefabgen` | ✅ |
 | | Generator library | `…stage18-generator-library` | `test:genlib` | ✅ |
-| | Connectors (roads/plazas) | `…stage18b-connectors` | `test:connectors` | ✅ (sweep-fragile) |
+| | Connectors (roads/plazas) | `…stage18b-connectors` | `test:connectors` | ✅ |
 | | Settlement standard | `…stage18c-settlement-standard` | `test:settlement-layout` | ✅ |
 | | Budget HUD | `…stage20a-budget-hud` | `test:budget` | ✅ |
-| 5 · Glacial environment & wildlife | Glacial valley (visual-0) | `…visual0-glacial-valley` | `test:terrain-profile` `test:terrain-source` `test:visual0` | ✅ (sweep-fragile) |
+| 5 · Glacial environment & wildlife | Glacial valley (visual-0) | `…visual0-glacial-valley` | `test:terrain-profile` `test:terrain-source` `test:visual0` | ✅ |
 | | Glacial water & atmosphere (visual-1) | `…visual1-glacial-water` | `test:water` `test:atmosphere` `test:visual1` | ✅ |
 | | Ambient wildlife (wildlife-0) | `…wildlife0-ambient` | `test:wildlife` `test:wildlife0` | ✅ |
 | | Aloft flocks (wildlife-1) | `…wildlife1-flocks` | `test:flock` `test:wildlife1` | ✅ |
@@ -1715,3 +1718,40 @@ constraints without spelling the forbidden tokens. Same class as the Wildlife-0 
 **Non-goals (held).** No damage/firing/ammo/combat/enemies/inventory/loot economy; no persisted geometry; no
 new persisted fields / no schema bump; no change to `relicRecipe()` determinism; no push/deploy. Commit +
 tag `world-builder-arsenal-v5` locally; `sword forge.html` left untracked.
+
+## ADR-037 — Gate Repair-0: Visibility Test Rebaseline + Sweep Isolation Triage (greening the working baseline)
+
+**Decision.** Before expanding features (Arsenal v6), make the active working baseline green. The Build Status
+Ledger surfaced one genuine red gate (`test:visibility`) and three sweep-fragile gates; repair them by
+correcting **tests/fixtures only** — never by mutating shipped runtime behavior or weakening assertions.
+
+**Diagnosis (proven, not assumed).** `test:visibility` (the Stage 17A SwiftShader proof) authors a world with
+two animated rigs and asserted the kernel registered exactly **2** agents; it now registers **3**. A throwaway
+agent dump showed the third agent is `relic-weapon-fp1` — the relic the objective **auto-spawns in any runtime
+world since FP-1**, which `PlacedWeaponRuntime.load(..., visibilityKernel)` registers as an agent. It is
+registered exactly ONCE (`__DOC_DEBUG__` → `relicWeapons:1`), so this is correct runtime state, not a
+double-registration bug. The `=== 2` assertion simply predates the FP-1 auto-spawn (it also fails at the FP-4
+commit — pre-existing, unrelated to Arsenal v5). The kernel works (registers all placed agents, never hides,
+tiers correctly); only the test's expected count was stale.
+
+**Fix.** Rebaselined the proof to the intended agent set and **strengthened** it rather than loosening it: it now
+explicitly asserts the relic agent is registered (`relic-weapon-fp1` present) AND `vis.total === 3` (2 authored
+rigs + 1 auto-spawned relic), with a comment so a future change to what auto-registers trips it on purpose. All
+prior coverage is retained (both rigs present, near awake / far asleep, the no-hide invariant, the
+asleep-mixer-frozen check). The change is confined to `scripts/browser-visibility-proof.mjs` — **no `src/`
+change, no runtime/visual behavior touched.**
+
+**Sweep-fragile triage (resolved with zero extra changes).** `test:undo`, `test:connectors`, `test:visual0`
+passed in isolation but failed in a back-to-back Node sweep. Hypothesis: they were collateral from the
+*crashing* visibility proof leaving residue. Confirmed — after the visibility fix the full sweep is **39/39
+green in a single run**. The fragility was a symptom of the red gate, not independent test-isolation debt; no
+per-test cleanup hack was warranted.
+
+**Verification.** `test:visibility` green alone AND in the full sweep; Node sweep 39/39; `build`, `qa:skills`
+32/0/0, `qa:layout` 43/0/0; `test:first-playable-proof` and `test:arsenal-identity` remain green; `git status`
+shows only the one test script modified. Committed test+ledger only; tagged `world-builder-gate-repair-visibility-v0`
+locally; `sword forge.html` left untracked.
+
+**Why this before Arsenal v6.** A first playable plus a *truthful* ledger is the asset; allowing the ledger to
+normalize a known red gate ("green except for known stuff") is the debt this repair prevents. Feature work
+resumes on a fully green baseline.

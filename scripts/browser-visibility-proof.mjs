@@ -66,12 +66,19 @@ const run = await withBrowserProof(
       const vis = await evalValue(rt.cdp, `window.__VISIBILITY_DEBUG__()`);
       assert.ok(vis, "__VISIBILITY_DEBUG__ hook present in runtime");
       assert.equal(vis.enabled, true, "kernel enabled");
-      assert.equal(vis.total, 2, `both animated rigs registered, got ${vis.total}`);
-      assert.equal(vis.visible + vis.warm + vis.sleeping + vis.unloaded, vis.total, "tiers sum to total");
 
       const near = vis.agents.find((a) => a.id === "obj-near");
       const far = vis.agents.find((a) => a.id === "obj-far");
-      assert.ok(near && far, "both agents present in snapshot");
+      assert.ok(near && far, "both authored rigs present in snapshot");
+
+      // The kernel registers EVERY placed agent. This world authors two animated rigs; since FP-1 the
+      // objective also auto-spawns the relic weapon in any runtime world, which the kernel registers as
+      // a third agent. Assert the intended set explicitly (rather than a bare count) so the expected
+      // total tracks real runtime state and a future change to what auto-registers trips this on purpose.
+      const relic = vis.agents.find((a) => a.id === "relic-weapon-fp1");
+      assert.ok(relic, "the FP-1 relic weapon is registered with the kernel (auto-spawned in runtime)");
+      assert.equal(vis.total, 3, `2 authored rigs + 1 auto-spawned relic = 3 agents, got ${vis.total}`);
+      assert.equal(vis.visible + vis.warm + vis.sleeping + vis.unloaded, vis.total, "tiers sum to total");
       assert.equal(near.awake, true, `near rig awake (tier ${near.tier})`);
       assert.equal(far.awake, false, `far rig asleep (tier ${far.tier})`);
 
