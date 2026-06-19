@@ -210,6 +210,13 @@ export class WildlifeSystem {
     };
   }
 
+  // Editor view toggle (Editor UX-1): show/hide every species mesh + the aloft
+  // flock. Pure render flag — never serialized, never alters simulation.
+  setVisible(visible) {
+    for (const mesh of this._meshes.values()) mesh.visible = visible;
+    this._aloft?.setVisible?.(visible);
+  }
+
   dispose() {
     this._aloft?.dispose();
     this._aloft = null;

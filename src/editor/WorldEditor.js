@@ -40,6 +40,14 @@ import { SelectionGroup } from "./SelectionGroup.js";
 import { CommandStack } from "./CommandStack.js";
 import { AddObjectsCommand, RemoveObjectsCommand, TransformObjectsCommand } from "./commands/WorldObjectCommands.js";
 import { getSampleWorld, VERTICAL_SLICE_ID } from "../world/samples/index.js";
+// Editor UX-1: outliner, numeric inspector, grid snap, layers + debounced autosave.
+import { HierarchyPanel } from "./HierarchyPanel.js";
+import { TransformInspector } from "./TransformInspector.js";
+import { LayersPanel } from "./LayersPanel.js";
+import { LayerModel } from "./LayerModel.js";
+import { SnapSettings, snapVec3 } from "./SnapSettings.js";
+import { EditorAutosave } from "./EditorAutosave.js";
+import { weaponIdentity } from "../arsenal/WeaponIdentity.js";
 
 export class WorldEditor {
   constructor({
@@ -59,6 +67,9 @@ export class WorldEditor {
     treeSystem,
     grassSystem,
     bushSystem,
+    water,
+    wildlife,
+    ambient,
     getGrassStats,
     getTreeStats,
     prefabLibrary,
@@ -87,6 +98,10 @@ export class WorldEditor {
     this.treeSystem = treeSystem;
     this.grassSystem = grassSystem ?? null;
     this.bushSystem = bushSystem ?? null;
+    // Editor UX-1 layer targets (recreated per world load → refreshed in setWorldContext).
+    this.water = water ?? null;
+    this.wildlife = wildlife ?? null;
+    this.ambient = ambient ?? null;
     this.assetLibrary = assetLibrary ?? new AssetLibrary();
     this.assetImporter = new AssetImporter(this.assetLibrary);
     this.getGrassStats = getGrassStats;
@@ -114,7 +129,17 @@ export class WorldEditor {
     // Bounded in-memory undo/redo for spatial authoring (place / prefab / dup /
     // delete / transform). Cleared whenever the world is reloaded so history
     // never references objects from a torn-down world.
-    this.history = new CommandStack({ limit: 100, onChange: () => this._refreshHistoryControls() });
+    this.history = new CommandStack({ limit: 100, onChange: () => { this._refreshHistoryControls(); this._markDirty(); } });
+    // Editor UX-1: grid snap (off by default), session-only layer state, and a
+    // debounced autosave wrapping the existing serialize+localStorage path. Layer
+    // visibility/lock + snap are NEVER written to the document (view state only).
+    this.snap = new SnapSettings();
+    this.layers = new LayerModel({ onVisibility: (id, visible) => this._applyLayerVisibility(id, visible) });
+    this._arsenalHidden = [];
+    this.autosave = new EditorAutosave({
+      save: () => this._persistWorld(),
+      onStatus: (status, error) => this._refreshSaveStatus(status, error),
+    });
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.selectedAsset = this.assetLibrary.list()[0];
@@ -165,9 +190,11 @@ export class WorldEditor {
       this._dragBefore = null;
       this.stats.lastActionMs = performance.now() - t0;
       this._transformStartBox = null;
+      this.transformInspector?.refresh(); // numeric inspector follows the drag
       this._refreshPerf();
     });
     scene.add(this.transform.getHelper());
+    this.snap.applyTo(this.transform); // start with snapping off (cleared)
 
     this.reliefTool = new ReliefAssetTool({
       onCreateAsset: async (asset) => {
@@ -186,10 +213,14 @@ export class WorldEditor {
     return this.selection.primary;
   }
 
-  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, getGrassStats, getTreeStats, placedAssetStore, placedWeaponRuntime }) {
+  setWorldContext({ terrain, objectManager, treeSystem, grassSystem, bushSystem, water, wildlife, ambient, getGrassStats, getTreeStats, placedAssetStore, placedWeaponRuntime }) {
     this.terrain = terrain ?? this.terrain;
     this.manager = objectManager ?? this.manager;
     this.grassSystem = grassSystem ?? this.grassSystem;
+    // Editor UX-1 layer targets are rebuilt per world load — repoint them.
+    this.water = water ?? this.water;
+    this.wildlife = wildlife ?? this.wildlife;
+    this.ambient = ambient ?? this.ambient;
     // Arsenal placement store/runtime are recreated per world load — keep the current ones.
     this.placedAssetStore = placedAssetStore ?? this.placedAssetStore;
     this.placedWeaponRuntime = placedWeaponRuntime ?? this.placedWeaponRuntime;
@@ -204,6 +235,14 @@ export class WorldEditor {
     // world-reload path (_load/_loadSample/_importWorld/_loadModWorld) routes
     // through onLoadWorld → setWorldContext, so this is the single choke point.
     this.history.clear();
+    // Editor UX-1: history.clear() above fires onChange → _markDirty(), which arms an
+    // autosave timer. Cancel it IMMEDIATELY (before any panel setup below can throw),
+    // so a half-reconstructed world is never autosaved over the saved one. Also drop
+    // editor-only view state (layer hide/lock + the stale arsenal-hidden list) and
+    // restore layer visibility on the new system handles (already repointed above).
+    this.autosave?.reset();
+    this._arsenalHidden = [];
+    this.layers?.reset();
     // A reloaded world is a fresh object graph — drop any voxel-lab preview so it
     // never references torn-down meshes.
     this.voxelPanel?.clear();
@@ -253,6 +292,10 @@ export class WorldEditor {
       this.terrainDetail.value = m.detailIntensity;
     }
     this._select(null);
+    // View state + autosave were already reset right after history.clear() above
+    // (throw-safe); here we just re-render the outliner/layers against the new graph.
+    this._refreshHierarchy();
+    this._refreshLayers();
     this._refreshPerf();
   }
 
@@ -263,6 +306,7 @@ export class WorldEditor {
     this.input?.setEnabled?.(false);
     if (document.pointerLockElement) document.exitPointerLock();
     this.particlePreview.load(this.manager); // preview the world's emitters
+    this._refreshHierarchy(); // objects may have changed while the editor was closed
     this.onOpen?.();
   }
 
@@ -311,6 +355,14 @@ export class WorldEditor {
       <div style="color:#8fa899;font-size:11px">Choose an asset, click terrain to place it, then select objects to transform.</div>
     `;
 
+    // Editor UX-1: the outliner sits near the top so an author always sees what's
+    // in the world and can select it without hunting in the viewport.
+    this.hierarchyPanel = new HierarchyPanel({
+      onSelect: (id) => this._selectById(id),
+      onToggleSelect: (id) => this._toggleById(id),
+    });
+    root.appendChild(this._section("Hierarchy", this.hierarchyPanel.root));
+
     this.assetList = document.createElement("div");
     Object.assign(this.assetList.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" });
     root.appendChild(this._section("Assets", this.assetList));
@@ -353,6 +405,16 @@ export class WorldEditor {
     modes.appendChild(this._button("Scale", () => this.transform.setMode("scale")));
     root.appendChild(this._section("Transform", modes));
 
+    // Editor UX-1: opt-in grid snap for the gizmo + new placements.
+    this.snapToggle = this._checkbox(`Snap to grid (${this.snap.gridSize} m)`, this.snap.enabled);
+    this.snapToggle.input.addEventListener("change", () => this.setSnapEnabled(this.snapToggle.input.checked));
+    root.appendChild(this._section("Grid Snap", this.snapToggle.label));
+
+    // Editor UX-1: numeric transform of the primary selection (precise complement
+    // to the drag gizmo); edits commit as normal undoable TransformObjectsCommands.
+    this.transformInspector = new TransformInspector({ onChange: (t) => this._applyInspectorTransform(t) });
+    root.appendChild(this._section("Transform Values", this.transformInspector.root));
+
     const actions = document.createElement("div");
     Object.assign(actions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
     actions.appendChild(this._button("Duplicate", () => this._duplicateSelected()));
@@ -364,6 +426,13 @@ export class WorldEditor {
     actions.appendChild(this._button("Load Sample World", () => this._loadSample()));
     actions.appendChild(this._button("Close", () => this.close()));
     root.appendChild(actions);
+
+    // Editor UX-1: autosave status chip (idle/dirty/saving/saved/error). Driven by
+    // the debounced EditorAutosave, separate from the one-shot Save World button.
+    this.saveStatusEl = document.createElement("div");
+    Object.assign(this.saveStatusEl.style, { color: "#8fa899", fontSize: "10px" });
+    this.saveStatusEl.textContent = "Autosave: idle";
+    root.appendChild(this.saveStatusEl);
 
     const history = document.createElement("div");
     Object.assign(history.style, { display: "flex", flexDirection: "column", gap: "7px" });
@@ -378,6 +447,14 @@ export class WorldEditor {
     history.appendChild(historyButtons);
     history.appendChild(this.historyLabel);
     root.appendChild(this._section("History (Ctrl+Z / Ctrl+Shift+Z)", history));
+
+    // Editor UX-1: per-category visibility (+ lock for the selectable objects). Layer
+    // state is editor-session-only — never written to the document, never seen by a player.
+    this.layersPanel = new LayersPanel({
+      onToggleVisible: (id) => { this.layers.toggleVisible(id); this._refreshLayers(); },
+      onToggleLock: (id) => { this.layers.toggleLocked(id); this._refreshLayers(); },
+    });
+    root.appendChild(this._section("Layers", this.layersPanel.root));
 
     const assetActions = document.createElement("div");
     Object.assign(assetActions.style, { display: "flex", gap: "8px", flexWrap: "wrap" });
@@ -423,6 +500,7 @@ export class WorldEditor {
         }
         this.manager._changed();
         this._refreshSelectionLabel();
+        this._markDirty();
       },
       onToggleDebug: () => this.colliderSystem?.toggleDebug(),
     });
@@ -432,6 +510,7 @@ export class WorldEditor {
       onChange: (override) => {
         const object = this.selection.primary;
         if (object) object.userData.animation = override;
+        this._markDirty();
       },
       onPlay: () => this._previewAnimation(),
       onStop: () => this.animationPreview.stop(),
@@ -445,6 +524,7 @@ export class WorldEditor {
         // Data-only: sanitize before storing so nothing executable is ever kept.
         object.userData.interaction = sanitizeInteraction(raw);
         this._refreshInteractionHelper();
+        this._markDirty();
       },
     });
     root.appendChild(this._section("Interaction", this.interactionPanel.root));
@@ -457,6 +537,7 @@ export class WorldEditor {
         // Grass is manually fogged + shaded, so push the live values into its
         // shader too (otherwise edits show everywhere but the grass).
         this.grassSystem?.syncLighting?.(lighting, this.lights?.sunDirection);
+        this._markDirty();
       },
     });
     this.lightingPanel.setLighting(this.worldLoader?.document?.lighting);
@@ -469,6 +550,7 @@ export class WorldEditor {
         object.userData.particles = sanitizeParticles(raw);
         // Rebuild the preview so the edit shows immediately.
         this.particlePreview.load(this.manager);
+        this._markDirty();
       },
     });
     root.appendChild(this._section("Particles", this.particlePanel.root));
@@ -495,7 +577,7 @@ export class WorldEditor {
       getDocument: () => this.worldLoader?.document,
       getPrefab: (id) => this.prefabLibrary?.get(id) ?? null,
       listPrefabs: () => this.prefabLibrary?.list() ?? [],
-      onChanged: () => this._refreshPerf(),
+      onChanged: () => { this._refreshPerf(); this._markDirty(); },
     });
     root.appendChild(this._section("Procedural (city / camp / ruin / forest / road / plaza / connector)", this.proceduralPanel.root));
 
@@ -512,6 +594,8 @@ export class WorldEditor {
     this._renderAssetList();
     this._refreshSelectionLabel();
     this._refreshHistoryControls();
+    this._refreshHierarchy();
+    this._refreshLayers();
   }
 
   _section(label, child) {
@@ -593,6 +677,7 @@ export class WorldEditor {
       fresnelIntensity: Math.min(1, Math.max(0, parseFloat(this.grassFresnel.value) || 0)),
     });
     this.stats.lastActionMs = performance.now() - t0;
+    this._markDirty();
     this._refreshPerf();
   }
 
@@ -629,6 +714,7 @@ export class WorldEditor {
       seed: Math.floor(parseFloat(this.bushSeed.value) || 1),
     });
     this.stats.lastActionMs = performance.now() - t0;
+    this._markDirty();
     this._refreshPerf();
   }
 
@@ -664,6 +750,7 @@ export class WorldEditor {
       detailIntensity: c01(this.terrainDetail, 0.25),
     });
     this.stats.lastActionMs = performance.now() - t0;
+    this._markDirty();
     this._refreshPerf();
   }
 
@@ -719,6 +806,7 @@ export class WorldEditor {
       seed: Math.floor(parseFloat(this.treeSeed.value) || 1),
     });
     this.stats.lastActionMs = performance.now() - t0;
+    this._markDirty();
     this._refreshPerf();
   }
 
@@ -834,8 +922,10 @@ export class WorldEditor {
       const weaponHits = this.raycaster.intersectObject(this.terrain.mesh, false);
       if (weaponHits.length && this.placedAssetStore && this.placedWeaponRuntime) {
         const hit = weaponHits[0].point;
-        const descriptor = placeWeapon(this.placedAssetStore, this.armedWeaponRecipe, { x: hit.x, z: hit.z, yaw: 0 });
+        const g = this.snap.snapPlacement({ x: hit.x, y: 0, z: hit.z });
+        const descriptor = placeWeapon(this.placedAssetStore, this.armedWeaponRecipe, { x: g.x, z: g.z, yaw: 0 });
         if (descriptor) this.placedWeaponRuntime.add(descriptor);
+        this._markDirty(); // placement changed the world → schedule autosave + refresh outliner
         this._rollArmedWeapon(); // next click places a different weapon
       }
       return;
@@ -847,7 +937,8 @@ export class WorldEditor {
       const armedHits = this.raycaster.intersectObject(this.terrain.mesh, false);
       if (armedHits.length) {
         const hit = armedHits[0].point;
-        hit.y = getHeight(hit.x, hit.z);
+        const g = this.snap.snapPlacement({ x: hit.x, y: 0, z: hit.z });
+        hit.set(g.x, getHeight(g.x, g.z), g.z);
         await this._placeArmedPrefab(hit);
       }
       return;
@@ -858,10 +949,16 @@ export class WorldEditor {
 
     const objectHits = this.raycaster.intersectObjects([...this.manager.objects.values()], true);
     if (objectHits.length) {
-      const root = this._findEditorRoot(objectHits[0].object);
-      if (additive) this._toggleInSelection(root);
-      else this._select(root);
-      return;
+      // Skip objects on a locked layer so they can't be picked/moved by accident;
+      // fall through to terrain handling when the nearest hits are all locked.
+      const pick = objectHits
+        .map((hit) => this._findEditorRoot(hit.object))
+        .find((root) => root && !this.layers.isObjectInLockedLayer(root));
+      if (pick) {
+        if (additive) this._toggleInSelection(pick);
+        else this._select(pick);
+        return;
+      }
     }
 
     const terrainHits = this.raycaster.intersectObject(this.terrain.mesh, false);
@@ -872,10 +969,19 @@ export class WorldEditor {
       return;
     }
     const point = terrainHits[0].point;
-    point.y = getHeight(point.x, point.z);
-    const placed = await this.manager.addFromAsset(this.selectedAsset, point);
+    await this._placeAssetAt(point.x, point.z);
+  }
+
+  // Place the currently-selected asset at world XZ (grid-snapped when snap is on;
+  // y is re-grounded to the terrain by the manager). Shared by the canvas click and
+  // the DEV proof hook so placement snapping is exercised the same way both paths.
+  async _placeAssetAt(x, z) {
+    if (!this.selectedAsset) return null;
+    const g = this.snap.snapPlacement({ x, y: 0, z });
+    const placed = await this.manager.addFromAsset(this.selectedAsset, new THREE.Vector3(g.x, 0, g.z));
     this.history.push(new AddObjectsCommand(this.manager, [placed]));
     this._select(placed);
+    return placed;
   }
 
   _findEditorRoot(object) {
@@ -901,6 +1007,18 @@ export class WorldEditor {
     this._applySelection();
   }
 
+  // Hierarchy → viewport selection (two-way binding). Resolve the row id to its
+  // live object and reuse the normal select/toggle paths.
+  _selectById(id) {
+    const object = this.manager.objects.get(id);
+    if (object) this._select(object);
+  }
+
+  _toggleById(id) {
+    const object = this.manager.objects.get(id);
+    if (object) this._toggleInSelection(object);
+  }
+
   // Point the transform gizmo at the right target: the object (single), the
   // group pivot (multi), or nothing (empty), then refresh dependent UI.
   _applySelection() {
@@ -913,7 +1031,11 @@ export class WorldEditor {
       this.selection.recenterPivot();
       this.transform.attach(this.selection.pivot);
     }
+    // Editor UX-1: numeric inspector follows the primary (single-select only);
+    // the outliner reflects the new selection so viewport↔hierarchy stay in sync.
+    this.transformInspector?.setObject(count === 1 ? this.selection.primary : null);
     this._refreshSelectionLabel();
+    this._refreshHierarchy();
   }
 
   _deleteSelected() {
@@ -1136,6 +1258,20 @@ export class WorldEditor {
   }
 
   _save() {
+    this.autosave.flush(); // persist now through the shared path; chip → saved/error
+    if (this.autosave.status() === "error") {
+      this.selectionLabel.textContent = `Save failed: ${this.autosave.lastError?.message ?? "unknown error"}`;
+    } else {
+      this.selectionLabel.textContent = `Saved ${this._lastSaveObjectCount ?? 0} object(s) to localStorage.`;
+    }
+    this._refreshPerf();
+  }
+
+  // The single persistence path: serialize the live world + prefab manifest and
+  // write it to localStorage. Used by the manual Save button AND the debounced
+  // autosave, so both produce byte-identical saves; throws propagate to the
+  // autosave error state.
+  _persistWorld() {
     const t0 = performance.now();
     const document = this.worldLoader.updateDocumentFromRuntime({
       player: this.player,
@@ -1148,8 +1284,236 @@ export class WorldEditor {
     this.stats.saveSerializeMs = t1 - t0;
     this.stats.saveWriteMs = t2 - t1;
     this.stats.lastActionMs = t2 - t0;
-    this.selectionLabel.textContent = `Saved ${result.document.objects.length} object(s) to localStorage.`;
-    this._refreshPerf();
+    this._lastSaveObjectCount = result.document.objects.length;
+    return result;
+  }
+
+  // --- Editor UX-1: dirty/autosave -------------------------------------------
+
+  // An edit changed the world: schedule a debounced autosave and refresh the outliner.
+  _markDirty() {
+    this.autosave?.markDirty();
+    this._refreshHierarchy();
+  }
+
+  // Force-persist now (no debounce) — used before entering Play so it tests the
+  // latest edits. Safe to call when clean (an idempotent re-save).
+  flushAutosave() {
+    this.autosave?.flush();
+  }
+
+  autosaveStatus() {
+    return this.autosave?.status() ?? "idle";
+  }
+
+  _refreshSaveStatus(status, error) {
+    if (!this.saveStatusEl) return;
+    const colors = { idle: "#8fa899", dirty: "#e3c46b", saving: "#9eeeff", saved: "#7fdca0", error: "#ff8f8f" };
+    const labels = {
+      idle: "Autosave: idle",
+      dirty: "Autosave: unsaved changes…",
+      saving: "Autosave: saving…",
+      saved: "Autosave: saved ✓",
+      error: `Autosave: FAILED — ${error?.message ?? "unknown error"}`,
+    };
+    this.saveStatusEl.textContent = labels[status] ?? `Autosave: ${status}`;
+    this.saveStatusEl.style.color = colors[status] ?? "#8fa899";
+  }
+
+  // --- Editor UX-1: snap ------------------------------------------------------
+
+  setSnapEnabled(on) {
+    this.snap.setEnabled(on);
+    this.snap.applyTo(this.transform);
+    if (this.snapToggle) this.snapToggle.input.checked = this.snap.enabled;
+    return this.snap.enabled;
+  }
+
+  isSnapEnabled() {
+    return this.snap.enabled;
+  }
+
+  // --- Editor UX-1: layers ----------------------------------------------------
+
+  // Apply a layer's visibility to its scene root(s). Visibility never touches a
+  // serialized field: system layers toggle their own roots, and the 'objects' layer
+  // toggles the manager's PARENT group (the serializer reads each child's own
+  // .visible, never the parent's) — so a hidden layer can never persist.
+  _applyLayerVisibility(id, visible) {
+    switch (id) {
+      case "objects":
+        if (this.manager?.root) this.manager.root.visible = visible;
+        break;
+      case "terrain":
+        if (this.terrain?.mesh) this.terrain.mesh.visible = visible;
+        break;
+      case "water":
+        if (this.water?.mesh) this.water.mesh.visible = visible;
+        break;
+      case "wildlife":
+        this.wildlife?.setVisible?.(visible);
+        break;
+      case "ambient":
+        this.ambient?.setVisible?.(visible);
+        break;
+      case "arsenal":
+        this._setArsenalVisible(visible);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Hide/show placed weapons WITHOUT clobbering a stored weapon's own hidden state:
+  // on hide, remember which groups were visible; on show, restore only those.
+  _setArsenalVisible(visible) {
+    const rt = this.placedWeaponRuntime;
+    if (!rt?.entries) return;
+    if (!visible) {
+      this._arsenalHidden = [];
+      for (const [id, entry] of rt.entries) {
+        if (entry.group?.visible) {
+          this._arsenalHidden.push(id);
+          entry.group.visible = false;
+        }
+      }
+    } else {
+      for (const id of this._arsenalHidden ?? []) {
+        const entry = rt.entries.get(id);
+        if (entry?.group) entry.group.visible = true;
+      }
+      this._arsenalHidden = [];
+    }
+  }
+
+  toggleLayerVisible(id) {
+    this.layers.toggleVisible(id);
+    this._refreshLayers();
+    return this.layers.isVisible(id);
+  }
+
+  setLayerLocked(id, locked) {
+    this.layers.setLocked(id, locked);
+    this._refreshLayers();
+    return this.layers.isLocked(id);
+  }
+
+  // How many world objects the selection raycast would consider (not on a locked
+  // layer). The canvas pick path uses the same predicate — DEV/proof read.
+  pickableObjectCount() {
+    return [...this.manager.objects.values()].filter((o) => !this.layers.isObjectInLockedLayer(o)).length;
+  }
+
+  _refreshLayers() {
+    this.layersPanel?.render(this.layers.layers());
+  }
+
+  // --- Editor UX-1: hierarchy -------------------------------------------------
+
+  _refreshHierarchy() {
+    this.hierarchyPanel?.render(this._hierarchyData());
+  }
+
+  _hierarchyData() {
+    const objects = [...this.manager.objects.values()].map((object) => ({
+      id: object.userData.objectId,
+      name: object.name || object.userData.objectId,
+      generated: !!object.userData.generatorId,
+    }));
+    const selectedIds = new Set(this.selection.objects.map((o) => o.userData.objectId));
+    return { objects, weapons: this._weaponRows(), objectives: this._objectiveRows(), selectedIds };
+  }
+
+  // Placed weapons named by their derived identity (Arsenal v5) — read-only rows.
+  _weaponRows() {
+    const list = this.placedAssetStore?.list?.() ?? [];
+    return list.map((item) => {
+      let name = item.id;
+      try {
+        const identity = item.recipe ? weaponIdentity(item.recipe) : null;
+        if (identity?.name) name = identity.name;
+      } catch {
+        /* fall back to the id */
+      }
+      return { id: item.id, name };
+    });
+  }
+
+  // The relic + cache objective from the document (the markers are runtime-only).
+  _objectiveRows() {
+    const items = this.worldLoader?.document?.objectives?.items ?? [];
+    return items.map((item) => ({
+      id: item.id,
+      name: typeof item.kind === "string" && item.kind.startsWith("relic") ? "Relic + Cache Zone" : item.id,
+    }));
+  }
+
+  // Serializable hierarchy snapshot for the DEV proof (Set → array).
+  getHierarchy() {
+    const data = this._hierarchyData();
+    return { objects: data.objects, weapons: data.weapons, objectives: data.objectives, selectedIds: [...data.selectedIds] };
+  }
+
+  selectFromHierarchy(id) {
+    this._selectById(id);
+  }
+
+  // --- Editor UX-1: inspector + DEV transform ---------------------------------
+
+  // Apply a typed transform to the primary selection and record it as a normal
+  // undoable TransformObjectsCommand (so undo + autosave fire). Typed values are
+  // exact (NOT snapped) — typing is the precise complement to the snapped gizmo.
+  _applyInspectorTransform(transform) {
+    const object = this.selection.primary;
+    if (!object) return;
+    const before = this._snapshotTransforms([object]);
+    object.position.set(transform.position.x, transform.position.y, transform.position.z);
+    object.rotation.set(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+    object.scale.set(
+      Math.max(1e-4, transform.scale.x),
+      Math.max(1e-4, transform.scale.y),
+      Math.max(1e-4, transform.scale.z)
+    );
+    object.updateMatrixWorld(true);
+    const after = this._snapshotTransforms([object]);
+    if (this._transformsChanged(before, after)) {
+      this.history.push(new TransformObjectsCommand(this.manager, before, after));
+      this.manager.commitObjectChange(object);
+    }
+    this.transformInspector?.refresh();
+    this._refreshSelectionLabel();
+  }
+
+  // DEV/proof: nudge the primary selection by a delta through the same snap+command
+  // path the gizmo uses, so the proof can assert the committed result lands on grid
+  // without a real pointer drag (which the headless harness can't perform).
+  nudgeSelected(dx = 0, dy = 0, dz = 0) {
+    const object = this.selection.primary;
+    if (!object) return null;
+    const before = this._snapshotTransforms([object]);
+    object.position.x += dx;
+    object.position.y += dy;
+    object.position.z += dz;
+    if (this.snap.enabled) {
+      const snapped = snapVec3(object.position, this.snap.gridSize);
+      object.position.set(snapped.x, snapped.y, snapped.z);
+    }
+    object.updateMatrixWorld(true);
+    const after = this._snapshotTransforms([object]);
+    if (this._transformsChanged(before, after)) {
+      this.history.push(new TransformObjectsCommand(this.manager, before, after));
+      this.manager.commitObjectChange(object);
+    }
+    this.transformInspector?.refresh();
+    this._refreshSelectionLabel();
+    return object.position.toArray();
+  }
+
+  // DEV/proof: place the selected asset at world XZ (exercises placement snap).
+  // Returns the new object's id.
+  async placeSelectedAssetAt(x, z) {
+    const placed = await this._placeAssetAt(x, z);
+    return placed?.userData?.objectId ?? null;
   }
 
   async _load() {

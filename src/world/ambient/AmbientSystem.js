@@ -179,6 +179,11 @@ export class AmbientSystem {
     };
   }
 
+  // Editor view toggle (Editor UX-1): show/hide every mote mesh. Pure render flag.
+  setVisible(visible) {
+    for (const mesh of this._meshes.values()) mesh.visible = visible;
+  }
+
   dispose() {
     for (const mesh of this._meshes.values()) {
       this.scene?.remove(mesh);

@@ -715,6 +715,9 @@ async function applyLoadedWorld(document) {
     treeSystem: trees,
     grassSystem: grass,
     bushSystem: bushes,
+    water, // Editor UX-1: rebuilt-per-load layer targets
+    wildlife,
+    ambient,
     getGrassStats: () => grass.stats,
     getTreeStats: () => trees.stats,
     placedAssetStore, // the store was recreated by loadRuntimeAssets above
@@ -846,6 +849,13 @@ async function boot() {
   if (runtimeMode) {
     toolbarEl.style.display = "none";
     hintEl.style.display = "none";
+    if (playMode) {
+      // Editor UX-1: Play → Editor round-trip. The editor toolbar is hidden in play
+      // mode, so a standalone corner button returns the author to the editor.
+      document.getElementById("exit-play")?.addEventListener("click", () => {
+        window.location.href = "/";
+      });
+    }
   } else {
     const prefabLibrary = await new PrefabLibrary().init();
     // Bring any prefabs embedded in the initially-loaded world into the library.
@@ -870,6 +880,9 @@ async function boot() {
       treeSystem: trees,
       grassSystem: grass,
       bushSystem: bushes,
+      water, // Editor UX-1 layer targets (refreshed per world load via setWorldContext)
+      wildlife,
+      ambient,
       getTreeStats: () => trees.stats,
       prefabLibrary,
       modRegistry,
@@ -883,7 +896,9 @@ async function boot() {
     });
     document.getElementById("open-editor").addEventListener("click", () => editor.open());
     // Slice-0A: a fresh player should never have to know about ?play=1 — Play is one click.
+    // Editor UX-1: flush any pending autosave first so Play always tests the latest edits.
     document.getElementById("enter-play")?.addEventListener("click", () => {
+      editor?.flushAutosave?.();
       window.location.href = "/?play=1";
     });
     // Dev/test-only hook (stripped from production builds): drive and inspect the

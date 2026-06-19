@@ -188,6 +188,11 @@ export class AloftWildlife {
     };
   }
 
+  // Editor view toggle (Editor UX-1): show/hide the flock meshes. Pure render flag.
+  setVisible(visible) {
+    for (const mesh of this._meshes.values()) mesh.visible = visible;
+  }
+
   dispose() {
     for (const mesh of this._meshes.values()) {
       this.scene?.remove(mesh);

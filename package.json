@@ -63,6 +63,8 @@
     "test:frozen-cache": "node scripts/frozen-cache-regression.mjs",
     "test:frozen-cache-proof": "node scripts/browser-frozen-cache-proof.mjs",
     "test:slice0a": "node scripts/browser-slice0a-proof.mjs",
+    "test:editor-ux1-unit": "node scripts/editor-ux1-regression.mjs",
+    "test:editor-ux1": "node scripts/browser-editor-ux1-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

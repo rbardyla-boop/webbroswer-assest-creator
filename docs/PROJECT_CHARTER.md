@@ -22,15 +22,18 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (Slice-0A accepted; tag `world-builder-slice0a-human-ux`).**
-- **51 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-19 (Editor UX-1 accepted; tag `world-builder-editor-ux1`).**
+- **52 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-0A — Human-UX Hardening +
-  Instrumentation** (ADR-040): closed by a clean no-coaching operator walk; added a ▶ Play entry, replay-primary
-  completion card, hidden-in-play-mode controls bar, arrival ControlsHint, and a SliceTrace friction log.
-- **Node regression baseline: 41/41 gates GREEN** (`test:arsenal-carry`, `test:frozen-cache`, …); browser
-  proofs incl. `test:slice0a` green this session. No known red or fragile gate remains.
-- **Next per ADR-039 roadmap: Editor UX-1** (hierarchy, selection, snapping, layers, autosave).
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Editor UX-1 — First Usable Authoring
+  Surface** (ADR-041): hierarchy/outliner, two-way selection, numeric transform inspector, grid snap, layer
+  visibility/lock, debounced autosave with status, and the Play↔Editor round-trip. Layer/snap state is
+  editor-session-only — never persisted, never seen by a player (no schema bump).
+- **Node regression GREEN incl. new `test:editor-ux1-unit`**; browser proofs re-run this session: `test:editor-ux1`,
+  `test:undo`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-objective-proof`,
+  `test:first-playable-proof`, plus the Node subset (`test:arsenal-carry`, `…-identity`, `test:first-objective`,
+  `test:first-playable-hidden`) — all green. No known red or fragile gate remains.
+- **Next per ADR-039 roadmap: Performance Contract-1.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -94,7 +97,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | | FP-3 hidden-issue sweep | `…first-playable-hidden-fp3` | `test:first-playable-hidden` (+proof) | ✅ |
 | | **FP-4 go/no-go + tag** | **`…first-playable-v0`** | full gate sweep + review | ✅ **MILESTONE: GAME IS PLAYABLE** |
 | 8 · Authored play slices | Slice-0 — The Frozen Cache | `…slice0-frozen-cache` | `test:frozen-cache` `test:frozen-cache-proof` | ✅ |
-| | **Slice-0A — Human-UX Hardening** | **`…slice0a-human-ux`** | `test:slice0a` | ✅ **LATEST** (ADR-040; reversible) |
+| | Slice-0A — Human-UX Hardening | `…slice0a-human-ux` | `test:slice0a` | ✅ (ADR-040; reversible) |
+| 9 · Editor as the product surface | **Editor UX-1 — First Usable Authoring Surface** | **`…editor-ux1`** | `test:editor-ux1-unit` `test:editor-ux1` | ✅ **LATEST** (ADR-041) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
@@ -1931,3 +1935,68 @@ Builder" — **there was no Play entry at all**, so a player had to know to type
 `?play=1` URL is never something a player must discover. `test:slice0a` asserts the Play button is present and
 primary on the sandbox landing. (Lesson: the play-mode fixes from walk #1 were correct but invisible because
 the operator was never in play mode — the discoverability of *play itself* was the real first-contact gap.)
+
+## ADR-041 — Editor UX-1: First Usable Authoring Surface (the editor becomes the product)
+
+**Status: ACCEPTED — tag `world-builder-editor-ux1`.** First stage of ADR-039's "editor is the product"
+pivot. The runtime loop is understood (FP-4, Slice-0A); the bottleneck is now the **authoring surface**. This
+turns the developer sandbox into a surface where a non-coder can *author or adjust a Frozen-Cache-style space*:
+a Hierarchy/outliner, two-way selection (viewport ↔ list), a numeric transform inspector, grid snap, per-category
+layer visibility/lock, debounced autosave with a status chip, and the Play↔Editor round-trip.
+
+**What already existed (reused, not rebuilt).** The editor already had raycast click-select + multi-select,
+`SelectionGroup` highlights, a `TransformControls` gizmo, an undo/redo `CommandStack` with Add/Remove/Transform
+commands, and `WorldSerializer` save/load. Editor UX-1 is gap-filling wired onto that, not green-field.
+
+**Core boundary decision (the invariant defended hardest): editor view state is session-only, never persisted.**
+Layer visibility/lock and snap settings are an editor *view* concern. They are NOT written to the WorldDocument
+→ zero schema change (`WORLD_DOCUMENT_VERSION` stays **2**), zero whitelist/validation edits, and — critically —
+**a layer hidden or locked in the editor can never hide content for a player.** They reset on world reload, like
+the undo history. The serializer (`WorldObjectManager.serializeWorldObject`) writes `runtime.visible =
+object.visible` per child, so the **trap** was using `object.visible` for layer-hide. Avoided two ways:
+(1) the six system layers (terrain/water/wildlife/ambient/arsenal + the editable-objects parent) toggle
+*system-owned roots* that never go through `serializeWorldObject`; (2) the "objects" layer toggles the **parent**
+`manager.root.visible` — the serializer reads each *child's* own `.visible`, never the root's — so hiding it
+changes nothing that persists. The browser proof asserts `allChildVisible` stays true after a hide+save.
+
+**Layers scoped honestly.** Objective markers are runtime-only (`objectiveRuntime` is null in editor mode), so
+"objectives" is **not** a dead Layers toggle — the objective is surfaced in the Hierarchy instead, read from
+`document.objectives`. Lock is shown only on the editable-`objects` layer (the only raycast-selectable content),
+gating the selection raycast via a pure editor Set — no fake lock toggles on layers with nothing to select.
+
+**New modules.** Pure + Node-testable: `SnapSettings` (grid/rot/scale snap math + a `TransformControls` driver),
+`EditorAutosave` (debounced `idle→dirty→saving→saved|error` state machine, injected timer), `LayerModel`
+(visible/lock Sets + an injected `onVisibility` callback so the editor owns the THREE toggle). DOM panels:
+`HierarchyPanel`, `TransformInspector`, `LayersPanel`. Three runtime systems gained a tiny additive
+`setVisible()` (`WildlifeSystem`/`AloftWildlife`/`AmbientSystem`) — pure render flag, never serialized. Arsenal
+visibility is handled in-editor (`_setArsenalVisible`) so a *stored* (intentionally hidden) weapon is never
+revealed by a layer toggle.
+
+**Autosave.** The manual Save button and the debounced autosave share one persistence path (`_persistWorld` →
+`updateDocumentFromRuntime` → `WorldSerializer.save`) so both produce byte-identical saves. Edits mark dirty
+(via `history.onChange` + the system-panel callbacks); the ▶ Play button flushes autosave first so Play always
+tests the latest edits. **Throw-safe reset:** `setWorldContext` resets autosave (cancelling the timer armed by
+`history.clear()`) *immediately* after the clear, before any panel-setup line can throw — so a half-reconstructed
+world is never autosaved over the saved one (review fix, see below).
+
+**Play round-trip.** Editor→Play already existed (▶ Play → `?play=1`). Added Play→Editor: a `#exit-play` corner
+button shown only in play mode (`body.play-mode`) → `/`. The proof clicks both and asserts the mode lands.
+
+**Verification.** TDD: `test:editor-ux1-unit` (12 checks: Snap/Autosave/Layer logic) RED→GREEN first.
+`test:editor-ux1` (SwiftShader) drives the full loop: place→Hierarchy lists→select-from-row→snap (gizmo +
+placement + nudge land on grid)→hide objects layer (root hidden, children stay visible)→lock (un-pickable)→
+autosave flush (status saved, localStorage has 3 objects, all children still visible)→reload (objects persist)→
+Play→Back-to-Editor. Full regression re-run green: `test:undo`, `test:slice0a`, `test:arsenal-v6`,
+`test:frozen-cache(+proof)`, `test:first-objective-proof`, `test:first-playable-proof`, the Node subset, qa
+skills 32/0/0, qa layout 43/0/0, build, qa:browser.
+
+**Review (2 fresh-context reviewers, adversarial).** Verdict 0 critical / 0 high; the persistence invariant held
+on all five probes. Fixed: **MEDIUM** — the autosave timer armed by `history.clear()` could survive a thrown
+exception during the ~50 lines of panel setup and later fire against a half-loaded world; moved `autosave.reset()`
+to immediately after `history.clear()`. **LOW** — `_arsenalHidden` wasn't cleared on world reload (a transient
+visual glitch, no persistence impact); now cleared in the same throw-safe block. Both re-verified green.
+
+**Non-goals (held).** No Unity/Unreal clone, no terrain-sculpt/combat/inventory, no persistence rewrite, no new
+persisted fields/schema bump, no generalized asset browser, no complex gizmos. `relicRecipe()` and all runtime
+proofs byte-unaffected (Editor UX-1 adds editor-session view tooling only). Next per ADR-039: Performance
+Contract-1.

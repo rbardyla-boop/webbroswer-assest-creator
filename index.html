@@ -152,6 +152,11 @@
       /* Slice-0A: Play is the primary entry — a fresh player should never need to type ?play=1. */
       .btn.btn-primary { color: #06222b; background: #67e8ff; border-color: #9eeeff; font-weight: 600; }
       .btn.btn-primary:hover { background: #8af0ff; color: #06222b; border-color: #c9f6ff; }
+
+      /* Editor UX-1: Play → Editor return. The editor toolbar is hidden in play mode,
+         so this standalone corner button is the way back to the authoring surface. */
+      #exit-play { position: fixed; right: 16px; top: 14px; z-index: 26; display: none; }
+      body.play-mode #exit-play { display: inline-flex; }
     </style>
   </head>
   <body>
@@ -164,6 +169,9 @@
       <button id="enter-play" class="btn btn-primary">▶ Play</button>
       <button id="open-editor" class="btn">▣ World Builder</button>
     </div>
+
+    <!-- Editor UX-1: shown only in play mode (body.play-mode) — returns to the editor. -->
+    <button id="exit-play" class="btn">⏹ Editor</button>
 
     <div id="hint">
       <b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &nbsp;
