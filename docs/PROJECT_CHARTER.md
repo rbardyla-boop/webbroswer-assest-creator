@@ -1475,3 +1475,50 @@ in isolation). Tag `world-builder-first-playable-proof-fp2` (local, no push). Do
 **Non-goals.** No new gameplay, weapon variety, Arsenal v5, or hidden-issue sweep (that's FP-3); no
 combat/inventory/quests; no schema bump; no gameplay/runtime-system edits beyond the DEV driver; do NOT
 apply `world-builder-first-playable-v0` (FP-4 only).
+
+## ADR-034 — FP-3: Hidden-Issue Sweep (hostile validation before the go/no-go)
+
+**Decision.** Add a Node + browser hostile/edge test pair that tries to BREAK the integrated
+first-playable loop, covering the nine gate probes (§9 FP-3): spawn-in-water, poisoned weapon marker,
+hostile dt, region-border thrash, reload duplication, proof drift, store/equip/drop reload, the console
+gate, and the UX traversal. `test:first-playable-hidden`
+(`scripts/first-playable-hidden-regression.mjs`, headless THREE) owns the deterministic/pure-logic
+probes; `test:first-playable-hidden-proof` (`scripts/browser-first-playable-hidden-proof.mjs`,
+SwiftShader, 5230/9364) owns the live/integrated ones. Hostile validation ONLY — no features, no
+objective change, FP-2 untouched. This satisfies §7.8 of the First Playable gate.
+
+**Outcome — the sweep found NO defect; every invariant already held.** The build's existing guards are
+sufficient: `findGoodSpawn` never returns a submerged point + `resolveSpawn` relocates wet spawns +
+`deriveSites`/`isWalkable` keep the relic/cache dry; the v4 marker finite-guards refuse a poisoned equip
+without reparenting (the weapon stays placed, never orphaned); `FlockRuntime`/`AmbientRuntime` guard
+`dt<=0` and clamp the high side, and the player/grounded-animal stay finite under finite-extreme dt via
+their `MAX_STEP`/`exp(-rate·dt)` math; the shared `RegionStreamer` hysteresis (keep−visible gap) builds
+each region at most once under oscillation; the replace-by-id stores + spawn-if-absent objective + the
+`clear()`-on-load markers keep reload counts at exactly 1; terrain/water/slope/cache/relic are
+deterministic across sessions; and the persisted runtime `state`/`slot` round-trips a real reload.
+
+**dt scope (the one judgment call).** The probe feeds the finite extremes {0, 1e6, −1} — the reachable
+(`dt=0`) and defensive (huge stall / backwards clock) cases — and proves finiteness + recovery. **NaN dt
+is documented out-of-scope:** the frame loop's `dt = Math.min((now−last)/1000, 0.05)` over a monotonic
+`performance.now` always yields a finite, non-negative dt, so NaN cannot reach the updaters in the real
+loop; `FlockRuntime`/`AmbientRuntime` additionally early-return on `dt<=0`. No boundary guard was added
+(it would be speculative hardening for an unreachable input — YAGNI), keeping FP-3 pure validation.
+
+**Two additive DEV-only hooks (the only product touch; both in the `import.meta.env.DEV` block of
+`src/main.js`).** `window.__DOC_DEBUG__()` reports document item counts + a scene-graph scan
+(`relicWeapons`/`cacheBeacons`/`relicMarkers`/`objectives`/`runtimeAssets`) — the live scene + document
+are module-local, unreachable from an eval — for the reload-duplication probe.
+`__ARSENAL_EQUIP_DO__.poisonEquipMarker(id)` corrupts a placed weapon's equip marker so the live proof
+can prove the finite-guard refuses the equip. Dynamic `import('/src/terrain/terrainSampling.js')` inside
+an eval reaches `getHeight`/`getWaterLevel`, so no terrain-sample hook was needed. Stripped from prod.
+
+**Verification.** `test:first-playable-hidden` + `-proof` green; **FP-2 `test:first-playable-proof`
+passes UNCHANGED**; build, qa (skills 32/0/0 + layout), `test:world`, arsenal v1–v4,
+`test:first-objective`(+proof), and the foundation sweep all green (`src/main.js` is +28 lines, purely
+additive). Tag `world-builder-first-playable-hidden-fp3` (local, no push). Does NOT satisfy FP-4 —
+`world-builder-first-playable-v0` stays reserved until the §7.9 go/no-go review. `docs/FIRST_PLAYABLE_BUILD.md`
+§7.8 added + FP-3 marked done; §10/§11 refreshed (only the review remains).
+
+**Non-goals.** No Arsenal v5, weapon variety, new objective, combat/inventory, live deploy, schema bump,
+or gameplay-logic change (none was needed); no FP-2 proof change beyond shared-helper hardening; do NOT
+apply `world-builder-first-playable-v0` (FP-4 only).

@@ -55,6 +55,8 @@
     "test:first-objective": "node scripts/first-objective-regression.mjs",
     "test:first-objective-proof": "node scripts/browser-first-objective-proof.mjs",
     "test:first-playable-proof": "node scripts/browser-first-playable-proof.mjs",
+    "test:first-playable-hidden": "node scripts/first-playable-hidden-regression.mjs",
+    "test:first-playable-hidden-proof": "node scripts/browser-first-playable-hidden-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

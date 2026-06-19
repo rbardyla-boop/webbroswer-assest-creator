@@ -200,6 +200,14 @@ if (import.meta.env.DEV) {
       weaponEquipRuntime.persistEquip = !!on;
       return weaponEquipRuntime.persistEquip;
     },
+    // Hostile-input probe (FP-3): corrupt a placed weapon's equip marker so the proof can prove the
+    // finite-guard refuses the equip without reparenting/orphaning. Returns false if the id is unknown.
+    poisonEquipMarker: (id) => {
+      const g = placedWeaponRuntime.getEntry(id)?.group;
+      if (!g?.userData?.markers) return false;
+      g.userData.markers.equip = [NaN, 0, 0];
+      return true;
+    },
     save: () => world?.document && (worldSerializer.save(world.document), true),
   };
   // Dev/test-only: relic objective (FP-1) state + deterministic drivers (the proof equips/
@@ -251,6 +259,26 @@ if (import.meta.env.DEV) {
       objectiveRuntime?.update(dt, player);
       return true;
     },
+  };
+  // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
+  // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
+  // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
+  window.__DOC_DEBUG__ = () => {
+    const items = world?.document?.runtimeAssets?.items ?? [];
+    const objectives = world?.document?.objectives?.items ?? [];
+    let cacheBeacons = 0;
+    let relicMarkers = 0;
+    scene.traverse((n) => {
+      if (n.name === "ObjectiveCacheBeacon") cacheBeacons++;
+      else if (n.name === "ObjectiveRelicMarker") relicMarkers++;
+    });
+    return {
+      objectives: objectives.length,
+      runtimeAssets: items.length,
+      relicWeapons: items.filter((i) => i.id === RELIC_ID).length,
+      cacheBeacons,
+      relicMarkers,
+    };
   };
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
   // Scans the live objects once for their declarative layoutRole + interaction role —
