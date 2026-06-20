@@ -43,6 +43,7 @@ import { rollConfig } from "./arsenal/WeaponConfig.js";
 import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
 import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
 import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
+import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
 const container = document.getElementById("app");
@@ -138,6 +139,12 @@ let placedAssetStore = null; // the current PlacedAssetStore, recreated per worl
 // First-playable objective (FP-1) — the relic retrieval loop. Runtime-only (it needs the
 // player + the per-load store); persists across reloads (its load() clears prior markers).
 const objectiveRuntime = runtimeMode ? new ObjectiveRuntime() : null;
+// Combat-0 weapon-use seam — runtime-only (editing never fires a weapon). Reads the active equipped
+// weapon + casts an eye-aim hitscan ray at registered inert targets; its targets are (re)registered
+// per world load from the document's objects (none in the shipped world → combat is inert there).
+const combatRuntime = runtimeMode
+  ? new CombatRuntime({ equipRuntime: weaponEquipRuntime, placedRuntime: placedWeaponRuntime, cameraController, input })
+  : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -388,6 +395,39 @@ if (import.meta.env.DEV) {
       return true;
     },
   };
+  // Dev/test-only: combat driver, input-equivalent to a real left-click. useActiveWeapon injects the
+  // Mouse0 edge a real click would; step runs the SAME combatRuntime.update the main loop runs (which
+  // consumes that edge → aim ray → hit). aimAt points the shared yaw/pitch aim basis at a world point
+  // (clamped to the look envelope), so the ray is one a player could actually take. For test:combat-proof.
+  window.__COMBAT_DO__ = {
+    // Deterministic positioning for the proof (mirrors __OBJECTIVE_DO__.teleportToCache): stand the
+    // player `dist` metres on the +Z side of a combat target at terrain height, so a headless proof
+    // can fire without walking the full real-time distance. Test-only — combat itself never teleports.
+    teleportNearTarget: (id, dist = 6) => {
+      const target = combatRuntime?.targets.get(id);
+      if (!target?.object3D) return false;
+      const pos = target.object3D.getWorldPosition(new THREE.Vector3());
+      const px = pos.x;
+      const pz = pos.z + dist;
+      player.position.set(px, getHeight(px, pz) + 0.1, pz);
+      player.velocityY = 0;
+      player.syncMesh();
+      return true;
+    },
+    aimAt: (x, y, z) => {
+      const dx = x - player.position.x;
+      const dy = y - (player.position.y + player.eyeHeight);
+      const dz = z - player.position.z;
+      cameraController.yaw = Math.atan2(-dx, -dz);
+      const pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      cameraController.pitch = Math.max(cameraController.minPitch, Math.min(cameraController.maxPitch, pitch));
+      return { yaw: cameraController.yaw, pitch: cameraController.pitch };
+    },
+    useActiveWeapon: () => (input.press("Mouse0"), true),
+    step: (dt = 1 / 60) => (combatRuntime?.update(dt), true),
+    lastEvent: () => combatRuntime?.lastEvent ?? null,
+  };
+  window.__COMBAT__ = () => combatRuntime?.snapshot() ?? null;
   // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
   // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
   // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
@@ -681,6 +721,13 @@ function loadObjective(document) {
   if (spawnedRelic || spawnedTutorial) worldSerializer.save(document);
 }
 
+// (Re)register the combat seam's inert targets from the loaded world (runtime only). Idempotent —
+// load() clears prior targets + feedback, so repeated reloads never leak. Called from BOTH runtime
+// load paths after the object graph exists.
+function loadCombat() {
+  combatRuntime?.load({ scene, objectManager });
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -714,6 +761,7 @@ async function applyLoadedWorld(document) {
   player.velocityY = 0;
   player.syncMesh();
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
+  loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -896,6 +944,7 @@ async function boot() {
   player.position.set(resolved.x, resolved.y, resolved.z);
   player.syncMesh();
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
+  loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -1074,6 +1123,7 @@ function frame(now) {
   interactionRuntime?.update(dt);
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
+  combatRuntime?.update(dt); // combat-0: poll the use-weapon edge → aim ray → hit → feedback fade
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
   frozenCacheSlice?.update(dt);
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer

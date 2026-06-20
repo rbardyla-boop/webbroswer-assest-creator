@@ -22,22 +22,24 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Asset Pipeline-1 accepted; tag `world-builder-asset-pipeline-1`).**
-- **55 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Combat-0 accepted; tag `world-builder-combat-0`).**
+- **56 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Asset Pipeline-1 — Validated GLB Budget
-  Gate** (ADR-044): a working GLB pipeline (import / IndexedDB blob store / registry / placement / play-mode resolve /
-  rigged animation) ALREADY existed, so this stage adds ONLY the missing validation/budget layer and reuses the rest.
-  KEY DESIGN: a new pure `AssetBudget.js` measures each imported asset (triangles / materials / textures / nodes /
-  scale) and grades it `ok` / `warn` / `reject`; the import path REJECTS an over-budget GLB before it is stored; the
-  per-asset budget is threaded through the three persistence whitelists (no `WORLD_DOCUMENT_VERSION` bump, stays 2);
-  and placed-asset instances come under the Performance Contract. The world document keeps a REFERENCE only — the
-  binary never leaves IndexedDB. See ADR-044 below.
-- **Node regression GREEN incl. new `test:authoring-procedural` (9 checks)**; browser proofs re-run this session:
-  `test:authoring-procedural-proof`, `test:performance-contract(+proof)` (now 5 scenes — authored-procedural added),
-  `test:editor-ux1`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-playable-proof`,
-  plus the Node subset + `qa` — all green.
-- **Next per ADR-039 roadmap: Asset Pipeline-1.**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Combat-0 — Validated Hitscan Strike
+  Seam** (ADR-045): the minimum combat contract future Enemy-0/encounters consume — input → active equipped weapon →
+  aim ray → hit query → validated `StrikeEvent` → lightweight feedback. A SEAM, not a game (explicit non-goals: enemy
+  AI, health/damage economy, ammo, loot, inventory, projectiles). KEY DESIGN: the inverse of Asset Pipeline-1 — there
+  was no combat layer, so five genuinely-new pure-ish `src/world/combat/` modules were built, while combat REUSES the
+  six existing seams it must only READ (rightHand-only `weaponEquipRuntime.activeId`, weapon markers, the shared
+  yaw/pitch aim basis, the inert-primitive target, the objective-runtime load/clear pattern, the test harness).
+  Holstered (back/hip) weapons cannot fire because that falls out of reading `activeId`. The shipped Frozen Cache /
+  first-playable world is UNCHANGED (combat is inert there — no targets). See ADR-045 below.
+- **Combat gates GREEN**: `test:combat` (10 Node checks) + `test:combat-proof` (SwiftShader: equip→hit, holstered
+  blocked, miss, reload-stable, in-play; 0 console errors). Full regression re-run this session — `qa`, all Node
+  regressions, and browser proofs `test:anim`, `test:first-playable(+hidden)-proof`, `test:frozen-cache(+proof)`,
+  `test:arsenal-v3/v4/v6`, `test:performance-contract(+proof)`, `test:asset-pipeline(+proof)`,
+  `test:authoring-procedural-proof`, `test:editor-ux1`, `test:slice0a` — all green.
+- **Next per ADR-039 roadmap: Enemy-0.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -105,14 +107,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | 9 · Editor as the product surface | Editor UX-1 — First Usable Authoring Surface | `…editor-ux1` | `test:editor-ux1-unit` `test:editor-ux1` | ✅ (ADR-041) |
 | 10 · Performance & scale | Performance Contract-1 — Performance as a Tested Gate | `…performance-contract-1` | `test:performance-contract` `test:performance-contract-proof` | ✅ (ADR-042) |
 | 10 · Performance & scale | Procedural Authoring-1 — Editable Spline / Mask / Modifier | `…procedural-authoring-1` | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ (ADR-043) |
-| 11 · Identity & assets | **Asset Pipeline-1 — Validated GLB Budget Gate** | **`…asset-pipeline-1`** | `test:asset-pipeline` `test:asset-pipeline-proof` | ✅ **LATEST** (ADR-044) |
+| 11 · Identity & assets | Asset Pipeline-1 — Validated GLB Budget Gate | `…asset-pipeline-1` | `test:asset-pipeline` `test:asset-pipeline-proof` | ✅ (ADR-044) |
+| 12 · Combat & encounters | **Combat-0 — Validated Hitscan Strike Seam** | **`…combat-0`** | `test:combat` `test:combat-proof` | ✅ **LATEST** (ADR-045) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-Asset Pipeline-1 → **Combat-0 (next)** → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
+Asset Pipeline-1 → Combat-0 → **Enemy-0 (next)** → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -2234,3 +2237,76 @@ LOW (negative budget values could pass the whitelist) were both fixed.
 DRACO/KTX2, node graph, combat, WebGPU, or live deploy. No duplicate registry/import/loader modules. No
 `WORLD_DOCUMENT_VERSION` bump. No material-convention rewriting (counts are captured + reported, not mutated). Next
 per ADR-039: **Combat-0**.
+
+## ADR-045 — Combat-0: A Validated Hitscan Strike Seam (reuse six seams, build five modules)
+
+**Status:** Accepted 2026-06-20. Tag `world-builder-combat-0` (local; no push). First stage of phase 12
+("Combat & encounters"), after Asset Pipeline-1 (ADR-044).
+
+**Context.** The editor can author structure (Procedural Authoring-1), enforce performance (Performance
+Contract-1), and place validated identity assets (Asset Pipeline-1); the relic objective (FP-1) proved a
+find→equip→carry→deposit loop with Arsenal v4/v6 weapons. The next seam is *using* an equipped weapon.
+Combat-0 adds the minimum contract future Enemy-0 / Encounter Editor stages can consume —
+`input → active equipped weapon → aim ray → hit query → validated StrikeEvent → feedback` — and nothing
+more. It is **a seam, not a game**: an inert `combat_target_dummy`, a hitscan ray, an impact flash, a
+recorded event. Explicit non-goals: enemy AI, health/damage economy, ammo, loot, inventory, projectiles,
+weapon balancing.
+
+**The architecture call (the inverse of Asset Pipeline-1).** Asset Pipeline-1 found the suggested modules
+already existed, so it reused. Combat-0 is the opposite: the things combat must *read* already exist, but
+there was **no combat layer at all**. So the decision is **reuse the six existing seams, build the five new
+combat modules**. Reused read-only: rightHand-only `weaponEquipRuntime.activeId`
+(`WeaponEquipRuntime.js:77`); the equipped weapon's `group.userData.markers`; the shared yaw/pitch aim
+basis; an inert primitive `WorldObject` as the hittable target; the `ObjectiveRuntime` owned-in-main /
+loaded-in-both-paths / `clear()`-idempotent pattern; and the Node-regression + SwiftShader-proof harness.
+
+**Mechanism.** New `src/world/combat/`: `CombatTypes.js` (constants + a finite-guarded, timestamp-free
+`createStrikeEvent`), `CombatValidation.js` (`validateStrike` — the "no active weapon ⇒ no event" gate +
+`isCombatTarget`), `CombatTarget.js` (an inert hit record — counts hits, never dies/removes),
+`CombatFeedback.js` (transient emissive impact marks, capped + disposed on `clear()`), and `CombatRuntime.js`
+(the seam: polls one input edge → requires `activeId` → casts ONE eye-aim hitscan ray at the registered
+targets → emits the `StrikeEvent` → drives feedback + the target record). Additive edits: a public
+`PlayerCameraController.aimRay()` (the single source of the aim basis, so combat never duplicates the trig);
+a left-mouse `Mouse0` edge in `input.js` (gated on pointer-lock; **Space stays jump** — deliberately not
+overloaded); and runtime-only `main.js` wiring (construct beside `objectiveRuntime`; a `loadCombat()` helper
+in both load paths; `combatRuntime?.update(dt)` in the frame loop; DEV-only `__COMBAT_DO__` / `__COMBAT__`).
+
+**The StrikeEvent contract (what Enemy-0 consumes).**
+`{ weaponId, weaponRecipeId(=recipe.seed), origin, direction, muzzle, hit: { targetId, point, normal,
+distance } | null }` — timestamp-free (determinism) and finite-guarded at every vector boundary (safety).
+**Holstered weapons cannot fire** because `activeId` is the rightHand occupant only — the rule falls out of
+the existing contract, not a separate check. Enemy-0 consumes the seam by registering enemies in the same
+target set and reading `StrikeEvent.hit` — touching neither arsenal (combat only READS recipe/markers/slot),
+objectives (separate runtime), nor input (one edge, already wired). Hitscan only; arc/projectile are later.
+
+**Isolation + persistence.** Combat modules import ONLY `three` or `./Combat*.js` — never an arsenal
+workbench module (scan-enforced, now covering `from`/side-effect/dynamic import forms). Combat events do not
+persist; the dummy is an ordinary persisted primitive `WorldObject`. **No `WORLD_DOCUMENT_VERSION` bump
+(stays 2).** The shipped Frozen Cache / first-playable world is byte-unchanged: it has no targets, so combat
+is inert there (proven by the regression sweep staying green).
+
+**Verification.** `test:combat` (10 Node checks: the active-weapon gate, finite-guarded `createStrikeEvent`,
+a real hitscan against a production-built target, determinism via `deepEqual`, the *real* rightHand-only
+`activeId` contract for holstering, inert target + non-leaking feedback, the shared `aimRay` basis, the
+reserved-name predicate, and the determinism/isolation static scans). `test:combat-proof` (SwiftShader:
+equip→hit + feedback, holstered-blocked with no new event, miss leaves the dummy untouched, reload
+re-registers cleanly with the relic objective intact, in-play with no editor; 0 console errors). Full
+regression re-run green, including `test:anim` (the rigged-GLB path is unbroken).
+
+**Review.** Fresh-context workflow — 4 reviewers (correctness / safety-determinism / isolation-regression /
+test-vacuity) → per-finding adversarial verification. **0 critical/high.** Three confirmed MEDIUM + three
+LOW/downgraded, ALL fixed: (1) `CombatFeedback.update()` did not finite-guard `dt` (a non-finite `dt`, only
+reachable via the DEV `step()` hook, wrote NaN to a mesh and pinned the mark) → early-return guard;
+(2) the isolation scan only matched `from "…"` imports → widened to side-effect + dynamic forms with
+negative controls; (3) the muzzle-marker read was untested (passed even if it silently fell back to the eye)
+→ the Node test now asserts the marker value, distinct from the eye; (4) the determinism scan missed
+`performance.now()` → added; (5) `_ownerId` ignored the `uuid` fallback key `load()` can register under →
+now matches both; (6) the proof's holstered check leaned on `hitCount` only → now also asserts `lastEvent`
+is unchanged. **Process note (recorded as a gotcha):** an adversarial *verifier* agent, having file-write
+tools, mutated `CombatRuntime.js` to empirically confirm finding (3); it self-reverted, and the full tree
+was re-audited clean (no probe markers) before commit — a reminder that workflow verifiers can write, so
+the producer must audit the working tree after a review, not trust it.
+
+**Non-goals (held).** No enemy AI, health/damage economy, ammo, loot, inventory, projectiles, arc/melee
+weapons, weapon balancing, multiplayer, or WebGPU. No `WORLD_DOCUMENT_VERSION` bump. No change to the shipped
+Frozen Cache / first-playable world. Next per ADR-039: **Enemy-0**.

@@ -14,12 +14,14 @@ export class Input {
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onKeyUp = this._onKeyUp.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
+    this._onMouseDown = this._onMouseDown.bind(this);
     this._onPointerLockChange = this._onPointerLockChange.bind(this);
     this._onCanvasClick = this._onCanvasClick.bind(this);
 
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
     window.addEventListener("mousemove", this._onMouseMove);
+    window.addEventListener("mousedown", this._onMouseDown);
     document.addEventListener("pointerlockchange", this._onPointerLockChange);
     this.dom.addEventListener("click", this._onCanvasClick);
   }
@@ -38,6 +40,13 @@ export class Input {
 
   isDown(code) {
     return this.keys.has(code);
+  }
+
+  // Inject a synthetic edge press onto the same path wasPressed() consumes. Used by the DEV combat
+  // driver (and tests) to fire the active weapon through the real input flow, never by mutating
+  // combat state directly — input-equivalent to a real Mouse0 down.
+  press(code) {
+    this._pressedThisFrame.add(code);
   }
 
   // Movement axes in local space. forward: W/S, strafe: A/D.
@@ -97,6 +106,14 @@ export class Input {
     this.mouseDY += e.movementY || 0;
   }
 
+  // Left mouse button = "use active weapon", but only once the pointer is captured. The first
+  // click on the canvas just requests pointer lock (handled in _onCanvasClick, fires no edge);
+  // subsequent clicks while locked emit the Mouse0 edge a single reader consumes. Space stays jump.
+  _onMouseDown(e) {
+    if (!this.enabled || !this.pointerLocked) return;
+    if (e.button === 0) this._pressedThisFrame.add("Mouse0");
+  }
+
   _onPointerLockChange() {
     this.pointerLocked = document.pointerLockElement === this.dom;
   }
@@ -110,6 +127,7 @@ export class Input {
     window.removeEventListener("keydown", this._onKeyDown);
     window.removeEventListener("keyup", this._onKeyUp);
     window.removeEventListener("mousemove", this._onMouseMove);
+    window.removeEventListener("mousedown", this._onMouseDown);
     document.removeEventListener("pointerlockchange", this._onPointerLockChange);
     this.dom.removeEventListener("click", this._onCanvasClick);
   }

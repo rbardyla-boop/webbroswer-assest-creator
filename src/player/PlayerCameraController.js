@@ -101,6 +101,16 @@ export class PlayerCameraController {
     this.camera.lookAt(this._target);
   }
 
+  // Fill outOrigin (eye position) + outDir (normalized aim direction) from the current yaw/pitch.
+  // The aim basis is identical in first- and third-person — only the camera SEAT differs — so combat
+  // and any future aim consumer read ONE source of truth here instead of duplicating the trig.
+  aimRay(outOrigin, outDir) {
+    const p = this.player.position;
+    outOrigin.set(p.x, p.y + this.player.eyeHeight, p.z);
+    lookDir(this.yaw, this.pitch, outDir);
+    return { origin: outOrigin, direction: outDir };
+  }
+
   get modeLabel() {
     return this.mode === "first" ? "First-Person" : "Third-Person";
   }
