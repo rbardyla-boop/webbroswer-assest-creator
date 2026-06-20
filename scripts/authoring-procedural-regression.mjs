@@ -182,7 +182,10 @@ const flatPoints = [
 
 // --- 9. authored benchmark scene determinism + no nondeterministic sources ---
 {
-  assert.deepEqual(authoredProceduralScene(), authoredProceduralScene(), "authoredProceduralScene is deterministic (same call → same document)");
+  // Compare the deterministic authored CONTENT — not document.metadata, whose createdAt/
+  // updatedAt are wall-clock timestamps stamped by createWorldDocument (comparing the
+  // whole scene would be ~20% flaky across a millisecond boundary).
+  assert.deepEqual(authoredProceduralScene().document.authoring, authoredProceduralScene().document.authoring, "authoredProceduralScene authored content is deterministic (same call → same content)");
   const a = authoredProceduralScene().document.authoring;
   assert.equal(a.modifiers.length, 1, "authored scene carries one modifier");
   assert.equal(a.splines[0].points.length, 5, "authored scene spline has 5 points");

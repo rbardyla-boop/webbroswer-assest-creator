@@ -27,6 +27,7 @@ import { ProceduralPanel } from "./ProceduralPanel.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
+import { validateAssetBudget } from "../assets/AssetBudget.js";
 import { PrefabLibrary } from "../prefabs/PrefabLibrary.js";
 // Arsenal v3 click-to-place: place a generated weapon onto terrain. PURE arsenal modules
 // only (recipe generation) — no workbench UI; the world↔arsenal boundary stays recipe-only.
@@ -870,7 +871,11 @@ export class WorldEditor {
       const animationNote = asset.type === "gltf" && asset.animation?.clips?.length
         ? `\n♦ ${summarizeAssetAnimation(asset.animation)}`
         : "";
-      label.textContent = `${asset.name}\n${asset.type}${animationNote}`;
+      // Asset Pipeline-1: surface the imported asset's triangle budget + a warn marker.
+      const budgetNote = asset.type === "gltf" && asset.budget
+        ? `\n▣ ${asset.budget.triangles.toLocaleString()} tris${asset.budget.severity === "warn" ? " ⚠" : ""}`
+        : "";
+      label.textContent = `${asset.name}\n${asset.type}${animationNote}${budgetNote}`;
       label.style.whiteSpace = "pre-line";
       label.style.textAlign = "left";
       button.appendChild(label);
@@ -2008,7 +2013,21 @@ export class WorldEditor {
     try {
       this.selectedAsset = await this.assetImporter.importGLTF(file);
       this._renderAssetList();
+      // Surface a soft-budget warning — the asset is usable but flagged (the asset-list
+      // badge also shows a ⚠). A hard-budget reject is the catch branch below.
+      const budget = this.selectedAsset?.budget;
+      if (budget?.severity === "warn") {
+        const warn = validateAssetBudget(budget).breaches.find((b) => b.tier === "warn");
+        this.selectionLabel.textContent = `Imported ${this.selectedAsset.name} — budget warning${warn ? `: ${warn.metric} ${warn.value} (over ${warn.limit})` : ""}.`;
+      }
     } catch (error) {
+      // A budget reject is an EXPECTED outcome, not an error — surface the report in the
+      // label and do NOT console.error (the asset was refused before any storage).
+      if (error?.name === "AssetBudgetError") {
+        const breach = error.report?.verdict?.breaches?.find((b) => b.tier === "reject");
+        this.selectionLabel.textContent = `Rejected ${file.name}${breach ? ` — ${breach.metric} ${breach.value} exceeds ${breach.limit}` : " (over budget)"}.`;
+        return;
+      }
       console.error("Failed to import GLTF", error);
       this.selectionLabel.textContent = `Could not import ${file.name}.`;
     }

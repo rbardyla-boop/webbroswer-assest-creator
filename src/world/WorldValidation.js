@@ -18,6 +18,7 @@ import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
 import { sanitizeObjectivesBlock } from "./objectives/ObjectiveTypes.js";
 import { sanitizeAuthoringBlock } from "./authoring/AuthoringTypes.js";
+import { sanitizeAssetBudget } from "../assets/AssetBudget.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
 // Far above any legitimate world; bounds memory from a hostile/corrupt save.
@@ -268,6 +269,9 @@ function sanitizeAssetManifestItem(item) {
     defaultExclusion: item.defaultExclusion,
     runtime: item.runtime ?? {},
     animation: sanitizeAssetAnimation(item.animation).animation,
+    // Asset Pipeline-1: captured per-asset budget report; null when absent. Metadata
+    // only — the asset binary itself never enters the world document.
+    budget: sanitizeAssetBudget(item.budget),
   };
 }
 

@@ -1,5 +1,6 @@
 import { ASSET_TYPES, defaultColliderTypeForAsset, defaultExclusionForAsset } from "./AssetTypes.js";
 import { sanitizeAssetAnimation } from "../animation/AnimationValidation.js";
+import { sanitizeAssetBudget } from "./AssetBudget.js";
 
 export function normalizeAssetMetadata(metadata) {
   const now = new Date().toISOString();
@@ -21,6 +22,9 @@ export function normalizeAssetMetadata(metadata) {
     runtime: metadata?.runtime ?? { static: true },
     // Optional rigged-asset animation metadata (gltf only); null when absent.
     animation: sanitizeAssetAnimation(metadata?.animation).animation,
+    // Asset Pipeline-1: captured budget report (triangles/materials/textures/nodes +
+    // severity); null when absent (primitives, legacy assets). Survives the round-trip.
+    budget: sanitizeAssetBudget(metadata?.budget),
   };
   if (!asset.defaultColliderType) asset.defaultColliderType = defaultColliderTypeForAsset(asset);
   if (!asset.defaultExclusion) asset.defaultExclusion = defaultExclusionForAsset(asset);

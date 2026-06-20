@@ -22,15 +22,17 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-19 (Procedural Authoring-1 accepted; tag `world-builder-procedural-authoring-1`).**
-- **54 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Asset Pipeline-1 accepted; tag `world-builder-asset-pipeline-1`).**
+- **55 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Procedural Authoring-1 — Editable Spline /
-  Mask / Modifier Primitives** (ADR-043): the first way to shape a *region* without placing objects one by one — an
-  editable spline (3–8 pts), a circle/box mask, and one non-destructive `beacon-trail` modifier. KEY DESIGN: the
-  authored block is the persisted source of truth; the modifier VISUALS are RE-DERIVED each load by an
-  `AuthoringRuntime` (owned by `WorldRuntimeLoader`, like `wildlife`/`ambient`) and are NEVER baked into `objects`
-  (the runtimeAssets idiom). No `WORLD_DOCUMENT_VERSION` bump (stays 2). See ADR-043 below.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Asset Pipeline-1 — Validated GLB Budget
+  Gate** (ADR-044): a working GLB pipeline (import / IndexedDB blob store / registry / placement / play-mode resolve /
+  rigged animation) ALREADY existed, so this stage adds ONLY the missing validation/budget layer and reuses the rest.
+  KEY DESIGN: a new pure `AssetBudget.js` measures each imported asset (triangles / materials / textures / nodes /
+  scale) and grades it `ok` / `warn` / `reject`; the import path REJECTS an over-budget GLB before it is stored; the
+  per-asset budget is threaded through the three persistence whitelists (no `WORLD_DOCUMENT_VERSION` bump, stays 2);
+  and placed-asset instances come under the Performance Contract. The world document keeps a REFERENCE only — the
+  binary never leaves IndexedDB. See ADR-044 below.
 - **Node regression GREEN incl. new `test:authoring-procedural` (9 checks)**; browser proofs re-run this session:
   `test:authoring-procedural-proof`, `test:performance-contract(+proof)` (now 5 scenes — authored-procedural added),
   `test:editor-ux1`, `test:slice0a`, `test:arsenal-v6`, `test:frozen-cache(+proof)`, `test:first-playable-proof`,
@@ -102,14 +104,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | | Slice-0A — Human-UX Hardening | `…slice0a-human-ux` | `test:slice0a` | ✅ (ADR-040; reversible) |
 | 9 · Editor as the product surface | Editor UX-1 — First Usable Authoring Surface | `…editor-ux1` | `test:editor-ux1-unit` `test:editor-ux1` | ✅ (ADR-041) |
 | 10 · Performance & scale | Performance Contract-1 — Performance as a Tested Gate | `…performance-contract-1` | `test:performance-contract` `test:performance-contract-proof` | ✅ (ADR-042) |
-| 10 · Performance & scale | **Procedural Authoring-1 — Editable Spline / Mask / Modifier** | **`…procedural-authoring-1`** | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ **LATEST** (ADR-043) |
+| 10 · Performance & scale | Procedural Authoring-1 — Editable Spline / Mask / Modifier | `…procedural-authoring-1` | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ (ADR-043) |
+| 11 · Identity & assets | **Asset Pipeline-1 — Validated GLB Budget Gate** | **`…asset-pipeline-1`** | `test:asset-pipeline` `test:asset-pipeline-proof` | ✅ **LATEST** (ADR-044) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-**Asset Pipeline-1 (next)** → Combat-0 → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
+Asset Pipeline-1 → **Combat-0 (next)** → Enemy-0 → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -2150,3 +2153,84 @@ precision; an explicit play-mode no-editor assertion) addressed.
 combat, WebGPU, or live deploy. No `WORLD_DOCUMENT_VERSION` bump. No new persisted visuals in `objects`. Mote-
 density boost (would fold into the ambient seed) and a fog-thinning corridor (no local/volumetric fog) were
 explicitly deferred. Next per ADR-039: **Asset Pipeline-1**.
+
+## ADR-044 — Asset Pipeline-1: Validated GLB Budget Gate (reuse, not rebuild)
+
+**Context.** The doctrine is "math handles composition, authored assets provide identity," so the next bottleneck
+after authoring was importing real meshes — with scale discipline, validation, and budget enforcement — without
+breaking performance, persistence, or the procedural source-of-truth model. Research surfaced the decisive fact:
+**a working GLB pipeline already existed.** `AssetImporter.importGLTF` loads a GLB through a real `GLTFLoader`;
+`AssetStore` persists the binary in IndexedDB (`grass-world-assets`, metadata + blobs stores); `AssetLibrary` is the
+registry with stable ids + lazy `resolve`; `document.assets` carries a metadata manifest (`createManifest` flags
+`localIndexedDB:true`); `WorldObjectManager.addFromAsset`/`_buildObject3D` place a GLB as a world object referenced
+by `assetRef`; the rigged-animation runtime even plays its clips (proven by `test:anim`). Persistence already obeys
+the core rule — the binary never enters `.world.json`; the document holds a reference.
+
+**Decision — add the missing validation/budget layer; reuse everything else.** Building the originally-suggested
+greenfield module list (AssetRegistry / AssetImport / AssetRuntimeLoader) would DUPLICATE `AssetLibrary` /
+`AssetImporter` / `AssetStore` — the adapter swamp the project rules forbid ("smallest coherent change", "reuse
+canonical utilities", "read existing ownership boundaries"). The genuine gap was that **nothing measured or enforced
+an imported asset's cost.** So this stage adds ONE new module and threads a budget through the existing seams — the
+same shape as Performance Contract-1 (which reused the Stage 20A measurement infra and added a gate on top, leaving
+the measured system byte-stable).
+
+**Mechanism.**
+
+- **The budget boundary** — new `src/assets/AssetBudget.js` (pure, imports only `three`; isolation grep-enforced).
+  `computeAssetBudget(object3D, animations)` traverses a loaded scene (the `AssetPreview` idiom) → `{ triangles,
+  materials, textures, nodes, meshes, hasAnimation, clipCount, maxDimension }` (materials/textures counted unique by
+  uuid; triangles handle indexed + non-indexed). `validateAssetBudget` grades it against `ASSET_BUDGET_LIMITS`
+  (triangles / materials / textures / nodes / maxDimension upper tiers + a `tinyDimension` floor = scale discipline)
+  → `{ severity: ok|warn|reject, breaches }`. `AssetBudgetError` carries the report; `sanitizeAssetBudget` is the
+  pure persistence whitelist (clamps counts non-negative — a corrupted budget can't subtract from a summed report).
+- **The gate** — `AssetImporter.importGLTF` computes the budget AFTER parse and BEFORE `storeAsset`. A `reject`
+  verdict THROWS `AssetBudgetError` (the throw precedes storage, so the budget-busting asset never reaches IndexedDB
+  or the in-memory map); a `warn` is stored + flagged. The captured budget rides in the asset metadata.
+- **Persistence (no schema bump)** — the `budget` field is threaded through the three whitelists:
+  `AssetValidation.normalizeAssetMetadata`, `AssetLibrary.createManifest`, and
+  `WorldValidation.sanitizeAssetManifestItem`. `WORLD_DOCUMENT_VERSION` stays **2** (the `assets` block already
+  existed at version 1; a sub-field is additive). The binary stays in IndexedDB — the document carries a reference.
+- **Editor surface (reused, not rebuilt)** — placement already worked (`selectedAsset` + `_placeAssetAt` +
+  `addFromAsset`), so no new tool/panel. `WorldEditor._importGLTF` catches `AssetBudgetError` and surfaces a
+  "Rejected …" label WITHOUT `console.error` (a budget reject is an expected outcome, not an error — proofs assert 0
+  console errors); the asset-list rows show a triangle badge + a warn marker. A DEV `__ASSETS__` hook + an `assets`
+  field on `__PERF__.snapshot()` (placed instances carrying `assetRef` + summed triangles) make the gate observable.
+- **Performance Contract** — `assetInstancesScene({ assetId, count })` in `BenchmarkScenes.js` is a scene of GLB
+  instances referencing one asset (reference-only). It is NOT in `allBenchmarkScenes()` (it needs a live IndexedDB
+  asset to resolve, so it can't render in the Node determinism enumeration); the browser proof imports a fixture to
+  supply a real `assetId` and gates it.
+
+**Performance — captured then locked (SwiftShader, structural / GPU-independent).** asset-instances (24 × the clean
+box fixture): draws 110, triangles 379k, objects 24, instanced batches 0, memGeometries 91 → overall **green**.
+Ceilings: draws 160 / tris 560k / objects (n+10) / batches 4 / memGeometries 200. `objects` guards that instances
+stay REFERENCED placed objects; `memGeometries` guards against per-instance geometry duplication (cloned GLB
+instances SHARE geometry — a regression that stopped sharing would spike it); `batches` is a small absolute guard
+(GLB instances are not primitive-batched). Non-vacuous: the proof asserts all 24 instances resolved and the heavy
+fixture was rejected.
+
+**Gates (TDD).** `test:asset-pipeline` (pure Node, 10 checks): exact budget counts on clean + heavy fixtures;
+tier grading (clean→ok, heavy→reject, borderline→warn, oversized/sub-tiny scale); `AssetBudgetError` shape;
+`sanitizeAssetBudget` whitelist + non-negative clamp; the `budget` field round-trips through all three whitelists
+with no schema bump + zero-warning-empty + idempotent; `assetInstancesScene` content determinism + reference-only;
+AssetBudget three-only import boundary + no-RNG scan. `test:asset-pipeline-proof` (SwiftShader): import a clean GLB
+→ budget captured (12 tris, ok); import a heavy GLB → REJECTED (not stored, surfaced, no console error — the gate is
+non-vacuous); place + persist + reload → asset + budget re-resolve from IndexedDB while the document holds a
+reference (a slice of the model's base64 is asserted ABSENT from the saved doc; the blob is asserted PRESENT in
+IndexedDB, 2140 bytes); the asset-instances scene stays within the contract; instances render in PLAY (no editor)
+coexisting with the Frozen Cache base. 0 console errors. Fixtures (`src/assets/fixtures/assetBudgetFixtures.js`) are
+GLTFExporter-built, deterministic, never bundled. The existing `test:anim` proves the budget gate did not break the
+rigged-GLB import/place/animate path.
+
+**Review (4 fresh-context reviewers, adversarial; each finding verified by two diverse-lens skeptics).** Net **0
+unresolved critical/high**. The verify phase confirmed ONE genuine HIGH (empirically reproduced ~21%): the
+`assetInstancesScene` determinism assertion compared the whole document including `createWorldDocument`'s wall-clock
+`createdAt`/`updatedAt` timestamps, making the Node check intermittently flaky — FIXED by comparing the deterministic
+scene content (`document.objects` + `gated`), the same pattern `performance-contract-regression` already used; the
+structurally-identical latent flake in `authoring-procedural-regression` was hardened the same way (both now 0/30
+under stress). A MEDIUM (an inaccurate triangle-count comment, 218,400 vs the real 217,560 after pole dedup) and a
+LOW (negative budget values could pass the whitelist) were both fixed.
+
+**Non-goals (held).** No asset marketplace, texture authoring/compression, animation retargeting, skeletal pipeline,
+DRACO/KTX2, node graph, combat, WebGPU, or live deploy. No duplicate registry/import/loader modules. No
+`WORLD_DOCUMENT_VERSION` bump. No material-convention rewriting (counts are captured + reported, not mutated). Next
+per ADR-039: **Combat-0**.

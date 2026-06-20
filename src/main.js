@@ -477,6 +477,9 @@ if (import.meta.env.DEV) {
         arsenal: placedWeaponRuntime?.stats ? { count: placedWeaponRuntime.stats.count, awake: placedWeaponRuntime.stats.awake } : null,
         // Procedural Authoring-1: derived beacon-trail visuals (groups + total markers).
         authoring: authoring ? authoring.stats() : null,
+        // Asset Pipeline-1: placed imported-asset instances + their summed triangle
+        // budget (reference-based — never embedded). Counts objects carrying an assetRef.
+        assets: assetInstanceStats(objectManager),
       };
     },
     // Time animation frames; `turn` forces a continuous camera pan to catch
@@ -775,6 +778,32 @@ if (import.meta.env.DEV) {
       runtime: authoring?.stats?.() ?? null,
     };
   };
+}
+
+// Asset Pipeline-1: dev/test-only asset snapshot (stripped from production). Reports the
+// asset library (id/type/budget — metadata only, never the binary) + placed instance
+// counts so the proof can assert import-budget capture, placement, and persistence.
+if (import.meta.env.DEV) {
+  window.__ASSETS__ = () => {
+    const library = (assetLibrary?.list?.() ?? []).map((a) => ({ id: a.id, type: a.type, budget: a.budget ?? null }));
+    return { library, placed: assetInstanceStats(objectManager) };
+  };
+}
+
+// Placed imported-asset instances + their summed triangle budget. An "asset instance"
+// is a placed object carrying an assetRef; its triangle cost comes from the resolved
+// asset's captured budget. Reference-based — the world never embeds asset binaries.
+function assetInstanceStats(manager) {
+  if (!manager) return { instances: 0, triangles: 0 };
+  let instances = 0;
+  let triangles = 0;
+  for (const object of manager.objects.values()) {
+    if (!object.userData.assetRef) continue;
+    instances++;
+    const tris = object.userData.asset?.budget?.triangles;
+    if (Number.isFinite(tris)) triangles += tris;
+  }
+  return { instances, triangles };
 }
 
 // Count placed objects emitted by a generator (they carry a generatorId) — the

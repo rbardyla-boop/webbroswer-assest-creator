@@ -69,6 +69,8 @@
     "test:performance-contract-proof": "node scripts/browser-performance-contract-proof.mjs",
     "test:authoring-procedural": "node scripts/authoring-procedural-regression.mjs",
     "test:authoring-procedural-proof": "node scripts/browser-authoring-procedural-proof.mjs",
+    "test:asset-pipeline": "node scripts/asset-pipeline-regression.mjs",
+    "test:asset-pipeline-proof": "node scripts/browser-asset-pipeline-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

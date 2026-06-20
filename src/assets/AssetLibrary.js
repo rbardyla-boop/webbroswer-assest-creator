@@ -93,6 +93,9 @@ export class AssetLibrary {
         defaultExclusion: asset.defaultExclusion,
         runtime: asset.runtime,
         animation: asset.animation ?? null,
+        // Asset Pipeline-1: per-asset budget report travels with the manifest (metadata
+        // only — never the binary). null for primitives / legacy assets.
+        budget: asset.budget ?? null,
       })),
     };
   }

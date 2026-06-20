@@ -179,6 +179,54 @@ export function authoredProceduralScene() {
   });
 }
 
+const ASSET_INSTANCE_SPACING = 4; // metres between placed asset instances
+
+/**
+ * A scene of imported-asset instances (Asset Pipeline-1): `count` GLB instances on a
+ * grid, each REFERENCING `assetId` (never embedding the binary — the core rule). The
+ * placed-asset cost flows into the contract's gated metrics (objects / draws / triangles
+ * / memGeometries). Because an asset-instance resolves a live IndexedDB blob, this scene
+ * is exercised by the browser proof (which imports a fixture to supply a real assetId),
+ * NOT by the Node `allBenchmarkScenes()` determinism enumeration. Low grass density
+ * isolates the asset path under load.
+ * @param {{ assetId?: string, count?: number }} [opts]
+ */
+export function assetInstancesScene({ assetId = "gltf-fixture", count = 24 } = {}) {
+  const n = Math.max(0, Math.floor(count));
+  const side = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const half = (side * ASSET_INSTANCE_SPACING) / 2;
+  const objects = [];
+  for (let i = 0; i < n; i++) {
+    const x = (i % side) * ASSET_INSTANCE_SPACING - half;
+    const z = Math.floor(i / side) * ASSET_INSTANCE_SPACING - half;
+    objects.push({
+      id: `asset-${i}`,
+      name: `Asset ${i}`,
+      type: "gltf",
+      assetRef: assetId,
+      primitive: null,
+      asset: null,
+      transform: { position: { x, y: 0, z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
+      collider: { type: "box", enabled: true },
+      exclusion: { grass: true, trees: true },
+    });
+  }
+  // Baseline (24 × the clean box fixture, captured then locked, SwiftShader): draws 110,
+  // tris 379k, objs 24, batches 0, memGeo 91 → overall green. Ceilings = baseline +
+  // ~40-45% headroom. `objects` (n+10) guards that instances stay REFERENCED placed
+  // objects; `memGeometries` guards against per-instance geometry duplication (cloned
+  // GLB instances SHARE geometry — a regression that stopped sharing would spike it);
+  // `instancedBatches` is a small absolute guard (GLB instances are not primitive-batched
+  // → baseline 0).
+  return scene("asset-instances", `Asset instances (${n} × ${assetId})`, { metadata: { name: "Asset Instances" }, grass: { density: 3 }, objects }, {
+    drawCalls: 160,
+    triangles: 560_000,
+    objects: n + 10,
+    instancedBatches: 4,
+    memGeometries: 200,
+  });
+}
+
 /** All canonical scenes, in gate order. */
 export function allBenchmarkScenes() {
   return [emptyScene(), frozenCacheScene(), denseAuthoredScene(), streamingBorderScene(), authoredProceduralScene()];

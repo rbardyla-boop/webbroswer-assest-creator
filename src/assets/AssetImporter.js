@@ -3,13 +3,14 @@ import { ASSET_TYPES, createAssetId, defaultColliderTypeForAsset, defaultExclusi
 import { computeBoundsFromGeometry, computeBoundsFromObject } from "./AssetPreview.js";
 import { iconThumbnail, thumbnailFromImageBlob } from "./AssetThumbnails.js";
 import { extractAnimationMetadata } from "../animation/AnimationMetadata.js";
+import { AssetBudgetError, computeAssetBudget, validateAssetBudget } from "./AssetBudget.js";
 
 export class AssetImporter {
   constructor(assetLibrary) {
     this.library = assetLibrary;
   }
 
-  async importGLTF(file) {
+  async importGLTF(file, { enforceBudget = true } = {}) {
     const id = createAssetId(ASSET_TYPES.gltf, file.name);
     const blob = file.slice(0, file.size, file.type || "model/gltf-binary");
     const loaded = await parseGLTFBlob(blob);
@@ -17,6 +18,16 @@ export class AssetImporter {
     // Detect skeleton/skinned meshes + animation clips. Static GLBs get empty
     // clip metadata and behave exactly as before.
     const animation = extractAnimationMetadata(loaded.scene, loaded.animations);
+    // Asset Pipeline-1: measure the asset's cost and grade it against the per-asset
+    // budget BEFORE it can be stored. A hard breach throws — the budget-busting asset
+    // never reaches IndexedDB or the in-memory map (the throw precedes storeAsset). A
+    // soft breach is kept but flagged (budget.severity === "warn").
+    const measured = computeAssetBudget(loaded.scene, loaded.animations);
+    const verdict = validateAssetBudget(measured);
+    if (enforceBudget && verdict.severity === "reject") {
+      throw new AssetBudgetError({ budget: { ...measured, severity: verdict.severity }, verdict });
+    }
+    const budget = { ...measured, severity: verdict.severity };
     const metadata = await this.library.storeAsset({
       id,
       type: ASSET_TYPES.gltf,
@@ -30,6 +41,7 @@ export class AssetImporter {
       defaultExclusion: defaultExclusionForAsset(assetShape),
       runtime: { static: true },
       animation,
+      budget,
     }, blob);
     this.library.cacheLoadedAsset(id, { ...metadata, scene: loaded.scene, animations: loaded.animations ?? [] });
     return metadata;
