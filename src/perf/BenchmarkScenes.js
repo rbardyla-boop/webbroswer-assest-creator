@@ -16,6 +16,7 @@ import { createWorldDocument } from "../world/WorldDocument.js";
 import { generateCityLayout } from "../generators/CityLayout.js";
 import { cityLayoutToWorldObjects } from "../generators/cityEmitter.js";
 import { createCityConfig } from "../generators/GeneratorConfig.js";
+import { buildVisualBenchmarkV1 } from "../world/samples/visualBenchmarkV1.js";
 
 const DENSE_SPACING = 3; // metres between authored cubes
 const DENSE_DEFAULT = 500;
@@ -227,7 +228,33 @@ export function assetInstancesScene({ assetId = "gltf-fixture", count = 24 } = {
   });
 }
 
+/**
+ * Visual Benchmark-1: the authored corridor (Relic Overlook → glacial crossing → cache pedestal) as the
+ * performance contract sees it. The validated-GLB cache prop is DROPPED here — its binary lives in
+ * IndexedDB and won't resolve headless; the live GLB is proven in test:visual-benchmark-proof. Default
+ * glacial vegetation, so the gate measures the real player-facing cost of an intentional, polished slice.
+ */
+export function visualBenchmarkScene() {
+  const doc = buildVisualBenchmarkV1();
+  doc.objects = doc.objects.filter((o) => o.type !== "gltf");
+  // Baseline (captured then locked, SwiftShader): draws 116, tris 512,962, objs 11, batches 2, vegPatch
+  // 62, rtAssets 2 — default glacial GRASS dominates triangles (like the empty floor); the ~10 authored
+  // landmark primitives + the beacon trail + the runtime relic + the projected encounter sentinel add
+  // little. Ceilings = measured baseline + ~35-45% headroom (the gate FAILS if set below the real number;
+  // matches the other glacial-grass scenes' draws/tris/veg ceilings). The objects ceiling guards the
+  // authored landmark count. See docs/VISUAL_BENCHMARK.md for the measured numbers + the LOD finding.
+  const gated = {
+    drawCalls: 160,
+    triangles: 700_000,
+    objects: 16,
+    instancedBatches: 8,
+    visibleVegetationPatches: 120,
+    runtimeAssets: 12,
+  };
+  return { id: "visual-benchmark", label: "Visual Benchmark 1 (authored corridor)", document: doc, gated };
+}
+
 /** All canonical scenes, in gate order. */
 export function allBenchmarkScenes() {
-  return [emptyScene(), frozenCacheScene(), denseAuthoredScene(), streamingBorderScene(), authoredProceduralScene()];
+  return [emptyScene(), frozenCacheScene(), denseAuthoredScene(), streamingBorderScene(), authoredProceduralScene(), visualBenchmarkScene()];
 }

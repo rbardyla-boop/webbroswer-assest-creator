@@ -98,13 +98,13 @@ const ok = (name) => {
   assert.ok(streamingBorderScene().document.objects.length > 0, "streaming-border scene emits a generated city");
 
   const all = allBenchmarkScenes();
-  assert.equal(all.length, 5, "five canonical scenes");
-  assert.deepEqual(all.map((s) => s.id), ["empty", "frozen-cache", "dense-authored", "streaming-border", "authored-procedural"], "scene ids + order");
+  assert.equal(all.length, 6, "six canonical scenes");
+  assert.deepEqual(all.map((s) => s.id), ["empty", "frozen-cache", "dense-authored", "streaming-border", "authored-procedural", "visual-benchmark"], "scene ids + order");
   for (const s of all) {
     assert.ok(s.document && Array.isArray(s.document.objects), `${s.id} has a document`);
     assert.ok(s.gated && Object.keys(s.gated).length > 0, `${s.id} declares gated ceilings`);
   }
-  ok("BenchmarkScenes: deterministic, five scenes, documented counts");
+  ok("BenchmarkScenes: deterministic, six scenes, documented counts");
 
   // No nondeterministic sources in the benchmark module (would break reproducibility).
   const src = fs.readFileSync(new URL("../src/perf/BenchmarkScenes.js", import.meta.url), "utf8");

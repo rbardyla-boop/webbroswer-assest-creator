@@ -79,6 +79,8 @@
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",
     "test:geometry-stream-proof": "node scripts/browser-paged-geometry-stream-proof.mjs",
+    "test:visual-benchmark": "node scripts/visual-benchmark-regression.mjs",
+    "test:visual-benchmark-proof": "node scripts/browser-visual-benchmark-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

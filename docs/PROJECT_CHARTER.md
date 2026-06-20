@@ -22,30 +22,35 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Geometry Stream Gate-0 accepted; tag `world-builder-geometry-stream-0`).**
-- **59 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Visual Benchmark-1 accepted; tag `world-builder-visual-benchmark-1`).**
+- **60 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Geometry Stream Gate-0 — PagedGeometryStream**
-  (ADR-048): a first-party, deterministic **chunked geometry streaming layer** for procedural producers, capped at
-  **≤64,000 vertices per chunk**, with incremental commit, clean disposal, and stats wired into Performance Contract-1.
-  Built as a **TESTED infrastructure gate, not a visual feature** — no real PCG system pages its geometry yet (a
-  synthetic terrain-detail producer exercises the contract under tests/DEV only). **LOAD-BEARING DOCTRINE: it reduces
-  CPU/upload stalls + buffer-size pressure; it does NOT replace LOD.** LOD can only be deferred or reduced after
-  Visual Benchmark-1 proves triangle/draw/memory/frame-budget safety. Five new `src/world/geometry/` modules; the only
-  runtime touch is **additive** (`__PERF__.paged` + a DEV `__PAGED__` harness + four reported `paged*` metrics in
-  `extractMetrics`) — `CONTRACT_BUDGETS`/`evaluateContract` UNCHANGED, no production stream constructed, shipped worlds
-  byte-stable. Generated pages are runtime projections, never saved. See ADR-048 below.
-- **Geometry Stream gates GREEN**: `test:geometry-stream` (9 Node checks: 200k→4×≤64k pages · seed-determinism incl.
-  geometric uniqueness · over-limit/duplicate-id/non-finite rejection · transactional replace · clear/dispose ·
-  rebuild-no-accumulation · contract-receives-paged-stats from a real `stream.snapshot()` · forbidden-source scan) +
-  `test:geometry-stream-proof` (SwiftShader: mount → incremental commit 1→2→3→4 (not one upload) → contract sees stats
-  live → unmount disposes all → `__PERF__.paged` null; 0 console errors). Fresh-context adversarial review (6
-  dimensions incl. a dedicated **lod-doctrine** check + per-finding verify, 184 executed probes): **0 critical / 0
-  high / 0 medium / 4 LOW** — the 3 test-rigor LOWs fixed (geometric-determinism / real-snapshot / non-vacuous
-  baseline), the 4th (this ADR's doctrine affirmation) closed by ADR-048. Full regression re-run this session —
-  `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`, `test:first-playable-proof`,
-  `test:performance-contract-proof`, `test:encounter-editor-proof` — all green; shipped worlds byte-stable.
-- **Next per ADR-039 roadmap: Visual Benchmark-1.**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Visual Benchmark-1 — one polished, measurable
+  authored corridor** (ADR-049): a NEW authored sample world (`visual-benchmark-1`) composing the Relic Overlook →
+  glacial crossing → cache-pedestal corridor as intentional data — glacial terrain/water/fog, authored primitive
+  landmarks framing a readable route, a Procedural Authoring-1 beacon-trail, an Encounter Editor-0 combat beat, a
+  reference-only validated-GLB cache prop, and the runtime-automatic relic loop. It answers the central question —
+  *can one small authored slice look intentional and stay measurable, reload-safe, and playable?* — **yes.** It does
+  NOT mutate the shipped Frozen Cache / first-playable slice (those stay historical baselines, byte-stable). The only
+  EXISTING files touched are additive (a registered sample, an added benchmark scene, a 5→6 scene-count edit, two test
+  scripts) — main.js untouched, `CONTRACT_BUDGETS` unchanged, no `WORLD_DOCUMENT_VERSION` bump.
+- **MEASURED + LOD FINDING (`docs/VISUAL_BENCHMARK.md`):** baseline (SwiftShader, STRUCTURAL not GPU-FPS) draws 116 /
+  tris 512,962 / objs 11 / batches 2 — **grass dominates triangles (≈513k, like the empty floor); the authored
+  corridor adds ~10 objects + 2 batches and keeps draws green.** Finding: **B — LOD can be deferred for this scoped
+  benchmark** (the dominant cost is grass, managed by patch streaming + the visibility kernel, not per-object LOD).
+  **C** (LOD reducible for streamed procedural detail) **remains an untested hypothesis** — the geometry stream was
+  used for MEASURED STATS ONLY (DEV `__PAGED__`), no production consumer created (per ADR-048). **LOD is
+  deferred-not-deleted**; no "LOD obsolete" / Nanite / "no visible lag" claim anywhere.
+- **Visual Benchmark gates GREEN**: `test:visual-benchmark` (9 Node: valid + deterministic + registered + composed
+  [landmarks frame a readable route · reference-only GLB · beacon-trail · one combat beat] + budget-bounded) +
+  `test:visual-benchmark-proof` (SwiftShader: living world → composition → GLB resolved → geometry-stream stats →
+  Performance Contract → relic AND encounter completed → reload-persists → 0 console errors). The `visual-benchmark`
+  scene is the Performance Contract's 6th gated scene (ceiling captured-then-locked). Fresh-context adversarial review
+  (6 dimensions incl. byte-stability + lod-doctrine + per-finding verify, 219 executed probes): **0 critical / 0 high /
+  1 medium / 2 low** — all 3 fixed (lintel immutability · proof asset-idempotency · paged-completeness assertion). Full
+  regression re-run this session — `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`,
+  `test:first-playable-proof`, `test:performance-contract-proof` (6 scenes) — all green; shipped worlds byte-stable.
+- **Next per ADR-039 roadmap: WebGPU Feasibility Gate.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -124,7 +129,7 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
-**Visual Benchmark-1 (next)** → WebGPU Feasibility Gate.
+Visual Benchmark-1 → **WebGPU Feasibility Gate (next)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1871,8 +1876,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 7. Enemy-0            — one non-networked test enemy
 8. Encounter Editor-0 — authored encounter placement  ← SHIPPED (ADR-047)
 9. Geometry Stream Gate-0 — deterministic ≤64k-vertex chunked geometry streaming (infra gate; does NOT replace LOD)  ← SHIPPED (ADR-048)
-10. Visual Benchmark-1 — one compact area polished to shipping quality  ← IMMEDIATE NEXT
-11. WebGPU Feasibility Gate
+10. Visual Benchmark-1 — one compact area polished to shipping quality  ← SHIPPED (ADR-049)
+11. WebGPU Feasibility Gate  ← IMMEDIATE NEXT
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2582,3 +2587,72 @@ No WebGPU, workers, async race complexity, or renderer rewrite. No `Math.random`
 `eval`/network/`fs`/dynamic import in the emission path. No generated geometry in the world document. No weakening
 of Performance Contract-1. No `WORLD_DOCUMENT_VERSION` bump. Next per ADR-039: **Visual Benchmark-1** (which may
 USE the stream as one tool, but LOD stays deferred-not-deleted until its budget evidence lands).
+
+## ADR-049 — Visual Benchmark-1: One Polished, Measurable Authored Corridor
+
+Decision recorded 2026-06-20. Tag `world-builder-visual-benchmark-1` (local only, no push). The first serious
+quality target in phase 12, after Geometry Stream Gate-0 (ADR-048).
+
+**Context.** With the engine's systems shipped (terrain/water/fog, authored procedural modifiers, asset
+pipeline, encounter authoring, the performance contract, and the geometry stream), the operator called for
+the first *quality* target: prove those systems can **coexist in one intentional space** — not a new engine
+phase. The central question: *can one small authored slice look intentional and stay measurable, reload-safe,
+and playable?* Hard fences: do NOT mutate the shipped Frozen Cache / first-playable slice (historical
+baselines), no renderer rewrite / WebGPU / new generator / new combat / asset-pipeline expansion, no new
+production geometry-stream consumer, no "LOD obsolete" language.
+
+**Decision — a NEW authored sample world, reusing every system as data.** `visual-benchmark-1`
+(`src/world/samples/visualBenchmarkV1.js`, registered in `samples/index.js`, loadable via
+`?world=visual-benchmark-1`) composes the Relic Overlook → glacial crossing → cache-pedestal corridor:
+
+- **Terrain/water/fog** — the default alpine glacial valley (Visual-0/1), no override.
+- **Composition** — authored primitive landmarks (overlook gateway, ruin, ice-pillar pass, cache pedestal)
+  arranged along the deterministic `deriveSites(spawn)` axis (relic +X·14, cache −X·26), framing a readable
+  route with an unobstructed carry centerline. `visualBenchmarkLayout()` is the single source of truth the
+  builder + the proof share.
+- **Procedural authoring** — a Procedural Authoring-1 beacon-trail spline + mask + modifier along the route.
+- **Encounter** — one Encounter Editor-0 `combat-beat.v0` (glacial_sentinel) on the crossing.
+- **Asset** — a reference-only validated-GLB cache prop (`type:"gltf"`, `asset:null`, fixed
+  `BENCHMARK_CACHE_ASSET_ID`); the binary lives in IndexedDB (the proof imports the clean fixture, budget-
+  validates it, and re-stores it under the fixed id). GLB binaries are never embedded in the document.
+- **Gameplay** — the relic find→carry→cache loop is the runtime's AUTOMATIC objective (no authored
+  `objectives` block); the landmarks frame that same axis. Both the relic loop and the encounter complete.
+
+The composition is pure + deterministic (no `Math.random`/`Date.now`/`performance.now`). The shipped slice is
+NOT touched: `main.js`, `FrozenCacheSlice.js`, `PerformanceContract.js`, and `WorldDocument.js` are
+byte-identical; only additive edits to `BenchmarkScenes.js` (a 6th scene), `samples/index.js` (registration),
+`performance-contract-regression.mjs` (5→6 count), and `package.json` (two scripts). No
+`WORLD_DOCUMENT_VERSION` bump.
+
+**Performance Contract inclusion.** `visualBenchmarkScene()` is the contract's 6th gated benchmark scene (the
+unresolvable-headless GLB prop is dropped from the budget variant — its live cost is proven in the proof).
+Ceiling captured-then-locked (draws ≤160, tris ≤700k, objs ≤16, batches ≤8, veg ≤120, rtAssets ≤12) at
+baseline + headroom. `CONTRACT_BUDGETS`/`evaluateContract`/`assertWithinBudget` are UNCHANGED — the contract
+is not weakened.
+
+**Geometry stream + the LOD finding (the load-bearing deliverable).** The geometry stream is used for
+**measured stats only** (the DEV `__PAGED__` harness mounts a synthetic producer, commits it, reads stats,
+unmounts) — **no production streamed-detail consumer is created** (that would be a different stage, per
+ADR-048). `docs/VISUAL_BENCHMARK.md` records the measured baseline (SwiftShader = CPU/structural signal, NOT
+GPU FPS — stated explicitly) and the conservative finding: **B — LOD can be deferred for this scoped
+benchmark** (grass dominates triangles ≈513k, managed by patch streaming + the visibility kernel, not
+per-object LOD; the authored corridor adds little). **C** (LOD reducible for streamed procedural detail)
+**remains an untested hypothesis** — no real consumer exists. The doc states verbatim: *PagedGeometryStream is
+available and structurally measured; no production visual dependency has been created yet; LOD remains
+deferred-not-deleted.* No "LOD obsolete" / Nanite / "no visible lag" claim appears (the only Nanite mention is
+the forbidden-claims list).
+
+**Verification.** `test:visual-benchmark` (9 Node checks: valid + deterministic + registered + composed +
+budget-bounded) + `test:visual-benchmark-proof` (SwiftShader: living world → composition → GLB resolved →
+geometry-stream stats → Performance Contract → relic AND encounter completed → reload-persists → 0 console
+errors). Full regression re-run green incl. byte-stability proofs `test:frozen-cache-proof` +
+`test:first-playable-proof` + `test:performance-contract-proof` (6 scenes). Fresh-context adversarial review —
+6 dimensions (byte-stability-boundary / composition-authoring / asset-reference-only / performance-contract /
+geometry-stream-lod-doctrine / proof-rigor) + per-finding verify, 219 executed probes — returned **0 critical
+/ 0 high / 1 medium / 2 low**, all three fixed (lintel built immutably; proof asset re-store made idempotent;
+the geometry-stream demo now asserts every page committed).
+
+**Non-goals (held).** No mutation of the shipped Frozen Cache / first-playable slice. No renderer rewrite, no
+WebGPU, no new generator, no new combat, no asset-pipeline expansion, no broad biome overhaul. No new
+production geometry-stream consumer. No "LOD obsolete" language. No `WORLD_DOCUMENT_VERSION` bump. No embedded
+GLB binary. Next per ADR-039: **WebGPU Feasibility Gate** (a future feasibility track, not a commitment).
