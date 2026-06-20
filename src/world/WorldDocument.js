@@ -116,6 +116,11 @@ export function createWorldDocument(overrides = {}) {
     // item carries { type, id, position, maxHealth, defeated }. Absent in the shipped world →
     // no enemies there. NOT an encounter system: one stationary type, idle/hit-react/defeated.
     enemies: { version: 1, items: [] },
+    // Authored combat encounters (Encounter Editor-0) — placed "combat beat" descriptors. Each item
+    // carries { type, id, position, radius, enemyType, enemyCount, completed, persistCompletion }. In
+    // play each projects ONE ephemeral Enemy-0 the player defeats; the spawned enemy is NEVER baked into
+    // `enemies.items` (the world stores the DESCRIPTOR, not the enemy). Absent in the shipped world.
+    encounters: { version: 1, items: [] },
     // Procedural authoring (Procedural Authoring-1) — editable splines/masks and the
     // modifiers that consume them. The modifier VISUALS are re-derived each load (never
     // baked into `objects`); this block is the source of truth. NOT a node graph.

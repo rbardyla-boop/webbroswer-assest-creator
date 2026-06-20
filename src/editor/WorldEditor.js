@@ -24,6 +24,13 @@ import { sanitizeParticles } from "../particles/ParticleValidation.js";
 import { ParticleRuntime } from "../particles/ParticleRuntime.js";
 import { VoxelDebugPanel } from "../voxels/VoxelDebugPanel.js";
 import { ProceduralPanel } from "./ProceduralPanel.js";
+import { EncounterPanel } from "./EncounterPanel.js";
+// Encounter Editor-0 click-to-place: write a combat-beat descriptor + draw a preview ring. PURE encounter
+// modules only (descriptor store + shared ring) — placement spawns no enemy; the runtime projects it.
+import { EncounterStore } from "../world/encounters/EncounterPersistence.js";
+import { ENCOUNTER_TYPE, DEFAULT_RADIUS } from "../world/encounters/EncounterTypes.js";
+import { buildZoneRing, disposeZoneRing, RING_Y_OFFSET } from "../world/encounters/EncounterMarkers.js";
+import { ENEMY_TYPE } from "../world/enemies/EnemyTypes.js";
 import { summarizeAssetAnimation } from "../animation/AnimationMetadata.js";
 import { AssetImporter } from "../assets/AssetImporter.js";
 import { AssetLibrary } from "../assets/AssetLibrary.js";
@@ -133,6 +140,11 @@ export class WorldEditor {
     this.placedAssetStore = placedAssetStore ?? null;
     this.placedWeaponRuntime = placedWeaponRuntime ?? null;
     this._weaponArmCounter = 0;
+    // Encounter Editor-0: when armed, terrain clicks drop a combat-beat descriptor (no enemy spawns in
+    // the editor). `_encounterRings` are session/render-only preview rings — never serialized as objects.
+    this.armedEncounter = false;
+    this._encounterCounter = 0;
+    this._encounterRings = [];
     this.lastExportReport = null;
     this.modRegistry = modRegistry ?? new ModRegistry();
     this.animationPreview = new AnimationPreview();
@@ -266,6 +278,11 @@ export class WorldEditor {
     this.voxelPanel?.clear();
     this._armPrefabPlacement(null);
     this._armWeaponPlacement(false);
+    // Encounter Editor-0: disarm placement, refresh the list, and rebuild the preview rings for the
+    // reloaded world (the old rings referenced the torn-down scene).
+    this._armEncounterPlacement(false);
+    this.encounterPanel?.refresh();
+    this._refreshEncounterRings();
     this.prefabPanel?.refresh();
     // A reloaded world brings its own lighting — refresh the editor panel from it.
     this.lightingPanel?.setLighting(this.worldLoader?.document?.lighting);
@@ -605,6 +622,15 @@ export class WorldEditor {
     });
     root.appendChild(this._section("Procedural (city / camp / ruin / forest / road / plaza / connector)", this.proceduralPanel.root));
 
+    // Encounter Editor-0: place + configure authored combat beats. Arming routes through editor
+    // methods (placement writes a descriptor + a preview ring); removal deletes the descriptor.
+    this.encounterPanel = new EncounterPanel({
+      getDocument: () => this.worldLoader?.document,
+      onArm: (on) => this._armEncounterPlacement(on),
+      onRemove: (id) => this._removeEncounter(id),
+    });
+    root.appendChild(this._section("Encounters (combat beat)", this.encounterPanel.root));
+
     // Procedural Authoring-1: spline/mask/modifier authoring. Buttons route to editor
     // methods that record undoable commands + drive the in-scene edit tools.
     this.authoringPanel = new AuthoringPanel({
@@ -916,13 +942,16 @@ export class WorldEditor {
       if (typing) return;
       if (event.code === "Delete" || event.code === "Backspace") this._deleteSelected();
       if (event.code === "Escape") {
-        // Escape disarms placement (weapon, then prefab) first, then closes the editor.
-        if (this.armedWeaponRecipe) this._armWeaponPlacement(false);
+        // Escape disarms placement (encounter, then weapon, then prefab) first, then closes the editor.
+        if (this.armedEncounter) this._armEncounterPlacement(false);
+        else if (this.armedWeaponRecipe) this._armWeaponPlacement(false);
         else if (this.armedPrefab) this._armPrefabPlacement(null);
         else this.close();
       }
       // B arms/disarms weapon placement (Arsenal v3): then terrain clicks drop generated weapons.
       if (event.code === "KeyB") this._armWeaponPlacement(!this.armedWeaponRecipe);
+      // N arms/disarms encounter placement (Encounter Editor-0): then terrain clicks drop combat beats.
+      if (event.code === "KeyN") this._armEncounterPlacement(!this.armedEncounter);
       if (event.code === "KeyQ") this.transform.setMode("translate");
       if (event.code === "KeyE") this.transform.setMode("rotate");
       if (event.code === "KeyR") this.transform.setMode("scale");
@@ -965,6 +994,15 @@ export class WorldEditor {
     if (this.splineTool?.isActive || this.maskTool?.isActive) {
       const toolHits = this.raycaster.intersectObject(this.terrain.mesh, false);
       if (toolHits.length) this._handleAuthoringClick(toolHits[0].point);
+      return;
+    }
+
+    // When encounter placement is armed, terrain clicks drop a combat-beat descriptor (repeatedly).
+    // Writes TEXT only — no enemy spawns in the editor; the runtime projects it in play. Object
+    // selection is suppressed so multiple placements stay fast. Highest precedence among the armed modes.
+    if (this.armedEncounter) {
+      const encHits = this.raycaster.intersectObject(this.terrain.mesh, false);
+      if (encHits.length) this._placeEncounterAt(encHits[0].point.x, encHits[0].point.z);
       return;
     }
 
@@ -1276,6 +1314,77 @@ export class WorldEditor {
     const preset = WEAPON_PRESETS[this._weaponArmCounter % WEAPON_PRESETS.length];
     this.armedWeaponRecipe = generateWeaponRecipe(rollConfig(preset.seed + this._weaponArmCounter, preset.type));
     this._weaponArmCounter++;
+  }
+
+  // Encounter Editor-0: arm/disarm combat-beat placement. While armed, terrain clicks drop a beat
+  // descriptor. Mutually exclusive with weapon/prefab placement and selection.
+  _armEncounterPlacement(on) {
+    this.armedEncounter = !!on;
+    if (on) {
+      this._armWeaponPlacement(false);
+      this._armPrefabPlacement(null);
+      this._select(null);
+    }
+    this.encounterPanel?.setArmed(this.armedEncounter);
+  }
+
+  // Place a combat-beat descriptor at world XZ (grid-snapped, grounded). Shared by the armed-canvas
+  // click and the DEV proof hook. Writes TEXT to document.encounters.items via EncounterStore + draws a
+  // preview ring — it spawns NO enemy (the runtime projects the enemy only in play). Non-undoable for the
+  // MVP (auto-persist), like the procedural generator, to avoid orphaned-descriptor undo bugs.
+  _placeEncounterAt(x, z) {
+    const document = this.worldLoader?.document;
+    if (!document) return null;
+    const g = this.snap.snapPlacement({ x, y: 0, z });
+    const y = getHeight(g.x, g.z);
+    const descriptor = new EncounterStore(document).add({
+      type: ENCOUNTER_TYPE,
+      id: `encounter-${this._encounterCounter++}`,
+      position: { x: g.x, y, z: g.z },
+      radius: this.encounterPanel?.radius() ?? DEFAULT_RADIUS,
+      enemyType: ENEMY_TYPE,
+      enemyCount: 1,
+      completed: false,
+      persistCompletion: this.encounterPanel?.persistCompletion() ?? true,
+    });
+    if (descriptor) {
+      this._markDirty(); // placement changed the world → schedule autosave + refresh outliner
+      this.encounterPanel?.refresh();
+      this._refreshEncounterRings();
+    }
+    return descriptor;
+  }
+
+  // Remove a placed beat (panel ✕). Deletes the descriptor + its preview ring.
+  _removeEncounter(id) {
+    const document = this.worldLoader?.document;
+    if (!document) return;
+    if (new EncounterStore(document).remove(id)) {
+      this._markDirty();
+      this.encounterPanel?.refresh();
+      this._refreshEncounterRings();
+    }
+  }
+
+  // Rebuild the editor's encounter preview rings from the live document. Session/render projection
+  // ONLY — the rings are tracked here, disposed + rebuilt on every change, and NEVER written into
+  // document.objects (so an encounter persists as a descriptor, not as baked geometry).
+  _refreshEncounterRings() {
+    for (const ring of this._encounterRings) {
+      ring.removeFromParent();
+      disposeZoneRing(ring);
+    }
+    this._encounterRings = [];
+    const items = this.worldLoader?.document?.encounters?.items ?? [];
+    for (const enc of items) {
+      const p = enc.position ?? { x: 0, y: 0, z: 0 };
+      const y = getHeight(p.x, p.z);
+      if (!Number.isFinite(y)) continue;
+      const ring = buildZoneRing(enc.radius);
+      ring.position.set(p.x, y + RING_Y_OFFSET, p.z);
+      this.scene.add(ring);
+      this._encounterRings.push(ring);
+    }
   }
 
   async _placeArmedPrefab(point) {

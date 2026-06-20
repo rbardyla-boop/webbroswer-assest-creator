@@ -88,6 +88,31 @@ export class EnemyRuntime {
     return actor;
   }
 
+  // Encounter Editor-0 hook (additive): project a TRANSIENT enemy that is NOT a document item. The
+  // descriptor is owned by the caller (an encounter), never persisted to `enemies.items` — so a reload
+  // re-derives it from the encounter and never bakes a pre-dead enemy. Identical to a doc-authored spawn
+  // (registers a combat target, drives the same FSM) except the actor is flagged `ephemeral`, so
+  // snapshot() omits it (the encounter reports it) and removeEphemeral can tear down just it. Returns the
+  // actor (for the encounter's defeat polling) or null when the position is non-finite.
+  spawnEphemeral(descriptor, groundHeight = null) {
+    const actor = this._spawn(descriptor, groundHeight);
+    if (actor) actor.ephemeral = true;
+    return actor;
+  }
+
+  // Tear down one ephemeral actor (encounter teardown). Guards on the ephemeral flag, so a baked,
+  // doc-authored enemy can never be removed through this path. Idempotent — a missing or non-ephemeral
+  // id is a no-op (returns false).
+  removeEphemeral(id) {
+    const actor = this.enemies.get(id);
+    if (!actor?.ephemeral) return false;
+    this.combatRuntime?.unregisterTarget(id);
+    actor.group.removeFromParent();
+    disposeGroup(actor.group);
+    this.enemies.delete(id);
+    return true;
+  }
+
   // Combat dispatched a strike to this actor. Apply one hit of damage (latched once defeated) and,
   // on the defeat edge, persist the terminal state by mutating the live document descriptor in place
   // (mirrors objective completion) + raise a one-shot persist request main consumes.
@@ -148,7 +173,9 @@ export class EnemyRuntime {
   // the animated transform.
   snapshot() {
     return {
-      enemies: [...this.enemies.values()].map((a) => ({
+      // Ephemeral (encounter-projected) actors are reported by EncounterRuntime, not here, so the
+      // doc-authored enemy view stays byte-stable for the existing Enemy-0 tests/worlds.
+      enemies: [...this.enemies.values()].filter((a) => !a.ephemeral).map((a) => ({
         id: a.id,
         type: a.type,
         state: a.state.state,

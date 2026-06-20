@@ -45,6 +45,7 @@ import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
 import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
 import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
+import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
 const container = document.getElementById("app");
@@ -150,6 +151,10 @@ const combatRuntime = runtimeMode
 // (combat stays the hit authority; the enemy only consumes registerHit). Doc-authored: absent in the
 // shipped world → no enemies there. `defeated` persists; live health is runtime-only.
 const enemyRuntime = runtimeMode ? new EnemyRuntime({ scene, combatRuntime }) : null;
+// Encounter Editor-0 — runtime-only orchestration. Projects each authored combat beat's enemy through
+// enemyRuntime.spawnEphemeral (never a document item → no baked enemy) + polls it for defeat/completion.
+// Editing never projects (editor authors the descriptor); absent in the shipped world → no encounters.
+const encounterRuntime = runtimeMode ? new EncounterRuntime({ scene, enemyRuntime }) : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -446,17 +451,35 @@ if (import.meta.env.DEV) {
       return true;
     },
   };
+  // Dev/test-only: encounter snapshot (beat identity + completion + the projected enemy's id/state). The
+  // projected enemy IS a combat target, so __COMBAT_DO__ teleports/aims/fires at it (via enemyId). For test:encounter-editor-proof.
+  window.__ENCOUNTER__ = () => encounterRuntime?.snapshot() ?? null;
+  // Dev/test-only: tick the encounter runtime + flush the completion-persist exactly as the main loop
+  // does (the headless rAF is throttled ~5fps), so the proof can resolve a beat deterministically.
+  window.__ENCOUNTER_DO__ = {
+    step: (dt = 1 / 60) => {
+      encounterRuntime?.update(dt, player);
+      if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
+      return true;
+    },
+  };
   // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
   // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
   // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
   window.__DOC_DEBUG__ = () => {
     const items = world?.document?.runtimeAssets?.items ?? [];
     const objectives = world?.document?.objectives?.items ?? [];
+    const enemies = world?.document?.enemies?.items ?? [];
+    const encounters = world?.document?.encounters?.items ?? [];
     let cacheBeacons = 0;
     let relicMarkers = 0;
+    let sentinels = 0; // glacial-sentinel meshes in the scene (incl. encounter-projected ephemerals)
+    let encounterZones = 0; // encounter preview/zone rings in the scene
     scene.traverse((n) => {
       if (n.name === "ObjectiveCacheBeacon") cacheBeacons++;
       else if (n.name === "ObjectiveRelicMarker") relicMarkers++;
+      else if (n.name === "GlacialSentinel") sentinels++;
+      else if (n.name === "EncounterZone") encounterZones++;
     });
     return {
       objectives: objectives.length,
@@ -465,6 +488,13 @@ if (import.meta.env.DEV) {
       tutorialWeapons: items.filter((i) => i.id === TUTORIAL_WEAPON_ID).length,
       cacheBeacons,
       relicMarkers,
+      // Encounter Editor-0: doc-level counts (the world stores DESCRIPTORS, never baked enemies) +
+      // scene-level actor counts (the projected ephemeral exists in the scene but not in enemies.items).
+      enemies: enemies.length,
+      encounters: encounters.length,
+      encountersCompleted: encounters.filter((e) => e.completed === true).length,
+      sentinels,
+      encounterZones,
     };
   };
   // Dev/test-only: settlement layout snapshot (Stage 18C) for test:settlement-layout.
@@ -753,6 +783,14 @@ function loadEnemies(document) {
   enemyRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z) });
 }
 
+// (Re)project Encounter Editor-0 combat beats from the loaded world (runtime only): draw each beat's
+// zone ring + spawn its one ephemeral enemy via enemyRuntime (never baked into enemies.items). MUST run
+// AFTER loadEnemies() (which clears + respawns the doc-authored enemy set) so the ephemerals join a fresh
+// set. Grounds onto the terrain single source. Idempotent (load() clears prior rings + ephemerals).
+function loadEncounters(document) {
+  encounterRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z) });
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -788,6 +826,7 @@ async function applyLoadedWorld(document) {
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
+  loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -972,6 +1011,7 @@ async function boot() {
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
+  loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -1154,6 +1194,9 @@ function frame(now) {
   enemyRuntime?.update(dt, player); // enemy-0: advance hit-react/defeated state + body visual (after combat dispatches the hit)
   // Persist a freshly-defeated enemy's terminal state (mirrors objective completion → save-on-edge).
   if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
+  encounterRuntime?.update(dt, player); // encounter-editor-0: poll each beat's enemy for defeat (after the enemy FSM ran)
+  // Persist a freshly-completed beat (only when persistCompletion) — save-on-edge, like enemy defeat.
+  if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
   frozenCacheSlice?.update(dt);
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer

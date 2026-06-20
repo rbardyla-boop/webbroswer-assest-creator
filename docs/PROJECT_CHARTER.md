@@ -22,24 +22,28 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Enemy-0 accepted; tag `world-builder-enemy-0`).**
-- **57 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Encounter Editor-0 accepted; tag `world-builder-encounter-editor-0`).**
+- **58 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-0 — Reactive Combat Target**
-  (ADR-046): the first CONSUMER of the Combat-0 seam — an enemy spawns → registers as a combat target → receives the
-  existing `StrikeEvent` → applies a finite health/state transition (idle / hit-react / defeated) → can be defeated.
-  Combat-target consumption, NOT AI (explicit non-goals: full AI, patrol, chase, loot, waves, inventory, projectiles,
-  navmesh, factions). KEY DESIGN: the enemy is a `CombatTarget`-shaped adapter dropped into `combatRuntime.targets`,
-  so combat's existing `registerHit` dispatch delivers the strike — **no duplicate hit detection**; the only combat
-  change is an additive `registerTarget`/`unregisterTarget`. Five new `src/world/enemies/` modules; `combatRuntime` is
-  injected, never imported. Enemies are **doc-authored, not auto-spawned**, so the shipped Frozen Cache / first-playable
-  world is UNCHANGED (zero enemies there). `defeated` persists; live health is runtime-only. See ADR-046 below.
-- **Enemy gates GREEN**: `test:enemy` (8 Node checks, incl. a non-vacuous consumption test that drives a *real*
-  `CombatRuntime` raycast through `registerHit`) + `test:enemy-proof` (SwiftShader: register → strike → defeat
-  (latched) → reload-persists-defeated → zero-enemy world unaffected → budget ok; 0 console errors). Combat unweakened:
-  `test:combat` (10) + `test:combat-proof` green. Full regression re-run this session — `qa`, all Node regressions, and
-  browser proofs `test:frozen-cache-proof`, `test:first-playable-proof`, `test:arsenal-v6` — all green.
-- **Next per ADR-039 roadmap: Encounter Editor-0.**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Encounter Editor-0 — Author One Combat Beat**
+  (ADR-047): the editor places + configures a "combat beat" descriptor; in PLAY it ORCHESTRATES the Enemy-0 + Combat-0
+  seams — the beat projects ONE ephemeral enemy the player defeats via the existing hitscan → the beat completes →
+  completion persists. Authored placement + completion ONLY, NOT an encounter system (explicit non-goals: waves, loot,
+  rewards, AI director, pathfinding, factions, scripting language, dialogue, inventory, procedural combat). KEY DESIGN:
+  the load-bearing invariant is **NO BAKED ENEMY** — the world stores the DESCRIPTOR, never the spawned enemy. The enemy
+  is projected through ONE additive `EnemyRuntime.spawnEphemeral` (a transient actor never written to `enemies.items`);
+  `_spawn`/`_onHit`/`load`/`clear`/`update` stay byte-unchanged. Six new `src/world/encounters/` modules + an
+  `EncounterPanel`; `enemyRuntime` is injected, never imported. Encounters are **doc-authored**, so the shipped Frozen
+  Cache / first-playable world is UNCHANGED (zero encounters there). `completed` persists (per-beat `persistCompletion`,
+  default true); the spawned enemy is runtime-only. See ADR-047 below.
+- **Encounter gates GREEN**: `test:encounter-editor` (7 Node checks, incl. a non-vacuous test driving a *real*
+  `CombatRuntime` + `EnemyRuntime` that proves `spawnEphemeral` registers a combat target yet never touches
+  `enemies.items`, and `removeEphemeral` refuses baked enemies) + `test:encounter-editor-proof` (SwiftShader:
+  author-in-editor → project enemy (not baked, `enemies.items` length 0) → strike to defeat → complete →
+  reload-persists with no respawn → budget ok; 0 console errors). Seams unweakened: `test:enemy` (8), `test:combat` (10), both proofs
+  green. Full regression re-run this session — `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`,
+  `test:first-playable-proof`, `test:performance-contract-proof` — all green.
+- **Next per ADR-039 roadmap: Visual Benchmark-1.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -109,14 +113,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | 10 · Performance & scale | Procedural Authoring-1 — Editable Spline / Mask / Modifier | `…procedural-authoring-1` | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ (ADR-043) |
 | 11 · Identity & assets | Asset Pipeline-1 — Validated GLB Budget Gate | `…asset-pipeline-1` | `test:asset-pipeline` `test:asset-pipeline-proof` | ✅ (ADR-044) |
 | 12 · Combat & encounters | Combat-0 — Validated Hitscan Strike Seam | `…combat-0` | `test:combat` `test:combat-proof` | ✅ (ADR-045) |
-| 12 · Combat & encounters | **Enemy-0 — Reactive Combat Target** | **`…enemy-0`** | `test:enemy` `test:enemy-proof` | ✅ **LATEST** (ADR-046) |
+| 12 · Combat & encounters | Enemy-0 — Reactive Combat Target | `…enemy-0` | `test:enemy` `test:enemy-proof` | ✅ (ADR-046) |
+| 12 · Combat & encounters | **Encounter Editor-0 — Author One Combat Beat** | **`…encounter-editor-0`** | `test:encounter-editor` `test:encounter-editor-proof` | ✅ **LATEST** (ADR-047) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-Asset Pipeline-1 → Combat-0 → Enemy-0 → **Encounter Editor-0 (next)** → Visual Benchmark-1 → WebGPU Feasibility Gate.
+Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → **Visual Benchmark-1 (next)** → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1861,8 +1866,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 5. Asset Pipeline-1   — GLB import + validation, LOD/collision gen, material templates, provenance/budgets
 6. Combat-0           — combat seam only (no enemies)
 7. Enemy-0            — one non-networked test enemy
-8. Encounter Editor-0 — authored encounter placement
-9. Visual Benchmark-1 — one compact area polished to shipping quality
+8. Encounter Editor-0 — authored encounter placement  ← SHIPPED (ADR-047)
+9. Visual Benchmark-1 — one compact area polished to shipping quality  ← IMMEDIATE NEXT
 10. WebGPU Feasibility Gate
 ```
 
@@ -2391,3 +2396,107 @@ empirical probes; no source mutation reached the tree — changed-file set + a p
 **Non-goals (held).** No enemy AI, patrol, chase, loot, waves, XP, inventory, projectiles, navmesh, factions,
 networking, encounter authoring, or duplicate hit detection. No `WORLD_DOCUMENT_VERSION` bump. No change to
 the shipped Frozen Cache / first-playable world. Next per ADR-039: **Encounter Editor-0**.
+
+## ADR-047 — Encounter Editor-0: Author One Combat Beat (orchestrate the seams, don't rewrite them)
+
+**Status:** Accepted 2026-06-20. Tag `world-builder-encounter-editor-0` (local; no push). Third stage of
+phase 12 ("Combat & encounters"), after Enemy-0 (ADR-046).
+
+**Context.** Combat-0 (ADR-045) shipped the weapon-use seam; Enemy-0 (ADR-046) shipped the first consumer —
+a reactive combat target. Encounter Editor-0 is the **authoring layer**: the editor places + configures a
+simple combat encounter, and play resolves it through the existing seams. The minimum loop is *editor places
+an encounter descriptor → play projects one `glacial_sentinel` → Combat-0 defeats it → the encounter
+completes → the descriptor + completion persist*. Doctrine held: Combat-0 owns strikes, Enemy-0 owns reactive
+enemy state, Encounter Editor-0 owns authored **placement + completion only**. Explicit non-goals: waves,
+loot, rewards, an AI director, pathfinding, factions, an encounter scripting language, dialogue, inventory,
+procedural combat generation, duplicate enemy/combat models. (Skybreak 798 stays a *later design-reference
+audit* — recorded in memory, deliberately out of this stage's scope.)
+
+**The architecture call (orchestrate; one additive method).** A fresh codebase read confirmed Encounter
+Editor-0 is a thin orchestration layer on top of two live seams, touching neither's source except for one
+additive method. `EnemyRuntime._spawn` is *already* a descriptor-driven spawner that registers an
+`EnemyTargetAdapter` into `combatRuntime` — it does **not** require the descriptor to live in
+`document.enemies.items`. The editor *already* has the full placement machinery (`_handleCanvasClick` →
+raycast `terrain.mesh` → `snap.snapPlacement` → `_markDirty`). So: **build the encounter domain (six modules)
+plus an `EncounterPanel`, reuse `EnemyRuntime` as the spawn engine and `CombatRuntime` as the hit authority —
+both untouched as source save for one additive `EnemyRuntime.spawnEphemeral` (plus a sibling `removeEphemeral`
+and a `snapshot()` ephemeral filter).**
+
+**The load-bearing decision — no baked enemy (Approach A).** `EncounterRuntime` calls
+`EnemyRuntime.spawnEphemeral(descriptor, groundHeight)` — the enemy lives in a **transient pool** under a
+namespaced id (`enc:<encounterId>:<n>`), flagged `ephemeral`, with a descriptor the encounter owns that is
+**never** a `document.enemies.items` member; it polls `isDefeated(actor.state)` for completion. The
+alternative (push a transient enemy descriptor into `enemies.items`, feed it to `EnemyRuntime.load`) was
+**rejected**: the moment a sentinel descriptor enters `enemies.items` it round-trips through save/load and
+**respawns as a baked, pre-dead enemy on reload** — a direct violation of "no baked enemy." `spawnEphemeral`
+calls the unchanged `_spawn` then tags `actor.ephemeral = true`; `removeEphemeral` is guarded on that flag so
+a baked enemy can never be torn down through it (idempotent); `snapshot()` gains a `.filter(a => !a.ephemeral)`
+so ephemerals are reported by `EncounterRuntime.snapshot()` instead — `_spawn`/`_onHit`/`load`/`clear`/`update`
+bodies stay **byte-unchanged** (`test:enemy` 8 + `test:combat` 10 + both proofs re-run green). The id
+namespaces are provably disjoint: the enemy id sanitizer strips colons, so a sanitized doc id can never equal
+an `enc:…:0` ephemeral id.
+
+**Mechanism.** New `src/world/encounters/`: `EncounterTypes.js` (constants + clamps + the untrusted-block
+whitelist `normalizeEncounterDescriptor`, importing only `ENEMY_TYPES` from the pure enemy value module),
+`EncounterValidation.js` (`sanitizeEncountersBlock` — zero-warning on empty + capped), `EncounterPersistence.js`
+(`EncounterStore` add/get/remove over `document.encounters.items`, in-place), `EncounterCompletion.js` (the
+pure `allDefeated` rule, reusing Enemy-0's `isDefeated` — non-vacuous: an empty actor set is not complete),
+`EncounterMarkers.js` (the shared zone-ring builder — THREE only — used by both the runtime zone and the
+editor preview, DRY), and `EncounterRuntime.js` (the runtime orchestrator: draws each beat's ring, projects
+one ephemeral enemy via the injected `enemyRuntime`, polls defeat, marks completion). Additive edits:
+`EnemyRuntime` (the two methods + filter); an `encounters` document block; `sanitizeEncountersBlock` in
+`WorldValidation`; `WorldEditor` (the `EncounterPanel` section, `_armEncounterPlacement`, an `_handleCanvasClick`
+branch *before* the armed-weapon/prefab checks, `_placeEncounterAt`, `_removeEncounter`, render-only preview
+rings via `_refreshEncounterRings`, `KeyN` + `Escape` handling — placement folds into `WorldEditor` methods
+matching the inline armed-weapon precedent, not a separate tool file); runtime-only `main.js` wiring (construct
+after `enemyRuntime`; a `loadEncounters()` helper called in **both** load paths **after** `loadEnemies()` so
+ephemerals join a fresh enemy/target set; `encounterRuntime.update` + a save-on-completion-edge; DEV-only
+`__ENCOUNTER__` / `__ENCOUNTER_DO__` + additive `__DOC_DEBUG__` enemy/encounter counts).
+
+**The descriptor + persistence.** A beat descriptor is `type: "combat-beat.v0"` with `id`, `position`,
+`radius` (clamp [1,40], default 6), `enemyType` (∈ Enemy-0's `ENEMY_TYPES`, else reject), `enemyCount`
+(clamp to **exactly 1** — the no-waves gate), `completed`, and `persistCompletion`. A non-finite position
+**rejects** the encounter (no origin relocation); an
+unspawnable `enemyType` rejects it. `completed` and `persistCompletion` are **always-emitted booleans** so
+`false` survives save→load. Only the descriptor + completion persist: the editor's `EncounterStore.add`
+mutates `document.encounters.items` in place, which `updateDocumentFromRuntime` preserves and `WorldSerializer.save`
+re-validates; the runtime flips `descriptor.completed = true` on the defeat edge **only when
+`persistCompletion` (default true)** and raises a one-shot persist request. A replayable beat
+(`persistCompletion: false`) leaves the descriptor uncompleted, so it respawns its enemy on reload. The
+spawned enemy **never** persists. **No `WORLD_DOCUMENT_VERSION` bump (stays 2).** Encounters are
+**doc-authored**: a world with no `encounters` descriptor projects nothing, so the shipped Frozen Cache /
+first-playable world is byte-unchanged.
+
+**Two interpretive choices (operator-approved).** (1) `persistCompletion` is a per-beat boolean defaulting
+**true** (honoring the spec's "optionally persists / if configured" — a designer can author a replayable
+beat). (2) The radius preview is a **zone ring** drawn in *both* the editor (authoring feedback) and play
+(the zone), via the shared `EncounterMarkers` builder; the editor rings are session/render projections —
+tracked in `_encounterRings`, disposed + rebuilt on every change, and **never** written into
+`document.objects` (confirmed: they carry `userData.isEncounterMarker`, are added straight to the scene, and
+the serializer collects only `manager.objects`).
+
+**Verification.** `test:encounter-editor` (7 Node checks: the descriptor whitelist + non-finite/allow-list
+rejects + radius/count clamps, the zero-warning/​capped block, the store add/replace/remove, the **non-vacuous**
+`allDefeated`, the doc-block round-trip preserving `completed`/`persistCompletion`, the **load-bearing**
+ephemeral-isolation test that drives a *real* `CombatRuntime` + `EnemyRuntime` — `spawnEphemeral` registers a
+combat target yet `document.enemies.items` stays length 0, `snapshot()` omits the ephemeral, and
+`removeEphemeral` refuses a baked enemy — and the determinism/isolation static scan). `test:encounter-editor-proof`
+(SwiftShader: **author the beat through the real editor tool** → 1 descriptor + 1 preview ring + 0 enemies
+while editing → play projects the enemy as a combat target while `document.enemies.items` stays length 0 (a
+`GlacialSentinel` is live in the scene) → equip → strike ×3 → defeat → `completed` false→true → budget green →
+reload persists completion with no respawn and `enemies.items` still empty; 0 console errors). Full regression
+re-run green: `test:enemy` (8) + `test:combat` (10) + both proofs (seams unweakened), `test:first-playable-proof`,
+`test:frozen-cache-proof`, `test:performance-contract(-proof)`, `test:world`, `qa` (skills 32/0/0, layout, build).
+
+**Review.** Fresh-context workflow — 5 reviewers (no-baked-enemy / persistence-whitelist / lifecycle-leak /
+editor-boundary / isolation-determinism) → per-finding adversarial verification (default-refute). **0 critical
+/ 0 high / 0 medium / 0 low** — every dimension CLEAN with file:line evidence and executed probes (incl. a
+sharp id-namespace-disjointness proof that `enc:…:0` can never collide with a sanitized baked-enemy id). Per
+the Combat-0 / Enemy-0 process gotcha, the working tree was re-audited clean after the workflow (reviewers ran
+probes only under `/tmp`; the changed-file set, diffstat, a probe-marker grep, and a `test:encounter-editor`
+re-run were all unchanged).
+
+**Non-goals (held).** No waves, loot, rewards, AI director, pathfinding, factions, encounter scripting,
+dialogue, inventory, procedural combat, duplicate enemy/combat models, or baked enemies. No
+`WORLD_DOCUMENT_VERSION` bump. No change to the shipped Frozen Cache / first-playable world. Next per ADR-039:
+**Visual Benchmark-1**.

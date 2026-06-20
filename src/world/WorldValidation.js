@@ -18,6 +18,7 @@ import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
 import { sanitizeObjectivesBlock } from "./objectives/ObjectiveTypes.js";
 import { sanitizeEnemiesBlock } from "./enemies/EnemyValidation.js";
+import { sanitizeEncountersBlock } from "./encounters/EncounterValidation.js";
 import { sanitizeAuthoringBlock } from "./authoring/AuthoringTypes.js";
 import { sanitizeAssetBudget } from "../assets/AssetBudget.js";
 
@@ -80,6 +81,10 @@ export function validateWorldDocument(input) {
   // Enemy actors (Enemy-0): reactive combat targets; type/id/position/maxHealth/defeated
   // whitelisted so they survive save→load, the list capped (zero warnings when empty).
   doc.enemies = sanitizeEnemiesBlock(doc.enemies, warnings);
+  // Authored combat encounters (Encounter Editor-0): type/id/position/radius/enemyType/enemyCount/
+  // completed/persistCompletion whitelisted so they survive save→load, the list capped (zero warnings
+  // when empty). The enemy the beat projects is never stored here — only the descriptor.
+  doc.encounters = sanitizeEncountersBlock(doc.encounters, warnings);
   // Procedural authoring (Procedural Authoring-1): splines/masks/modifiers whitelisted +
   // capped. The modifier visuals re-derive each load, so only this intent block persists.
   doc.authoring = sanitizeAuthoringBlock(doc.authoring, warnings);
