@@ -93,10 +93,52 @@ LOD remains deferred-not-deleted.
 - Either result would move the conclusion from B (defer) toward "LOD needed soon" or toward testing C with a
   real producer.
 
+## Environment Polish-1 — before / after (ADR-051)
+
+Environment Polish-1 evolved this corridor **in place** toward a shippable authored slice **using only the
+existing stack** — no new rendering architecture, no WebGPU, no terrain/combat/AI work. The git tag
+`world-builder-visual-benchmark-1` preserves the pre-polish byte-state; the polished corridor is HEAD.
+
+What changed, all additive and measured:
+
+- **Composition / landmark density:** +4 route-framing primitives — two waypoint cairns guiding the eye
+  along the route, and a crossing gateway (two short ice posts) framing the combat beat as a threshold.
+- **Per-scene readability overrides (this document only):** `lighting` (a brighter, higher, more raking sun
+  so the stone/ice landmarks read with form; fog pushed back — near 90→112, far 320→380 — so the cache is
+  discoverable from the overlook while the route keeps depth), `water` (foam band 0.7→1.4, fresnel 0.28→0.40,
+  flow 0.35→0.50 so the crossing edge reads), `atmosphere` (basin fog 0.45→0.38, mist 0.40→0.32, mist band
+  12→16 so the corridor floor and crossing stay legible). Each config factory returns a fresh object and the
+  loader reads the value off the document, so these affect **only** the benchmark — the global default and
+  the frozen slices are byte-stable (the regression asserts a vanilla world still gets the unmodified default).
+- **Feedback:** ambient particle emitters stage the relic (spark), the cache (spark), and the crossing
+  threshold (dust); the relic loop's audio already comes from the always-on slice, so the additive
+  `RuntimeFeedback` owner closes the remaining gap with an **encounter-clear audio cue** (provable via a cue
+  counter — audio no-ops in the headless harness without a user gesture).
+
+| Capture (SwiftShader, structural) | draws | triangles | objects | inst. batches | veg patches | runtime assets |
+|---|---|---|---|---|---|---|
+| **Before** — Visual Benchmark-1 (full) | 116 | 512,962 | 11 | 2 | 62 | 2 |
+| **After** — Environment Polish-1 (full) | 119 | 511,720 | 15 | 1 | 62 | 2 |
+| **After** — Environment Polish-1 (budget variant) | 98 | 499,864 | 14 | 1 | 56 | 2 |
+
+The polish is **nearly free structurally**: +4 landmark objects and +3 ambient particle emitters add ~3 draw
+calls and no meaningful triangle delta (grass still dominates, ~500k ≈ the empty floor). The per-scene
+`visual-benchmark` ceiling was **re-captured and re-locked** at the new baseline + headroom — the `objects`
+ceiling moved 16→20 to track the polished authored count, while the draws/triangles/vegetation ceilings stay
+at the shared glacial-grass values (still ample headroom). The scene classifies **green** in the contract.
+
+The **LOD finding is unchanged: B (defer for this scope).** Polishing the corridor toward shipping quality did
+not move the scene out of its structural band — the same conclusion the original benchmark recorded. C (LOD
+reducible for streamed procedural detail) remains an untested hypothesis; no production streamed-detail
+producer was created. The SwiftShader-is-CPU-not-GPU caveat above still applies to every number here.
+
 ## Gates
 
-- `test:visual-benchmark` — Node: the authored scene is valid, deterministic, registered, composed (landmarks
-  frame a readable route; reference-only GLB; beacon-trail; one combat beat), and budget-bounded.
+- `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
+  (landmarks frame a readable route; reference-only GLB; beacon-trail; one combat beat), budget-bounded, the
+  per-scene readability overrides differ from the global default while the global default stays unchanged, and
+  ambient particle feedback is present.
 - `test:visual-benchmark-proof` — SwiftShader: living world → composition → GLB resolved → geometry-stream
-  stats → Performance Contract → relic + encounter completable → reload-persists → 0 console errors.
+  stats → Performance Contract → relic + encounter completable → readability overrides applied + persisted →
+  particle feedback live → encounter-clear cue fired → reload-persists → 0 console errors.
 - `test:performance-contract(-proof)` — the `visual-benchmark` scene is a gated benchmark scene (6th scene).

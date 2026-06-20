@@ -237,16 +237,18 @@ export function assetInstancesScene({ assetId = "gltf-fixture", count = 24 } = {
 export function visualBenchmarkScene() {
   const doc = buildVisualBenchmarkV1();
   doc.objects = doc.objects.filter((o) => o.type !== "gltf");
-  // Baseline (captured then locked, SwiftShader): draws 116, tris 512,962, objs 11, batches 2, vegPatch
-  // 62, rtAssets 2 — default glacial GRASS dominates triangles (like the empty floor); the ~10 authored
-  // landmark primitives + the beacon trail + the runtime relic + the projected encounter sentinel add
-  // little. Ceilings = measured baseline + ~35-45% headroom (the gate FAILS if set below the real number;
-  // matches the other glacial-grass scenes' draws/tris/veg ceilings). The objects ceiling guards the
-  // authored landmark count. See docs/VISUAL_BENCHMARK.md for the measured numbers + the LOD finding.
+  // Baseline RE-CAPTURED + RE-LOCKED for Environment Polish-1 (SwiftShader budget variant — GLB dropped):
+  // draws 98, tris 499,864, objs 14, batches 1, vegPatch 56, rtAssets 2 — default glacial GRASS still
+  // dominates triangles (like the empty floor); the polished landmark set (~14 authored primitives) + the
+  // 3 ambient particle emitters + the beacon trail + the runtime relic + the projected encounter sentinel
+  // add little. Ceilings = measured baseline + headroom (the gate FAILS if set below the real number;
+  // draws/tris/veg match the other glacial-grass scenes — grass dominates). The objects ceiling (16→20)
+  // tracks the polished authored count with headroom, far under the global red. See docs/VISUAL_BENCHMARK.md
+  // for the before/after numbers + the LOD finding.
   const gated = {
     drawCalls: 160,
     triangles: 700_000,
-    objects: 16,
+    objects: 20,
     instancedBatches: 8,
     visibleVegetationPatches: 120,
     runtimeAssets: 12,

@@ -27,6 +27,11 @@ import { deriveSites, isWalkable } from "../src/world/objectives/RelicWeaponObje
 import { ENCOUNTER_TYPE } from "../src/world/encounters/EncounterTypes.js";
 import { CONTRACT_BUDGETS } from "../src/perf/PerformanceContract.js";
 import { WorldObjectManager } from "../src/world/WorldObjectManager.js";
+import { createWorldDocument } from "../src/world/WorldDocument.js";
+import { glacialLighting } from "../src/lighting/GlacialAtmosphere.js";
+import { createWaterConfig } from "../src/world/water/WaterConfig.js";
+import { createAtmosphereConfig } from "../src/world/atmosphere/AtmosphereConfig.js";
+import { PARTICLE_KINDS } from "../src/particles/ParticleTypes.js";
 
 let passed = 0;
 const ok = (name) => {
@@ -98,6 +103,11 @@ const shape = (doc) => ({
   const layout = visualBenchmarkLayout();
   const landmarks = doc.objects.filter((o) => typeof o.id === "string" && o.id.startsWith("vb-"));
   assert.ok(landmarks.length >= 6, `authored landmarks present (${landmarks.length})`);
+  // Environment Polish-1: the route-framing additions (waypoint cairns + crossing gateway) exist.
+  const lmIds = new Set(landmarks.map((l) => l.id));
+  for (const req of ["vb-route-cairn-a", "vb-route-cairn-b", "vb-crossing-post-l", "vb-crossing-post-r"]) {
+    assert.ok(lmIds.has(req), `polish landmark ${req} present`);
+  }
   // Every landmark sits near the spawn→relic→cache route (it frames the corridor, not scattered).
   const onRoute = (p) => Math.min(distToSegment(p, layout.spawn, layout.relic), distToSegment(p, layout.relic, layout.cache), distToSegment(p, layout.spawn, layout.cache));
   for (const lm of landmarks) {
@@ -169,6 +179,43 @@ const shape = (doc) => ({
   const src = fs.readFileSync(new URL("../src/world/samples/visualBenchmarkV1.js", import.meta.url), "utf8");
   assert.equal(/Math\.random|Date\.now|new Date\(|performance\.now/.test(src), false, "the sample module has no Math.random/Date/performance.now");
   ok("static: the benchmark composition is deterministic (no RNG / wall-clock)");
+}
+
+// --- 10. Environment Polish-1: per-scene readability overrides ---------------
+{
+  const doc = buildVisualBenchmarkV1();
+  assert.ok(doc.lighting && doc.water && doc.atmosphere, "benchmark authors per-scene lighting/water/atmosphere blocks");
+  // They DIFFER from the global default → a real readability pass, not the inherited default.
+  assert.notDeepEqual(doc.lighting, glacialLighting(), "benchmark lighting differs from the global default");
+  assert.notDeepEqual(doc.water, createWaterConfig(), "benchmark water differs from the global default");
+  assert.notDeepEqual(doc.atmosphere, createAtmosphereConfig(), "benchmark atmosphere differs from the global default");
+  // The overrides survive validation (still legal blocks, clamped not dropped).
+  const res = validateWorldDocument(doc);
+  assert.equal(res.document.lighting.fog.far, doc.lighting.fog.far, "lighting fog override survives validation");
+  assert.equal(res.document.water.fresnel, doc.water.fresnel, "water fresnel override survives validation");
+  assert.equal(res.document.atmosphere.mistStrength, doc.atmosphere.mistStrength, "atmosphere mist override survives validation");
+  // CRITICAL: overriding the benchmark does NOT change the global default a vanilla world receives
+  // (so the frozen Frozen Cache / first-playable slices, which inherit the default, stay byte-stable).
+  const vanilla = createWorldDocument({ metadata: { name: "Vanilla" } });
+  assert.deepEqual(vanilla.lighting, glacialLighting(), "global lighting default unchanged (frozen slices safe)");
+  assert.deepEqual(vanilla.water, createWaterConfig(), "global water default unchanged");
+  assert.deepEqual(vanilla.atmosphere, createAtmosphereConfig(), "global atmosphere default unchanged");
+  ok("readability: per-scene lighting/water/atmosphere overrides differ from default; global default unchanged");
+}
+
+// --- 11. Environment Polish-1: ambient particle feedback ----------------------
+{
+  const doc = buildVisualBenchmarkV1();
+  const emitters = doc.objects.filter((o) => o.particles);
+  assert.ok(emitters.length >= 3, `ambient particle emitters present (${emitters.length})`);
+  for (const e of emitters) assert.ok(PARTICLE_KINDS.includes(e.particles.kind), `emitter ${e.id} has a valid kind (${e.particles.kind})`);
+  // The relic and the cache are emphasised (the two staged destinations of the carry loop).
+  assert.ok(doc.objects.find((o) => o.id === "vb-ruin-shard")?.particles, "the relic shard emits (staged as the goal)");
+  assert.ok(doc.objects.find((o) => o.id === "vb-cache-pedestal")?.particles, "the cache pedestal emits (staged as the destination)");
+  // Emitters survive validation (sanitized + retained, not dropped).
+  const res = validateWorldDocument(doc);
+  assert.ok(res.document.objects.filter((o) => o.particles).length >= 3, "particle emitters survive validation");
+  ok(`feedback: ${emitters.length} ambient particle emitters stage the relic/cache/crossing`);
 }
 
 console.log(`\nvisual-benchmark regression: ${passed} checks passed`);

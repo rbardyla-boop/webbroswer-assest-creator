@@ -22,36 +22,42 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (WebGPU Feasibility Gate-0 accepted; tag `world-builder-webgpu-feasibility-0`).**
-- **61 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Environment Polish-1 accepted; tag `world-builder-environment-polish-1`).**
+- **62 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **WebGPU Feasibility Gate-0 — feasibility only,
-  WebGL stays production** (ADR-050): an ISOLATED Vite lab (`webgpu-lab.html` → `src/feasibility/webgpu/`) that probes
-  WebGPU honestly, initializes a `WebGPURenderer`, and renders a minimal instanced grass-like field — to answer *is
-  WebGPU worth pursuing for our actual bottlenecks?* WITHOUT touching the production renderer. **MEASURED:** the headless
-  proof ATTEMPTS an adapter (`--enable-unsafe-webgpu --enable-features=Vulkan`); in CI an adapter was granted and the
-  renderer used a live **`webgpu` backend** (4096-instance field rendered, 0 errors) — but `isFallbackAdapter=false` is a
-  SOFTWARE Vulkan path, a STRUCTURAL/CPU signal, **not** a GPU-FPS result. The gate is robust to BOTH outcomes (it also
-  accepts the WebGL2 fallback any adapter-less machine gets).
-- **GO/NO-GO = B — keep WebGPU as an experimental lab only** (`docs/WEBGPU_FEASIBILITY.md`): our bottleneck is grass
-  triangle pressure / content discipline, not renderer architecture or CPU draw cost (draws already green); the GLSL→TSL
-  rewrite of every custom shader is the large cost; not-A (the lab works) / not-C (no bottleneck WebGPU uniquely solves
-  yet) / not-D (no migration). The durable isolated lab IS outcome B. WebGL byte-stable: `src/core/renderer.js` +
-  `src/main.js` UNTOUCHED; only additive edits to `vite.config.js` (a 3rd rollup input) + `package.json` (2 test
-  scripts); the `three/webgpu` code is a SEPARATE build chunk (app bundles unchanged). No "LOD obsolete" / Nanite /
-  GPU-FPS / renderer-migration claim anywhere.
-- **WebGPU gates GREEN**: `test:webgpu-feasibility` (6 Node: probe verdicts across navigator shapes + limit whitelist +
-  field-plan determinism/clamps + structural comparison + isolation/purity static scans) + `test:webgpu-feasibility-proof`
-  (its OWN WebGPU-flagged launcher — shared `scripts/lib/browser.mjs` kept byte-identical; field numbers read off the REAL
-  rendered mesh; the production WebGL app still boots cleanly alongside the lab). Fresh-context adversarial review
-  (4 dimensions: isolation/byte-stability · probe-determinism · proof-rigor · doc-doctrine + per-finding verify):
-  **0 critical / 0 high / 0 medium / 1 low** — fixed (field structural asserts now render-gated off the real mesh, not
-  plan constants). Full sweep re-run this session — `build`, `qa`, and browser proofs `test:frozen-cache-proof`,
-  `test:first-playable-proof`, `test:performance-contract-proof` (6 scenes) — all green; shipped worlds byte-stable.
-- **Prior stage:** Visual Benchmark-1 (ADR-049, tag `world-builder-visual-benchmark-1`) — one polished, measurable
-  authored corridor (`visual-benchmark-1`); LOD finding **B** (defer for scope), C untested; `docs/VISUAL_BENCHMARK.md`.
-- **Next per ADR-039 roadmap: (await operator pick)** — a Nanite-like Shader Feasibility track, weapon variety, or
-  deeper environment. WebGPU stays a lab; no renderer migration without a later, separately approved stage.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Environment Polish-1 — Visual Benchmark
+  Expansion** (ADR-051): evolves the `visual-benchmark-1` corridor IN PLACE toward a shippable authored slice using ONLY
+  the existing stack (no new rendering architecture, no WebGPU, no terrain/combat/AI) — +4 route-framing landmarks
+  (waypoint cairns + a crossing gateway), PER-SCENE `lighting`/`water`/`atmosphere` readability overrides (applied to the
+  benchmark document ONLY), ambient particle feedback staging the relic/cache/crossing, and an additive encounter-clear
+  audio cue. The next constraint was art-directed quality, not engine infrastructure — the WebGPU gate just proved that.
+- **MEASURED before/after (`docs/VISUAL_BENCHMARK.md`, SwiftShader STRUCTURAL not GPU-FPS):** full scene draws 116→119,
+  tris 512,962→511,720, objs 11→15, batches 2→1 — **the polish is nearly free structurally** (+4 landmarks + 3 particle
+  emitters add ~3 draws + no triangle delta; grass still dominates ~500k). The per-scene `visual-benchmark` ceiling was
+  RE-CAPTURED + RE-LOCKED (`objects` 16→20) at the new baseline+headroom, draws/tris/veg at the shared glacial values;
+  classifies **green**. **LOD finding unchanged: B (defer for this scope)** — polishing toward shipping quality did not
+  move the scene out of its structural band. No "LOD obsolete" / Nanite / GPU-FPS claim.
+- **BYTE-STABILITY (the load-bearing invariant).** The shipped Frozen Cache / first-playable slices stay byte-stable:
+  `src/main.js` edits are PURELY ADDITIVE (a `RuntimeFeedback` import/construct + two `runtimeFeedback.update(snapshot)`
+  hooks + a DEV `__RUNTIME_FEEDBACK__` hook — zero behavior change); `FrozenCacheSlice.js` + `SliceCompletion.js`
+  UNTOUCHED; and overriding the benchmark's `lighting`/`water`/`atmosphere` does NOT mutate the GLOBAL default a vanilla
+  world receives (each config factory returns a fresh object; the regression asserts a vanilla world is unaffected). The
+  relic loop's audio already comes from the always-on slice, so `RuntimeFeedback` only closes the encounter gap; worlds
+  with no encounters fire no cue → no behavior change. No `WORLD_DOCUMENT_VERSION` bump. No new test scripts (the polish
+  reuses `test:visual-benchmark(-proof)` on the same evolved scene).
+- **Environment Polish-1 gates GREEN**: `test:visual-benchmark` (11 Node: + per-scene overrides differ-from-default,
+  global-default-unchanged, ambient particles, the new landmark ids) + `test:visual-benchmark-proof` (overrides applied
+  live + PERSIST across reload, particle feedback live, the encounter-clear cue fires `cueAttempts` 0→1, relic + encounter
+  completable, reload-stable, 0 errors). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
+  override-safety · feedback-correctness · proof-rigor + per-finding verify): **0 critical / 0 high / 0 medium / 0 low**.
+  Full sweep re-run — `build`, `qa`, `test:frozen-cache-proof`, `test:first-playable-proof`,
+  `test:performance-contract-proof` (6 scenes) — all green; shipped worlds byte-stable.
+- **Prior stages:** WebGPU Feasibility Gate-0 (ADR-050, tag `world-builder-webgpu-feasibility-0`) — feasibility-only,
+  go/no-go = B (WebGPU stays an experimental lab; WebGL is production). Visual Benchmark-1 (ADR-049,
+  `world-builder-visual-benchmark-1`) — the original authored corridor; LOD finding B.
+- **Next per ADR-039 roadmap: (await operator pick)** — Encounter-1 (authored combat-beat polish, no AI director),
+  Enemy-1 (basic movement/patrol if needed), or the Nanite-like Shader Feasibility track (only if benchmark data shows a
+  real rendering/detail bottleneck). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -130,7 +136,7 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
-Visual Benchmark-1 → WebGPU Feasibility Gate-0 → **(await operator pick)**.
+Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1879,7 +1885,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 9. Geometry Stream Gate-0 — deterministic ≤64k-vertex chunked geometry streaming (infra gate; does NOT replace LOD)  ← SHIPPED (ADR-048)
 10. Visual Benchmark-1 — one compact area polished to shipping quality  ← SHIPPED (ADR-049)
 11. WebGPU Feasibility Gate-0 — feasibility-only research gate; go/no-go = B (keep as experimental lab)  ← SHIPPED (ADR-050)
-12. (await operator pick) — Nanite-like Shader Feasibility track / weapon variety / deeper environment
+12. Environment Polish-1 — visual benchmark expansion (landmarks + readability overrides + feedback), still WebGL  ← SHIPPED (ADR-051)
+13. (await operator pick) — Encounter-1 (combat-beat polish) / Enemy-1 (movement/patrol) / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2716,3 +2723,63 @@ structural asserts now read the real rendered mesh, not plan constants). Tree re
 world. No TSL rewrite of the production shaders. No new production geometry-stream consumer. No "LOD obsolete" /
 Nanite / GPU-FPS / "no visible lag" claim. No `WORLD_DOCUMENT_VERSION` bump. No edit to the shared browser
 harness. No renderer migration without a later, separately approved stage.
+
+## ADR-051 — Environment Polish-1: Visual Benchmark Expansion (art-directed quality, not engine infrastructure)
+
+**Status.** Accepted. Tag `world-builder-environment-polish-1` (local only). Stage 62.
+
+**Context.** WebGPU Feasibility Gate-0 (ADR-050) proved the immediate bottleneck is not renderer architecture —
+it is grass triangle pressure + content/authoring discipline. The next constraint is therefore **art-directed
+quality**: can the proven Visual Benchmark-1 corridor be polished toward a shippable authored slice **using only
+the existing stack**, while staying measurable, reload-safe, and playable? A Nanite-like shader track would have
+been speculative — this stage keeps converting the engine into a product surface instead.
+
+**Decision — evolve `visual-benchmark-1` IN PLACE; touch no new rendering architecture.** The corridor scene
+(`src/world/samples/visualBenchmarkV1.js`) grows toward shipping quality; the git tag
+`world-builder-visual-benchmark-1` preserves the pre-polish byte-state. Three operator-approved choices: evolve
+in place (not a new scene), particles-primary + additive audio cues, and re-capture-and-re-lock the performance
+ceiling.
+
+**What shipped (all additive, all existing systems as data).**
+- **Composition / landmark density:** +4 route-framing primitives — two waypoint cairns guiding the eye along
+  the route, and a crossing gateway (two short ice posts) framing the combat beat as a threshold. The
+  route-readability invariants (perpendicular distance ≤ 14, carry centerline midpoint unobstructed) still hold
+  and the regression now requires the specific new landmark ids.
+- **Per-scene readability overrides (THIS document only):** `doc.lighting` (brighter, higher, more raking sun so
+  the stone/ice landmarks read with form; fog near 90→112, far 320→380 so the cache is discoverable from the
+  overlook while the route keeps depth), `doc.water` (foam 0.7→1.4, fresnel 0.28→0.40, flow 0.35→0.50 for the
+  crossing edge), `doc.atmosphere` (basin fog 0.45→0.38, mist 0.40→0.32, band 12→16 for legibility). Each config
+  factory returns a fresh object and the loader reads the value off the document, so the override affects ONLY
+  the benchmark — the global default is unchanged (the regression asserts a vanilla world is unaffected).
+- **Feedback:** ambient particle emitters stage the relic (spark), the cache (spark), and the crossing
+  threshold (dust) — pure authored data on objects, auto-loaded by `ParticleRuntime`. The relic loop's audio
+  already comes from the always-on `FrozenCacheSlice`, so a NEW additive `RuntimeFeedback`
+  (`src/world/feedback/RuntimeFeedback.js`) closes only the encounter gap: it fires an `AUDIO_CUES.COMPLETE` cue
+  on an encounter's completion edge (edge-triggered once via a `_cued` Set), reusing the existing `ProceduralAudio`.
+  Headless-graceful (cue no-ops without a user gesture) with a `cueAttempts` counter so the wiring is provable.
+
+**Byte-stability (the load-bearing invariant).** `src/main.js` is edited ADDITIVELY only — a `RuntimeFeedback`
+import + construction, two `runtimeFeedback.update(encounterRuntime.snapshot())` calls after the existing
+`encounterRuntime.update` (in both the `__ENCOUNTER_DO__` driver and the real frame loop), and a DEV
+`__RUNTIME_FEEDBACK__` hook. `FrozenCacheSlice.js` + `SliceCompletion.js` are UNTOUCHED. Worlds with no
+encounters (the frozen-cache / first-playable slices) fire no cue → no behavior change. The frozen-cache +
+first-playable proofs are green. No `WORLD_DOCUMENT_VERSION` bump. No new test scripts (the polish reuses
+`test:visual-benchmark(-proof)` on the same evolved scene).
+
+**Measured (SwiftShader, STRUCTURAL not GPU-FPS; `docs/VISUAL_BENCHMARK.md`).** Full scene before→after: draws
+116→119, tris 512,962→511,720, objs 11→15, batches 2→1 — the polish is nearly free (+3 draws, no triangle
+delta; grass dominates ~500k). The `visual-benchmark` per-scene ceiling was RE-CAPTURED + RE-LOCKED (`objects`
+16→20) at the new baseline + headroom, with draws/tris/veg at the shared glacial-grass values; the scene
+classifies green, far under the global red. The LOD finding is UNCHANGED: **B (defer for this scope)** — polishing
+toward shipping quality did not move the scene out of its structural band.
+
+**Gates.** `test:visual-benchmark` (11 Node checks) + `test:visual-benchmark-proof` (overrides applied live +
+persisted across reload, particle feedback live, encounter-clear cue fires 0→1, relic + encounter completable,
+reload-stable, 0 errors) + `test:performance-contract(-proof)` (6 scenes). Fresh-context adversarial review
+(4 dimensions — byte-stability/isolation · override-safety · feedback-correctness · proof-rigor + per-finding
+verify, 4 agents): **0 critical / 0 high / 0 medium / 0 low**. Tree re-audited clean.
+
+**Non-goals (held).** No new rendering architecture. No WebGPU. No Nanite-like shader work. No new terrain
+engine. No new combat systems. No enemy AI. No broad world generation. No mutation of the shipped Frozen Cache /
+first-playable slice. No edit to the frozen `FrozenCacheSlice` / `SliceCompletion`. No global lighting/water/
+atmosphere default change. No `WORLD_DOCUMENT_VERSION` bump. No "LOD obsolete" / Nanite / GPU-FPS claim.

@@ -46,6 +46,7 @@ import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
 import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
+import { RuntimeFeedback } from "./world/feedback/RuntimeFeedback.js";
 import { createPagedGeometryStream } from "./world/geometry/PagedGeometryStream.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
@@ -156,6 +157,10 @@ const enemyRuntime = runtimeMode ? new EnemyRuntime({ scene, combatRuntime }) : 
 // enemyRuntime.spawnEphemeral (never a document item → no baked enemy) + polls it for defeat/completion.
 // Editing never projects (editor authors the descriptor); absent in the shipped world → no encounters.
 const encounterRuntime = runtimeMode ? new EncounterRuntime({ scene, enemyRuntime }) : null;
+// Environment Polish-1: additive audio feedback on encounter clear (the relic loop is already cued by
+// FrozenCacheSlice). Headless-graceful (cue() no-ops without a gesture); worlds with no encounters get no
+// cue → byte-stable. Never touches the frozen slice.
+const runtimeFeedback = runtimeMode ? new RuntimeFeedback() : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -465,10 +470,14 @@ if (import.meta.env.DEV) {
   window.__ENCOUNTER_DO__ = {
     step: (dt = 1 / 60) => {
       encounterRuntime?.update(dt, player);
+      runtimeFeedback?.update(encounterRuntime?.snapshot());
       if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
       return true;
     },
   };
+  // Dev/test-only: the additive encounter-feedback owner's cue counter (audio no-ops headless, so the
+  // counter is how a proof confirms the WIRING fired on the completion edge). For Environment Polish-1.
+  window.__RUNTIME_FEEDBACK__ = () => runtimeFeedback?.snapshot() ?? null;
   // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
   // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
   // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
@@ -1230,6 +1239,7 @@ function frame(now) {
   // Persist a freshly-defeated enemy's terminal state (mirrors objective completion → save-on-edge).
   if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   encounterRuntime?.update(dt, player); // encounter-editor-0: poll each beat's enemy for defeat (after the enemy FSM ran)
+  runtimeFeedback?.update(encounterRuntime?.snapshot()); // environment-polish-1: cue audio on encounter clear
   // Persist a freshly-completed beat (only when persistCompletion) — save-on-edge, like enemy defeat.
   if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)

@@ -9,6 +9,9 @@
 //   - the geometry stream is AVAILABLE and structurally measured via the DEV __PAGED__ harness
 //     (stats only — NO production streamed-detail producer is created in this stage),
 //   - BOTH the relic objective AND the encounter combat beat are completable,
+//   - Environment Polish-1: per-scene lighting/water/atmosphere readability overrides are applied and
+//     PERSIST (differing from the global default), ambient particle feedback is live, and the additive
+//     encounter-clear audio cue fires on completion (provable via the cue counter — audio no-ops headless),
 //   - the scene passes the Performance Contract (captured counts within the visual-benchmark ceiling),
 //   - completion persists across reload, and there are 0 console errors throughout.
 // Skips cleanly without Chromium. Does NOT touch the shipped Frozen Cache / first-playable slice.
@@ -114,8 +117,17 @@ const run = await withBrowserProof(
       assert.equal(world.hasWater, true, "glacial water is present");
       assert.equal(world.fog, true, "fog/atmosphere is active (readability, not soup)");
       assert.ok(Number.isFinite(world.sun) && world.sun > 0, "lighting is active (sun intensity > 0)");
+      // Environment Polish-1: the per-scene lighting readability override reached the renderer (the
+      // benchmark sun intensity is 2.55; the global glacial default is 2.3 — sun intensity is not
+      // modulated by the atmosphere, so this is a clean live signal the override applied to THIS world).
+      assert.ok(world.sun > 2.4, `per-scene lighting readability override applied (benchmark sun ${world.sun} > default 2.3)`);
       assert.ok(world.trailMarkers > 0, `the authored beacon-trail is derived + visible (${world.trailMarkers} markers)`);
       assert.ok(world.assetInstances >= 1, `the validated-GLB cache prop resolved as a rendered instance (${world.assetInstances})`);
+
+      // Environment Polish-1: ambient particle feedback is LIVE in the runtime (emitters loaded from the
+      // authored objects by ParticleRuntime — the relic shard, the cache pedestal, the crossing post).
+      const liveEmitters = await evalValue(play.cdp, `window.__PARTICLE_RUNTIME__ ? window.__PARTICLE_RUNTIME__.emitters.length : -1`);
+      assert.ok(liveEmitters >= 3, `ambient particle emitters are live in the runtime (${liveEmitters})`);
 
       // (2) landmarks + reference-only GLB in the loaded document
       const comp = await evalValue(
@@ -126,16 +138,27 @@ const run = await withBrowserProof(
           const objs = loaded?.document?.objects ?? [];
           const landmarks = objs.filter((o) => typeof o.id === 'string' && o.id.startsWith('vb-'));
           const gltf = objs.filter((o) => o.type === 'gltf');
+          const d = loaded?.document ?? {};
           return {
             landmarkCount: landmarks.length,
             gltfRefOnly: gltf.length === 1 && gltf[0].asset === null && typeof gltf[0].assetRef === 'string',
             encounters: (loaded?.document?.encounters?.items ?? []).length,
+            particleEmitters: objs.filter((o) => o.particles).length,
+            fogFar: d.lighting?.fog?.far ?? null,
+            waterFresnel: d.water?.fresnel ?? null,
+            mistStrength: d.atmosphere?.mistStrength ?? null,
           };
         })()`
       );
-      assert.ok(comp.landmarkCount >= 6, `authored landmarks present in the loaded scene (${comp.landmarkCount})`);
+      assert.ok(comp.landmarkCount >= 10, `polished landmark set present in the loaded scene (${comp.landmarkCount})`);
       assert.equal(comp.gltfRefOnly, true, "the GLB cache prop is reference-only (asset:null + assetRef string)");
       assert.equal(comp.encounters, 1, "the authored combat beat is present");
+      // Environment Polish-1: the per-scene readability overrides PERSISTED into the saved/loaded world
+      // (each value differs from the global glacial default → a real, scoped readability pass).
+      assert.equal(comp.fogFar, 380, "per-scene fog readability override persisted (benchmark 380, default 320)");
+      assert.equal(comp.waterFresnel, 0.4, "per-scene water readability override persisted (benchmark 0.4, default 0.28)");
+      assert.equal(comp.mistStrength, 0.32, "per-scene atmosphere readability override persisted (benchmark 0.32, default 0.4)");
+      assert.ok(comp.particleEmitters >= 3, `ambient particle feedback authored in the loaded scene (${comp.particleEmitters} emitters)`);
 
       // (3) geometry stream — AVAILABLE + structurally measured (stats only; no production producer)
       const paged = await evalValue(
@@ -187,16 +210,22 @@ const run = await withBrowserProof(
           D.teleportNearTarget(beat.enemyId, 6);
           const fire = () => { D.aimAt(beat.position[0], beat.position[1] + 1.0, beat.position[2]); D.useActiveWeapon(); D.step(); };
           const before = window.__ENCOUNTER__().encounters[0].completed;
+          const feedbackBefore = window.__RUNTIME_FEEDBACK__()?.cueAttempts ?? -1;
           fire(); fire(); fire();
           window.__ENEMY_DO__.step();
           window.__ENCOUNTER_DO__.step();
           const after = window.__ENCOUNTER__().encounters[0];
-          return { before, completed: after.completed, enemyState: after.enemyState };
+          const feedbackAfter = window.__RUNTIME_FEEDBACK__()?.cueAttempts ?? -1;
+          return { before, completed: after.completed, enemyState: after.enemyState, feedbackBefore, feedbackAfter };
         })()`
       );
       assert.equal(defeat.before, false, "the beat was uncompleted before the strikes (non-vacuous)");
       assert.equal(defeat.enemyState, "defeated", "the sentinel was defeated by the Combat-0 hitscan");
       assert.equal(defeat.completed, true, "the encounter beat completed");
+      // Environment Polish-1: the additive encounter-clear audio cue fired on completion. Audio no-ops in
+      // headless (suspended AudioContext), so the cue counter is the provable signal the WIRING ran.
+      assert.equal(defeat.feedbackBefore, 0, "no encounter cue before the beat cleared (non-vacuous)");
+      assert.ok(defeat.feedbackAfter >= 1, `the additive encounter-clear audio cue fired (cueAttempts ${defeat.feedbackAfter})`);
 
       // (6) the relic objective is completable — equip relic, carry to cache, deposit
       const relic = await evalValue(
