@@ -46,6 +46,7 @@ import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
 import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
+import { createPagedGeometryStream } from "./world/geometry/PagedGeometryStream.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
 const container = document.getElementById("app");
@@ -185,6 +186,11 @@ const instancedRenderer = runtimeMode ? new InstancedWorldObjectRenderer(scene) 
 if (instancedRenderer && import.meta.env.DEV) window.__INSTANCING_DEBUG__ = () => instancedRenderer.stats;
 // Dev/test-only: read the live applied lighting (sun/hemisphere/fog).
 if (import.meta.env.DEV) {
+  // Geometry Stream Gate-0: dev/test-only paged-geometry stream. NO production system
+  // mounts one (paging is proven via a synthetic producer under the gate); it stays null in
+  // normal play, so __PERF__.paged is null and the Performance Contract is unaffected. The
+  // proof mounts a stream against the live scene through window.__PAGED__ (below).
+  let pagedStream = null;
   window.__LIGHTING_DEBUG__ = () => ({
     sunIntensity: lights.sun.intensity,
     sunColor: `#${lights.sun.color.getHexString()}`,
@@ -568,6 +574,9 @@ if (import.meta.env.DEV) {
         // Asset Pipeline-1: placed imported-asset instances + their summed triangle
         // budget (reference-based — never embedded). Counts objects carrying an assetRef.
         assets: assetInstanceStats(objectManager),
+        // Geometry Stream Gate-0: paged chunk/vertex/geometry stats when a stream is mounted
+        // (DEV/proof only) — null in normal play. Read by PerformanceContract.extractMetrics.
+        paged: pagedStream?.snapshot() ?? null,
       };
     },
     // Time animation frames; `turn` forces a continuous camera pan to catch
@@ -673,6 +682,32 @@ if (import.meta.env.DEV) {
   window.__WILDLIFE_DEBUG__ = () => wildlife?.debugSnapshot() ?? { present: false };
   // Dev/test-only: Stage Ambient-0 — streamed firefly motes + hover-contract violations.
   window.__AMBIENT_DEBUG__ = () => ambient?.debugSnapshot() ?? { present: false };
+
+  // Geometry Stream Gate-0: dev/test-only paged-geometry harness. Mounts ONE stream against
+  // the live scene with a single shared material; the proof drives commitNext() to stream a
+  // synthetic producer's pages incrementally. Nothing here runs in normal play (the stream is
+  // only created on an explicit mount() call), so the runtime stays untouched.
+  let pagedMaterial = null;
+  window.__PAGED__ = {
+    mount({ maxVerticesPerChunk = 64000 } = {}) {
+      if (pagedStream) pagedStream.dispose();
+      pagedMaterial?.dispose();
+      pagedMaterial = new THREE.MeshStandardMaterial({ color: 0x8fb6d8, roughness: 0.85, metalness: 0.0 });
+      pagedStream = createPagedGeometryStream({ sceneRoot: scene, material: pagedMaterial, maxVerticesPerChunk });
+      return true;
+    },
+    stream: () => pagedStream,
+    replacePages: (pages) => pagedStream?.replacePages(pages) ?? null,
+    commitNext: (opts) => pagedStream?.commitNext(opts) ?? null,
+    snapshot: () => pagedStream?.snapshot() ?? null,
+    unmount() {
+      if (pagedStream) pagedStream.dispose();
+      pagedMaterial?.dispose();
+      pagedStream = null;
+      pagedMaterial = null;
+      return true;
+    },
+  };
 }
 
 function handleWorldChanged(change = {}) {

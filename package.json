@@ -77,6 +77,8 @@
     "test:enemy-proof": "node scripts/browser-enemy-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
+    "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",
+    "test:geometry-stream-proof": "node scripts/browser-paged-geometry-stream-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

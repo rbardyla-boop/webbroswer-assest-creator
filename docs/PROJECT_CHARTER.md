@@ -22,27 +22,29 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Encounter Editor-0 accepted; tag `world-builder-encounter-editor-0`).**
-- **58 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Geometry Stream Gate-0 accepted; tag `world-builder-geometry-stream-0`).**
+- **59 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Encounter Editor-0 — Author One Combat Beat**
-  (ADR-047): the editor places + configures a "combat beat" descriptor; in PLAY it ORCHESTRATES the Enemy-0 + Combat-0
-  seams — the beat projects ONE ephemeral enemy the player defeats via the existing hitscan → the beat completes →
-  completion persists. Authored placement + completion ONLY, NOT an encounter system (explicit non-goals: waves, loot,
-  rewards, AI director, pathfinding, factions, scripting language, dialogue, inventory, procedural combat). KEY DESIGN:
-  the load-bearing invariant is **NO BAKED ENEMY** — the world stores the DESCRIPTOR, never the spawned enemy. The enemy
-  is projected through ONE additive `EnemyRuntime.spawnEphemeral` (a transient actor never written to `enemies.items`);
-  `_spawn`/`_onHit`/`load`/`clear`/`update` stay byte-unchanged. Six new `src/world/encounters/` modules + an
-  `EncounterPanel`; `enemyRuntime` is injected, never imported. Encounters are **doc-authored**, so the shipped Frozen
-  Cache / first-playable world is UNCHANGED (zero encounters there). `completed` persists (per-beat `persistCompletion`,
-  default true); the spawned enemy is runtime-only. See ADR-047 below.
-- **Encounter gates GREEN**: `test:encounter-editor` (7 Node checks, incl. a non-vacuous test driving a *real*
-  `CombatRuntime` + `EnemyRuntime` that proves `spawnEphemeral` registers a combat target yet never touches
-  `enemies.items`, and `removeEphemeral` refuses baked enemies) + `test:encounter-editor-proof` (SwiftShader:
-  author-in-editor → project enemy (not baked, `enemies.items` length 0) → strike to defeat → complete →
-  reload-persists with no respawn → budget ok; 0 console errors). Seams unweakened: `test:enemy` (8), `test:combat` (10), both proofs
-  green. Full regression re-run this session — `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`,
-  `test:first-playable-proof`, `test:performance-contract-proof` — all green.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Geometry Stream Gate-0 — PagedGeometryStream**
+  (ADR-048): a first-party, deterministic **chunked geometry streaming layer** for procedural producers, capped at
+  **≤64,000 vertices per chunk**, with incremental commit, clean disposal, and stats wired into Performance Contract-1.
+  Built as a **TESTED infrastructure gate, not a visual feature** — no real PCG system pages its geometry yet (a
+  synthetic terrain-detail producer exercises the contract under tests/DEV only). **LOAD-BEARING DOCTRINE: it reduces
+  CPU/upload stalls + buffer-size pressure; it does NOT replace LOD.** LOD can only be deferred or reduced after
+  Visual Benchmark-1 proves triangle/draw/memory/frame-budget safety. Five new `src/world/geometry/` modules; the only
+  runtime touch is **additive** (`__PERF__.paged` + a DEV `__PAGED__` harness + four reported `paged*` metrics in
+  `extractMetrics`) — `CONTRACT_BUDGETS`/`evaluateContract` UNCHANGED, no production stream constructed, shipped worlds
+  byte-stable. Generated pages are runtime projections, never saved. See ADR-048 below.
+- **Geometry Stream gates GREEN**: `test:geometry-stream` (9 Node checks: 200k→4×≤64k pages · seed-determinism incl.
+  geometric uniqueness · over-limit/duplicate-id/non-finite rejection · transactional replace · clear/dispose ·
+  rebuild-no-accumulation · contract-receives-paged-stats from a real `stream.snapshot()` · forbidden-source scan) +
+  `test:geometry-stream-proof` (SwiftShader: mount → incremental commit 1→2→3→4 (not one upload) → contract sees stats
+  live → unmount disposes all → `__PERF__.paged` null; 0 console errors). Fresh-context adversarial review (6
+  dimensions incl. a dedicated **lod-doctrine** check + per-finding verify, 184 executed probes): **0 critical / 0
+  high / 0 medium / 4 LOW** — the 3 test-rigor LOWs fixed (geometric-determinism / real-snapshot / non-vacuous
+  baseline), the 4th (this ADR's doctrine affirmation) closed by ADR-048. Full regression re-run this session —
+  `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`, `test:first-playable-proof`,
+  `test:performance-contract-proof`, `test:encounter-editor-proof` — all green; shipped worlds byte-stable.
 - **Next per ADR-039 roadmap: Visual Benchmark-1.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
@@ -121,7 +123,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → **Visual Benchmark-1 (next)** → WebGPU Feasibility Gate.
+Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
+**Visual Benchmark-1 (next)** → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1867,8 +1870,9 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 6. Combat-0           — combat seam only (no enemies)
 7. Enemy-0            — one non-networked test enemy
 8. Encounter Editor-0 — authored encounter placement  ← SHIPPED (ADR-047)
-9. Visual Benchmark-1 — one compact area polished to shipping quality  ← IMMEDIATE NEXT
-10. WebGPU Feasibility Gate
+9. Geometry Stream Gate-0 — deterministic ≤64k-vertex chunked geometry streaming (infra gate; does NOT replace LOD)  ← SHIPPED (ADR-048)
+10. Visual Benchmark-1 — one compact area polished to shipping quality  ← IMMEDIATE NEXT
+11. WebGPU Feasibility Gate
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2500,3 +2504,81 @@ re-run were all unchanged).
 dialogue, inventory, procedural combat, duplicate enemy/combat models, or baked enemies. No
 `WORLD_DOCUMENT_VERSION` bump. No change to the shipped Frozen Cache / first-playable world. Next per ADR-039:
 **Visual Benchmark-1**.
+
+## ADR-048 — Geometry Stream Gate-0: PagedGeometryStream (a tested infrastructure gate that does NOT replace LOD)
+
+Decision recorded 2026-06-20. Tag `world-builder-geometry-stream-0` (local only, no push). Sits in
+phase 12, inserted **before** Visual Benchmark-1, after Encounter Editor-0 (ADR-047).
+
+**Context.** Before polishing one compact area to shipping quality (Visual Benchmark-1), the operator
+called for a validated **chunked geometry streaming** layer so large procedural surfaces upload as bounded
+chunks instead of one stalling buffer — and explicitly fenced it against scope creep: build it **first-party,
+narrowly, test-first**, and integrate only after tests prove the contract. A research pass confirmed no
+`PagedGeometryStream` existed anywhere in the tree (the only streaming was the Family-A `RegionStreamer`,
+which streams world *objects* by region, not geometry; Family-B grass/bush/tree geometry streaming was
+deferred at Wildlife-2). So this is net-new, not an audit of external code.
+
+**The load-bearing doctrine (operator-mandated, affirmed here verbatim-in-spirit).**
+**PagedGeometryStream reduces CPU/upload stalls and buffer pressure. It does NOT replace LOD. LOD can only be
+deferred or reduced after Visual Benchmark-1 proves triangle/draw/memory/frame-budget safety.** Paging is
+upload/CPU-stall + buffer-size infrastructure; it does nothing for screen-space triangle waste, vertex/fragment
+shading, overdraw, shadow-pass cost, or memory residency. Those remain governed by Performance Contract-1 and
+(later) LOD work. No code, comment, doc, or test in this stage claims paging makes a scene safe without a
+measured budget; the fresh-context review included a dedicated `lod-doctrine` dimension that verified this.
+
+**Decision — orchestrate the existing contracts; build five pure-ish modules; touch the runtime only additively.**
+
+- `src/world/geometry/PagedGeometryTypes.js` (PURE) — `MAX_VERTICES_PER_CHUNK = 64000`, finite/bounds predicates,
+  `normalizePageDescriptor` (whitelist + deep-frozen bounds; rejects, never relocates).
+- `src/world/geometry/PagedGeometryValidation.js` (THREE-free, duck-typed) — `validatePageDescriptor` /
+  `validatePages` (dedup ids) / `validateBuiltGeometry`. **Two cap layers**: the descriptor's promised
+  `vertexCount` AND the realized `position.count` are both checked against the cap, and must agree — so a producer
+  cannot under-promise then over-build. Every position/normal/uv value must be finite; every index in `[0, count)`.
+- `src/world/geometry/PagedGeometryStats.js` (PURE) — `summarizePages`, the ONE definition the stream's
+  `snapshot()` and the runtime `__PERF__.paged` field share.
+- `src/world/geometry/PagedGeometryProducer.js` (THREE) — a synthetic terrain-detail grid producer, deterministic
+  via seeded `mulberry32`/`hash2i` (never the platform RNG). The ONLY producer shipped; NO runtime system
+  constructs it (it serves the gate's tests + the DEV harness).
+- `src/world/geometry/PagedGeometryStream.js` (THREE) — `createPagedGeometryStream({ maxVerticesPerChunk, material,
+  sceneRoot })` → `replacePages` (transactional: validate the whole batch BEFORE disposing/queuing — a bad batch
+  leaves state unchanged) · `commitNext` (incremental: `maxPages` per call by default; `budgetMs` honored only via
+  an **injected `now()` clock**, so `performance.now` stays out of the module and the emission path is
+  scan-clean/deterministic) · `clear` / `dispose` (release every page geometry, detach meshes; the caller-owned
+  **material is never disposed by the stream**) · `snapshot`. One shared material across all page meshes. A page
+  whose build yields invalid geometry is disposed and dropped from the queue, then rejected — it never enters the
+  scene graph.
+
+**Page descriptor:** `{ id, bounds:{min:[x,y,z],max:[x,y,z]}, vertexCount, indexCount, build:()=>BufferGeometry }`.
+`build` is LAZY, so determinism is compared on ids/order/counts/bounds (and, in tests, built positions) — never
+timestamps. **Generated pages are runtime projections** — the stream never touches the world document, so paging
+adds nothing to the saved world file (statically scan-enforced).
+
+**Performance Contract integration = the established additive `__PERF__` pattern** (as wildlife/ambient/arsenal
+did in Performance Contract-1). `main.js` (DEV-gated) gains a `__PAGED__` harness that mounts one stream against
+the live scene and an additive `paged: pagedStream?.snapshot() ?? null` field in `__PERF__.snapshot()`.
+`PerformanceContract.extractMetrics` gains four **reported** `paged*` metrics. `CONTRACT_BUDGETS` and
+`evaluateContract` are UNCHANGED — the per-page ≤64k cap (enforced in the stream) is the real safety gate, not a
+fixed total-vertex ceiling, so the existing performance gate is not weakened. No production stream is constructed;
+`paged` is null in normal play; shipped worlds are byte-stable.
+
+**Verification.** `test:geometry-stream` (9 Node checks) + `test:geometry-stream-proof` (SwiftShader: mount →
+incremental commit 1→2→3→4 → contract sees stats live → unmount disposes all → `__PERF__.paged` null; 0 console
+errors). Full regression re-run green (`qa`, all Node regressions, `test:frozen-cache-proof`,
+`test:first-playable-proof`, `test:performance-contract-proof`, `test:encounter-editor-proof`). Fresh-context
+adversarial review — 6 dimensions (cap-and-rejection / lifecycle-leak / determinism-emission / boundary-and-doctrine
+/ test-rigor / **lod-doctrine**) + per-finding adversarial verify, 184 executed probes — returned **0 critical / 0
+high / 0 medium / 4 LOW**. The three test-rigor LOWs were fixed (assert geometric determinism not just the id
+string; feed a real `stream.snapshot()` through `extractMetrics`, not only a literal; add a non-vacuous "clear
+changed state" guard); the fourth LOW (this ADR's doctrine affirmation being absent) is closed by this entry.
+
+**Refinements vs the original spec (convention alignment).** Tests live in `scripts/` (not `tests/`), named
+`paged-geometry-stream-regression.mjs` + `browser-paged-geometry-stream-proof.mjs`, npm `test:geometry-stream(-proof)`,
+matching the repo's 60+ gates and the `qa:skills` walker. Page-diffing on regenerate is deferred (KISS:
+dispose-all + queue-new); a real PCG consumer (grass/terrain) paging its geometry is a later stage, gated on
+Visual Benchmark-1 budget evidence.
+
+**Non-goals (held).** Does NOT claim LOD is obsolete. No broad rewrite of terrain/grass/wildlife/asset systems.
+No WebGPU, workers, async race complexity, or renderer rewrite. No `Math.random`/`Date.now`/`performance.now`/
+`eval`/network/`fs`/dynamic import in the emission path. No generated geometry in the world document. No weakening
+of Performance Contract-1. No `WORLD_DOCUMENT_VERSION` bump. Next per ADR-039: **Visual Benchmark-1** (which may
+USE the stream as one tool, but LOD stays deferred-not-deleted until its budget evidence lands).

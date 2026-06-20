@@ -41,6 +41,13 @@ export function extractMetrics({ perf = null, budget = null } = {}) {
     // Reported for stability checks (not gated by a fixed ceiling):
     wildlifeAnimals: pick(perf?.wildlife?.activeAnimals, 0),
     ambientMotes: pick(perf?.ambient?.activeMotes, 0),
+    // Geometry Stream Gate-0: paged chunk/vertex/geometry stats. Reported for stability —
+    // the real safety gate is the per-page <= 64k cap enforced inside the stream, NOT a
+    // fixed ceiling on the stream total. Zero when no stream is mounted (normal play).
+    pagedPages: pick(perf?.paged?.pages, 0),
+    pagedCommittedPages: pick(perf?.paged?.committedPages, 0),
+    pagedVertices: pick(perf?.paged?.committedVertices, 0),
+    pagedGeometries: pick(perf?.paged?.geometries, 0),
   };
 }
 
