@@ -73,6 +73,8 @@
     "test:asset-pipeline-proof": "node scripts/browser-asset-pipeline-proof.mjs",
     "test:combat": "node scripts/combat-regression.mjs",
     "test:combat-proof": "node scripts/browser-combat-proof.mjs",
+    "test:enemy": "node scripts/enemy-regression.mjs",
+    "test:enemy-proof": "node scripts/browser-enemy-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

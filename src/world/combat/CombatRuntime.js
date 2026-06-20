@@ -46,6 +46,20 @@ export class CombatRuntime {
     }
   }
 
+  // Register a runtime-owned combat target (e.g. an Enemy-0 actor) into the target set. The target
+  // duck-types CombatTarget ({ id, object3D, hitCount, registerHit }), so the existing raycast +
+  // hit-dispatch path drives it unchanged — combat stays the authority; the actor only consumes
+  // registerHit. Additive: load() clears the set, so the owner re-registers after each world load.
+  registerTarget(id, target) {
+    if (id == null || !target?.object3D) return;
+    this.targets.set(id, target);
+  }
+
+  /** Remove a runtime-owned target (e.g. on enemy teardown). Idempotent. */
+  unregisterTarget(id) {
+    this.targets.delete(id);
+  }
+
   get activeId() {
     return this.equipRuntime?.activeId ?? null;
   }

@@ -17,6 +17,7 @@ import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 import { createGeneratorInstance } from "../generators/GeneratorConfig.js";
 import { sanitizeRuntimeAssetsBlock } from "./assets/RuntimeAssetTypes.js";
 import { sanitizeObjectivesBlock } from "./objectives/ObjectiveTypes.js";
+import { sanitizeEnemiesBlock } from "./enemies/EnemyValidation.js";
 import { sanitizeAuthoringBlock } from "./authoring/AuthoringTypes.js";
 import { sanitizeAssetBudget } from "../assets/AssetBudget.js";
 
@@ -76,6 +77,9 @@ export function validateWorldDocument(input) {
   // Gameplay objectives (FP-1): the relic-weapon objective; cache/relicId/completed
   // whitelisted so they survive save→load, the list capped (zero warnings when empty).
   doc.objectives = sanitizeObjectivesBlock(doc.objectives, warnings);
+  // Enemy actors (Enemy-0): reactive combat targets; type/id/position/maxHealth/defeated
+  // whitelisted so they survive save→load, the list capped (zero warnings when empty).
+  doc.enemies = sanitizeEnemiesBlock(doc.enemies, warnings);
   // Procedural authoring (Procedural Authoring-1): splines/masks/modifiers whitelisted +
   // capped. The modifier visuals re-derive each load, so only this intent block persists.
   doc.authoring = sanitizeAuthoringBlock(doc.authoring, warnings);

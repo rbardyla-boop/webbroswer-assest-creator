@@ -44,6 +44,7 @@ import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
 import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
 import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
 import { CombatRuntime } from "./world/combat/CombatRuntime.js";
+import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
 const container = document.getElementById("app");
@@ -145,6 +146,10 @@ const objectiveRuntime = runtimeMode ? new ObjectiveRuntime() : null;
 const combatRuntime = runtimeMode
   ? new CombatRuntime({ equipRuntime: weaponEquipRuntime, placedRuntime: placedWeaponRuntime, cameraController, input })
   : null;
+// Enemy-0 reactive combat targets — runtime-only. Each enemy registers an adapter into combatRuntime
+// (combat stays the hit authority; the enemy only consumes registerHit). Doc-authored: absent in the
+// shipped world → no enemies there. `defeated` persists; live health is runtime-only.
+const enemyRuntime = runtimeMode ? new EnemyRuntime({ scene, combatRuntime }) : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -428,6 +433,19 @@ if (import.meta.env.DEV) {
     lastEvent: () => combatRuntime?.lastEvent ?? null,
   };
   window.__COMBAT__ = () => combatRuntime?.snapshot() ?? null;
+  // Dev/test-only: enemy snapshot (logical state/health/defeated per actor). The enemy IS a combat
+  // target, so __COMBAT_DO__ already teleports/aims/fires at it; this exposes the reaction. For test:enemy-proof.
+  window.__ENEMY__ = () => enemyRuntime?.snapshot() ?? null;
+  // Dev/test-only: tick the enemy runtime + flush the defeat-persist exactly as the main loop does.
+  // The headless rAF is throttled (~5fps), so the proof drives this synchronously after firing to
+  // advance hit-react/defeated state + persist a defeat deterministically (input-equivalent, no state mutation).
+  window.__ENEMY_DO__ = {
+    step: (dt = 1 / 60) => {
+      enemyRuntime?.update(dt, player);
+      if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
+      return true;
+    },
+  };
   // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
   // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
   // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
@@ -728,6 +746,13 @@ function loadCombat() {
   combatRuntime?.load({ scene, objectManager });
 }
 
+// (Re)spawn Enemy-0 actors from the loaded world (runtime only) + register them as combat targets.
+// MUST run AFTER loadCombat() (which clears the combat target set) so each enemy re-registers into
+// the fresh set. Grounds bodies onto the terrain single source. Idempotent (load() clears prior).
+function loadEnemies(document) {
+  enemyRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z) });
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -762,6 +787,7 @@ async function applyLoadedWorld(document) {
   player.syncMesh();
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
+  loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -945,6 +971,7 @@ async function boot() {
   player.syncMesh();
   loadObjective(world.document); // relic objective (FP-1) — after grounding so sites derive from spawn
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
+  loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -1124,6 +1151,9 @@ function frame(now) {
   particleRuntime?.update(dt);
   placedWeaponRuntime.update(dt, visibilityKernel ? isAgentAwake : null);
   combatRuntime?.update(dt); // combat-0: poll the use-weapon edge → aim ray → hit → feedback fade
+  enemyRuntime?.update(dt, player); // enemy-0: advance hit-react/defeated state + body visual (after combat dispatches the hit)
+  // Persist a freshly-defeated enemy's terminal state (mirrors objective completion → save-on-edge).
+  if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
   frozenCacheSlice?.update(dt);
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer

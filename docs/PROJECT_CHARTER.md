@@ -22,24 +22,24 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Combat-0 accepted; tag `world-builder-combat-0`).**
-- **56 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Enemy-0 accepted; tag `world-builder-enemy-0`).**
+- **57 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Combat-0 — Validated Hitscan Strike
-  Seam** (ADR-045): the minimum combat contract future Enemy-0/encounters consume — input → active equipped weapon →
-  aim ray → hit query → validated `StrikeEvent` → lightweight feedback. A SEAM, not a game (explicit non-goals: enemy
-  AI, health/damage economy, ammo, loot, inventory, projectiles). KEY DESIGN: the inverse of Asset Pipeline-1 — there
-  was no combat layer, so five genuinely-new pure-ish `src/world/combat/` modules were built, while combat REUSES the
-  six existing seams it must only READ (rightHand-only `weaponEquipRuntime.activeId`, weapon markers, the shared
-  yaw/pitch aim basis, the inert-primitive target, the objective-runtime load/clear pattern, the test harness).
-  Holstered (back/hip) weapons cannot fire because that falls out of reading `activeId`. The shipped Frozen Cache /
-  first-playable world is UNCHANGED (combat is inert there — no targets). See ADR-045 below.
-- **Combat gates GREEN**: `test:combat` (10 Node checks) + `test:combat-proof` (SwiftShader: equip→hit, holstered
-  blocked, miss, reload-stable, in-play; 0 console errors). Full regression re-run this session — `qa`, all Node
-  regressions, and browser proofs `test:anim`, `test:first-playable(+hidden)-proof`, `test:frozen-cache(+proof)`,
-  `test:arsenal-v3/v4/v6`, `test:performance-contract(+proof)`, `test:asset-pipeline(+proof)`,
-  `test:authoring-procedural-proof`, `test:editor-ux1`, `test:slice0a` — all green.
-- **Next per ADR-039 roadmap: Enemy-0.**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-0 — Reactive Combat Target**
+  (ADR-046): the first CONSUMER of the Combat-0 seam — an enemy spawns → registers as a combat target → receives the
+  existing `StrikeEvent` → applies a finite health/state transition (idle / hit-react / defeated) → can be defeated.
+  Combat-target consumption, NOT AI (explicit non-goals: full AI, patrol, chase, loot, waves, inventory, projectiles,
+  navmesh, factions). KEY DESIGN: the enemy is a `CombatTarget`-shaped adapter dropped into `combatRuntime.targets`,
+  so combat's existing `registerHit` dispatch delivers the strike — **no duplicate hit detection**; the only combat
+  change is an additive `registerTarget`/`unregisterTarget`. Five new `src/world/enemies/` modules; `combatRuntime` is
+  injected, never imported. Enemies are **doc-authored, not auto-spawned**, so the shipped Frozen Cache / first-playable
+  world is UNCHANGED (zero enemies there). `defeated` persists; live health is runtime-only. See ADR-046 below.
+- **Enemy gates GREEN**: `test:enemy` (8 Node checks, incl. a non-vacuous consumption test that drives a *real*
+  `CombatRuntime` raycast through `registerHit`) + `test:enemy-proof` (SwiftShader: register → strike → defeat
+  (latched) → reload-persists-defeated → zero-enemy world unaffected → budget ok; 0 console errors). Combat unweakened:
+  `test:combat` (10) + `test:combat-proof` green. Full regression re-run this session — `qa`, all Node regressions, and
+  browser proofs `test:frozen-cache-proof`, `test:first-playable-proof`, `test:arsenal-v6` — all green.
+- **Next per ADR-039 roadmap: Encounter Editor-0.**
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -108,14 +108,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 | 10 · Performance & scale | Performance Contract-1 — Performance as a Tested Gate | `…performance-contract-1` | `test:performance-contract` `test:performance-contract-proof` | ✅ (ADR-042) |
 | 10 · Performance & scale | Procedural Authoring-1 — Editable Spline / Mask / Modifier | `…procedural-authoring-1` | `test:authoring-procedural` `test:authoring-procedural-proof` | ✅ (ADR-043) |
 | 11 · Identity & assets | Asset Pipeline-1 — Validated GLB Budget Gate | `…asset-pipeline-1` | `test:asset-pipeline` `test:asset-pipeline-proof` | ✅ (ADR-044) |
-| 12 · Combat & encounters | **Combat-0 — Validated Hitscan Strike Seam** | **`…combat-0`** | `test:combat` `test:combat-proof` | ✅ **LATEST** (ADR-045) |
+| 12 · Combat & encounters | Combat-0 — Validated Hitscan Strike Seam | `…combat-0` | `test:combat` `test:combat-proof` | ✅ (ADR-045) |
+| 12 · Combat & encounters | **Enemy-0 — Reactive Combat Target** | **`…enemy-0`** | `test:enemy` `test:enemy-proof` | ✅ **LATEST** (ADR-046) |
 
 (All tags are prefixed `world-builder-`. ADR-NNN entries below give the full decision record per stage.)
 
 **Roadmap ahead (product doctrine in ADR-039 — "Focused Procedural World Editor, not Unreal-in-a-tab"; each
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
-Asset Pipeline-1 → Combat-0 → **Enemy-0 (next)** → Encounter Editor-0 → Visual Benchmark-1 → WebGPU Feasibility Gate.
+Asset Pipeline-1 → Combat-0 → Enemy-0 → **Encounter Editor-0 (next)** → Visual Benchmark-1 → WebGPU Feasibility Gate.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -2310,3 +2311,83 @@ the producer must audit the working tree after a review, not trust it.
 **Non-goals (held).** No enemy AI, health/damage economy, ammo, loot, inventory, projectiles, arc/melee
 weapons, weapon balancing, multiplayer, or WebGPU. No `WORLD_DOCUMENT_VERSION` bump. No change to the shipped
 Frozen Cache / first-playable world. Next per ADR-039: **Enemy-0**.
+
+## ADR-046 — Enemy-0: A Reactive Combat Target (consume the seam, build five modules)
+
+**Status:** Accepted 2026-06-20. Tag `world-builder-enemy-0` (local; no push). Second stage of phase 12
+("Combat & encounters"), after Combat-0 (ADR-045).
+
+**Context.** Combat-0 shipped the weapon-use *seam* (`input → active weapon → aim ray → hit query →
+StrikeEvent → feedback`) against an inert dummy, with its header documenting the next step:
+*"Enemy-0 consumes the seam by registering enemies as targets and reading StrikeEvent.hit."* Enemy-0 is the
+first **consumer** — the smallest hostile-actor contract: `enemy spawns → registers as a combat target →
+receives the existing StrikeEvent → applies a finite health/state transition → shows feedback → can be
+defeated`. It is **combat-target consumption, not AI**: one stationary test type (`glacial_sentinel`),
+idle / hit-react / defeated. Explicit non-goals: full AI, patrol, chase, loot, waves, XP, inventory,
+projectiles, navmesh, factions, networking, encounter authoring.
+
+**The architecture call (consume the seam; one additive extension).** Reading the live Combat-0 code,
+`CombatRuntime.use()` already delivers a hit via `this.targets.get(id)?.registerHit(...)` and `_queryHit()`
+raycasts *whatever is in `this.targets`*. So an enemy plugs in by dropping a **`CombatTarget`-shaped adapter**
+into that set — the existing `registerHit` call **is** the hit delivery. Hit detection is byte-unchanged (no
+duplicate raycast; honoring "no combat rewrite"). The single needed extension is the **additive**
+`registerTarget(id, target)` / `unregisterTarget(id)` on `CombatRuntime` (~14 lines); `use()` / `_queryHit` /
+`_ownerId` / `snapshot` are unchanged. Decision: **build the five new `src/world/enemies/` modules, reuse the
+combat hit path + the objectives doc-block/persistence pattern + the test harness.**
+
+**Mechanism.** New `src/world/enemies/`: `EnemyTypes.js` (constants + a pure, immutable `createEnemyState`),
+`EnemyValidation.js` (the untrusted-block whitelist `normalizeEnemyDescriptor` / `sanitizeEnemiesBlock` + the
+pure, finite-guarded, deterministic transitions `applyDamage` / `advanceState` — defeat is **latched +
+idempotent**), `EnemyTargetAdapter.js` (the `CombatTarget` drop-in: `{ id, object3D, hitCount, lastHit,
+registerHit }` forwarding the strike to `onHit`), `EnemyFeedback.js` (the enemy *reacting* — an emissive body
+flash that decays over the react timer + a one-time desaturated defeat color; owns no THREE objects, so it
+can't leak), and `EnemyRuntime.js` (owns the actors, **injects** `combatRuntime`, registers an adapter per
+enemy, drives the FSM + body visuals, persists the defeat edge). Additive edits: an `enemies` document block
+with `sanitizeEnemiesBlock` in `WorldValidation`; runtime-only `main.js` wiring (construct after
+`combatRuntime`; a `loadEnemies()` helper called in **both** load paths **after** `loadCombat()` — which
+clears the target set, so order matters; `enemyRuntime.update(dt, player)` + a save-on-defeat-edge in the
+frame loop; DEV-only `__ENEMY__` / `__ENEMY_DO__`).
+
+**The enemy contract.** `EnemyState = { state: idle|hit-react|defeated, health, maxHealth, reactTimer }` —
+immutable, finite-guarded, timestamp-free (identical strikes ⇒ identical state). The adapter's `registerHit`
+runs `applyDamage`; the `snapshot()` reports the **logical** state + the authored HOME position (never the
+animated transform), so it is deterministic. **Holstered weapons can't damage an enemy** — that falls out of
+Combat-0's rightHand-only `activeId` (no active weapon ⇒ no `StrikeEvent` ⇒ no `registerHit`), not a separate
+check. One stationary type; patrol/chase are a later `EnemyPathing`.
+
+**Isolation + persistence.** Enemy modules import ONLY `three` or `./Enemy*.js` — `combatRuntime` is injected
+(never imported), so the layer depends on combat's runtime *API*, not its code (scan-enforced, covering
+`from`/side-effect/dynamic forms). The terminal **`defeated` state persists** (whitelisted boolean — always
+emitted so `false` survives save→load — mutated in place on the defeat edge + saved, mirroring objective
+completion); **live health is runtime-only** (a reloaded live enemy starts at full health; only the terminal
+state persists, like objectives persist completion not progress). A non-finite transform **rejects** the
+enemy rather than relocating it to the origin. **No `WORLD_DOCUMENT_VERSION` bump (stays 2).** Enemies are
+**doc-authored, not auto-spawned**: a world with no `enemies` descriptor spawns zero enemies and registers
+zero new combat targets, so the shipped Frozen Cache / first-playable world is byte-unchanged (combat stays
+inert there).
+
+**Verification.** `test:enemy` (8 Node checks: the descriptor whitelist + non-finite-transform reject, the
+zero-warning-on-empty/​capped block, finite-guarded clamped latched `applyDamage`, deterministic
+`advanceState`, the adapter's `CombatTarget` surface, a **non-vacuous consumption test** that registers an
+adapter into a *real* `CombatRuntime`, fires a real ray, and asserts the enemy lost health through combat's
+own `registerHit`, the doc-block round-trip, and the determinism/isolation static scans). `test:enemy-proof`
+(SwiftShader: the enemy registers as a combat target → an equipped strike resolves to it and decreases its
+health → repeated strikes DEFEAT it, latched → the scene stays within the draw/object budget → reload
+PERSISTS the defeated state with the relic objective intact → a no-enemy world has zero enemies; 0 console
+errors). Full regression re-run green, including `test:combat` (10) + `test:combat-proof` — proving Combat-0
+was not weakened by `registerTarget`.
+
+**Review.** Fresh-context workflow — 4 reviewers (combat-boundary / determinism-safety / persistence-whitelist
+/ regression-lifecycle) → per-finding adversarial verification (default-refute). **15 raw → 0 critical / 0
+high / 0 medium, 3 LOW.** Two were defense-in-depth hardening (both fixed): (1) `_applyDefeatPose` wrote a
+group transform without a *site-local* finite guard (finite by construction via the distant spawn guard, no
+live defect) → guarded at the site for consistency; (2) `applyDamage` / `advanceState` trusted the *incoming*
+`state.health`/`maxHealth`/`reactTimer` (the producer set is closed — all states come from `createEnemyState`
+and the two transitions, all finite — so unreachable) → added site-local finite guards so purity is
+self-contained. The third LOW was an **informational confirmation** (Frozen Cache byte-unchanged), not a bug.
+Per the Combat-0 process gotcha, the working tree was re-audited clean after the workflow (verifiers ran
+empirical probes; no source mutation reached the tree — changed-file set + a probe-marker grep both clean).
+
+**Non-goals (held).** No enemy AI, patrol, chase, loot, waves, XP, inventory, projectiles, navmesh, factions,
+networking, encounter authoring, or duplicate hit detection. No `WORLD_DOCUMENT_VERSION` bump. No change to
+the shipped Frozen Cache / first-playable world. Next per ADR-039: **Encounter Editor-0**.
