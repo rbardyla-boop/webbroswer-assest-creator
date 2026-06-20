@@ -137,7 +137,12 @@ export class EncounterPresentation {
       this._paintBeacon(st, phase, clearedRecently);
 
       // Banner precedence: engaged > alert > recently-cleared; dormant yields to the objective banner.
-      const text = encounterBannerText(phase, { clearedRecently });
+      // Content-1: the beat's authored label names its location so two beats read correctly. Each beat's
+      // OWN banner line is kept (st.bannerText) so multiple beats are individually inspectable — the single
+      // on-screen `this._banner` is the highest-priority across all beats (when two are live at once, the
+      // nearer threat reads), but each beat's own line is preserved for readability/proof.
+      const text = encounterBannerText(phase, { clearedRecently, label: enc.label });
+      st.bannerText = text;
       const prio = phase === ENCOUNTER_PHASE.ENGAGED ? 3 : phase === ENCOUNTER_PHASE.ALERT ? 2 : phase === ENCOUNTER_PHASE.CLEARED && clearedRecently ? 1 : -1;
       if (text && prio > bannerPriority) {
         this._banner = text;
@@ -187,6 +192,7 @@ export class EncounterPresentation {
         telegraph: s.telegraph,
         telegraphIntensity: s.telegraphIntensity ?? null, // the emissive actually written to the sentinel
         clearPulses: s.clearPulses,
+        bannerText: s.bannerText ?? null, // this beat's OWN banner line (the on-screen banner is the max-priority across beats)
       })),
     };
   }

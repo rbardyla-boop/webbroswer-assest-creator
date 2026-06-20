@@ -3,11 +3,15 @@
 // An "encounter" is an AUTHORED combat beat: a placed descriptor that, in play, projects ONE reactive
 // enemy (Enemy-0) the player defeats via the Combat-0 hitscan to complete it. This module is the
 // validation boundary the world calls on an untrusted `encounters` block (from a save file): it
-// whitelists type/id/position/radius/enemyType/enemyCount/completed/persistCompletion and DROPS anything
-// that can't yield a valid encounter. A non-finite position REJECTS the encounter rather than relocating
-// it to the origin (mirrors the objective cache rule); an enemyType outside the Enemy-0 allow-list
-// REJECTS it (the editor must never author an enemy the runtime can't spawn). It is NOT an encounter
-// system: one beat type, exactly one enemy, no waves / loot / AI / scripting.
+// whitelists type/id/position/radius/enemyType/enemyCount/completed/persistCompletion/label and DROPS
+// anything that can't yield a valid encounter. A non-finite position REJECTS the encounter rather than
+// relocating it to the origin (mirrors the objective cache rule); an enemyType outside the Enemy-0
+// allow-list REJECTS it (the editor must never author an enemy the runtime can't spawn). It is NOT an
+// encounter system: one beat type, exactly one enemy, no waves / loot / AI / scripting.
+//
+// Content-1 adds `label` — an optional authored display string naming the beat's location so the
+// presentation banner reads correctly per beat ("guards the crossing" vs "guards the pass"). It is the
+// ONLY new field; it changes no combat/runtime behaviour (presentation text only).
 
 import { ENEMY_TYPES } from "../enemies/EnemyTypes.js";
 
@@ -18,6 +22,7 @@ export const MAX_ENCOUNTERS = 16; // defense in depth; far above any real Encoun
 export const RADIUS_MIN = 1;
 export const RADIUS_MAX = 40;
 export const DEFAULT_RADIUS = 6;
+export const MAX_LABEL_LENGTH = 48; // a banner location label, not prose
 // Encounter-0 projects EXACTLY one enemy. Stored as a field so a future "waves" bump is one line,
 // but clamped to 1 here — this clamp IS the no-waves gate.
 export const ENEMY_COUNT = 1;
@@ -56,9 +61,25 @@ function sanitizeId(value, fallback) {
 }
 
 /**
+ * Sanitize the optional authored banner label (display text). Untrusted (it comes from a save file too),
+ * so strip — defense in depth, the banner renders via textContent — markup angle-brackets, C0 control
+ * chars + DEL, and Unicode bidi-override / zero-width / BOM formatting (which could cosmetically reorder
+ * or hide banner text). Then trim + cap length. Empty/non-string → null (the banner falls back to a
+ * neutral noun). Ordinary spaces + printable Unicode (e.g. emoji) are preserved.
+ */
+export function sanitizeLabel(value) {
+  if (typeof value !== "string") return null;
+  // <> markup · C0 controls + DEL · zero-width/LRM/RLM 200B-200F · bidi embed/override 202A-202E · bidi
+  // isolates 2066-2069 · BOM FEFF (all \u escapes → the source stays plain ASCII, never a binary file).
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[<>\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim().slice(0, MAX_LABEL_LENGTH);
+  return cleaned.length ? cleaned : null;
+}
+
+/**
  * Normalize one untrusted encounter descriptor, or null if it can't yield a valid encounter.
- * Whitelists exactly { type, id, position, radius, enemyType, enemyCount, completed, persistCompletion };
- * unknown keys are dropped.
+ * Whitelists exactly { type, id, position, radius, enemyType, enemyCount, completed, persistCompletion,
+ * label }; unknown keys are dropped.
  * @param {unknown} item
  */
 export function normalizeEncounterDescriptor(item) {
@@ -80,5 +101,8 @@ export function normalizeEncounterDescriptor(item) {
     // written to disk at all. Never `item.x ?? ...` / conditional emission.
     completed: item.completed === true,
     persistCompletion: item.persistCompletion !== false,
+    // Content-1: the optional banner location label (presentation only). ALWAYS emit the key (a string
+    // or null) so the absence round-trips stably; the banner falls back to a neutral noun when null.
+    label: sanitizeLabel(item.label),
   };
 }

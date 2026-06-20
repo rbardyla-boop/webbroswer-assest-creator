@@ -22,47 +22,47 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Encounter-1 accepted; tag `world-builder-encounter-1`).**
-- **63 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Content-1 accepted; tag `world-builder-content-1-combat-beats`).**
+- **64 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Encounter-1 — Authored Combat Beat Polish**
-  (ADR-052): makes the existing combat beat read as an intentional, readable moment using ONLY the shipped Combat-0 /
-  Enemy-0 / Encounter Editor-0 seams — NO AI director, patrol, chase, waves, loot, ranged attacks, or balancing. A new
-  additive `EncounterPresentation` (the `RuntimeFeedback` pattern) derives a player-facing PHASE
-  (dormant → alert → engaged → cleared) from proximity + the Enemy-0 state + completion, and drives: a sentinel
-  idle→alert emissive TELEGRAPH (the threat reads before it fires), a dedicated runtime GATE-LIGHT beacon at the crossing
-  (dim → hostile pulse → steady green + a one-shot clear pulse), an encounter BANNER (takes precedence at a live beat),
-  and the existing Polish-1 clear AUDIO. It is a presentation OBSERVER — it mutates no encounter/enemy STATE.
-- **What already existed vs what Encounter-1 added.** Hit feedback (EnemyFeedback emissive flash + recoil), defeat
-  feedback (color shift + slump + tip), the zone-ring amber→green on completion, the clear audio cue, and persistence were
-  ALREADY shipped — Encounter-1 added the MISSING readability: the telegraph, the encounter phase + banner, and the
-  gate-light/clear marker. The telegraph runs AFTER `EnemyFeedback` each frame and pulses the idle sentinel's emissive only
-  while idle (backs off the instant combat starts → never fights the flash/defeat recolor).
-- **BYTE-STABILITY (the load-bearing invariant).** `src/main.js` edits are PURELY ADDITIVE (an `EncounterPresentation`
-  import/construct + a `load()` inside `loadEncounters` + two `update()` calls + a banner-fallback PREPEND that returns
-  null for encounter-less worlds + a DEV `__ENCOUNTER_PRESENTATION__` hook). `EncounterRuntime` / `EnemyRuntime` /
-  `EnemyFeedback` / `EnemyTypes` / `FrozenCacheSlice` / `SliceCompletion` and the benchmark scene `visualBenchmarkV1.js`
-  are ALL UNTOUCHED (Encounter-1 is pure runtime presentation — no authored-scene change). Worlds with NO encounters build
-  no gate-light + fire no telegraph → the frozen-cache + first-playable slices are byte-stable. No `WORLD_DOCUMENT_VERSION`
-  bump.
-- **Encounter-1 gates GREEN**: `test:encounter-polish` (7 Node: phase derivation, telegraph idle-only, banner per phase,
-  beacon colour/opacity, purity, and an isolation scan proving the layer assigns no encounter/enemy STATE) +
-  `test:encounter-polish-proof` (on `visual-benchmark-1`: staged+visible → dormant→alert→engaged→cleared driven by REAL
-  player teleports, the telegraph substantively lifts the sentinel emissive, hit→defeat via real strikes, the clear pulse
-  fires exactly ONCE, the audio cue fires, reload persists completed/defeated with no re-pulse, benchmark within the
-  Performance Contract, 0 errors). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
-  observer-discipline · phase/feedback-correctness · proof-rigor + per-finding verify): **0 critical / 0 high / 0 medium /
-  1 low** — fixed (the telegraph proof threshold raised from > 0.25 to > 0.6 so it validates the lift is substantively
-  applied). Full sweep re-run — `build`, `qa`, `test:frozen-cache-proof`, `test:first-playable-proof`,
-  `test:visual-benchmark-proof`, `test:performance-contract-proof` (6 scenes), enemy/combat/encounter-editor regressions —
-  all green; shipped worlds byte-stable.
-- **Prior stages:** Environment Polish-1 (ADR-051, `world-builder-environment-polish-1`) — visual benchmark expansion
-  (landmarks + per-scene readability overrides + feedback), still WebGL, frozen slices byte-stable. WebGPU Feasibility
-  Gate-0 (ADR-050) — feasibility-only, go/no-go = B (WebGPU stays an experimental lab). Visual Benchmark-1 (ADR-049) — the
-  original authored corridor; LOD finding B.
-- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-1 (basic movement/patrol, a bigger seam — only if the
-  slice needs it), more authored content/encounters, or the Nanite-like Shader Feasibility track (only if benchmark data
-  shows a real rendering/detail bottleneck). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-1 — Second Authored Combat Beat**
+  (ADR-053): proves the encounter authoring model is REPEATABLE. The visual-benchmark corridor now stages TWO authored
+  combat beats — the glacial-crossing skirmish + a final guardian at the cache gate (~10.5m further on, framed by the
+  existing pass pillars) — on the SAME systems (Encounter Editor-0 orchestration, Combat-0 strike, Enemy-0 sentinel) with
+  NO new runtime code. The two beats complete + persist INDEPENDENTLY; each carries an optional per-beat `label` so the
+  banner names its own location ("guards the crossing" vs "guards the pass"). NO AI/patrol/chase/waves/loot/pathfinding/
+  new combat rules/procedural generation.
+- **The change is almost pure authored DATA.** `EncounterRuntime` / `EncounterPresentation` already iterate over N beats,
+  so the second beat is a sample-data addition + an additive `label` field threaded
+  `descriptor → snapshot → presentation → banner`. The ONLY new field is `label` (whitelisted + sanitized at the
+  untrusted-input boundary — markup/control/bidi/zero-width/BOM stripped, capped at 48, ALWAYS emitted string|null,
+  rendered via `.textContent`). The banner is templated so the crossing beat's text is BYTE-IDENTICAL to before.
+- **BYTE-STABILITY.** `src/main.js`, `EnemyRuntime` / `EnemyFeedback` / `EnemyTypes` / `CombatRuntime` /
+  `FrozenCacheSlice` / `SliceCompletion` / `EncounterCompletion` / `EncounterMarkers` are ALL UNTOUCHED. No
+  `WORLD_DOCUMENT_VERSION` bump. The visual benchmark evolves in place (as under Environment Polish-1); the frozen-cache +
+  first-playable slices (no encounters) are byte-stable. Benchmark draws/triangles unchanged (98 / 499,864 — the two
+  sentinels + gate-lights add no measurable draw cost).
+- **Content-1 gates GREEN**: `test:content-combat-beats` (5 Node: two distinct beats, label sanitization incl. bidi/
+  zero-width stripping, banner location-awareness + crossing byte-identity, INDEPENDENT completion round-trip both
+  directions, determinism) + `test:content-combat-beats-proof` (on `visual-benchmark-1`: two beats staged with two
+  distinct ephemeral enemies + two gate-lights + independent phase at the overlook → defeat beat#1 leaves beat#2 LIVE →
+  banner names "the pass" → defeat beat#2 → each fires its OWN clear pulse → objective still completable → benchmark within
+  the Performance Contract → reload persists BOTH completions + the objective, no re-pulse, 0 errors). The three sibling
+  1-beat gates evolved honestly to 2 beats (encounter-editor key-set, visual-benchmark regression+proof, encounter-polish
+  presentCount→≥1 + a per-beat banner check). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
+  independence/persistence · label-sanitization/security · proof/gate-rigor + per-finding verify): **0 critical / 0 high /
+  1 medium / 4 low** — all addressed (geometry precondition documented + asserted; `sanitizeLabel` hardened to strip bidi/
+  zero-width/BOM; non-null banner assert). Council (local) added only refuted hallucinations. Full sweep — `build`, `qa`,
+  `test:frozen-cache-proof`, `test:first-playable-proof`, `test:visual-benchmark-proof`, `test:performance-contract-proof`
+  (6 scenes), enemy/combat/encounter-editor — all green; shipped worlds byte-stable.
+- **Prior stages:** Encounter-1 (ADR-052, `world-builder-encounter-1`) — authored combat-beat polish (telegraph +
+  gate-light + phase/banner), no AI director. Environment Polish-1 (ADR-051) — visual benchmark expansion (landmarks +
+  per-scene readability overrides + feedback), still WebGL. WebGPU Feasibility Gate-0 (ADR-050) — feasibility-only,
+  go/no-go = B (WebGPU stays an experimental lab). Visual Benchmark-1 (ADR-049) — the original authored corridor.
+- **Next per ADR-039 roadmap: (await operator pick)** — Content-1 proved the authoring model scales to a second beat; the
+  evidence-gated fork now is: more authored content (if two staged sentinels feel enough), Enemy-1 movement/patrol (if
+  static sentinels feel dead — a bigger seam), or shader/LOD feasibility (only if visuals become the constraint). Keep
+  converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -1892,7 +1892,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 11. WebGPU Feasibility Gate-0 — feasibility-only research gate; go/no-go = B (keep as experimental lab)  ← SHIPPED (ADR-050)
 12. Environment Polish-1 — visual benchmark expansion (landmarks + readability overrides + feedback), still WebGL  ← SHIPPED (ADR-051)
 13. Encounter-1 — authored combat-beat polish (telegraph + gate-light + phase/banner), no AI director  ← SHIPPED (ADR-052)
-14. (await operator pick) — Enemy-1 (movement/patrol) / more authored content / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
+14. Content-1 — second authored combat beat (repeatable encounter composition: crossing + cache gate), no AI/waves/loot  ← SHIPPED (ADR-053)
+15. (await operator pick) — Enemy-1 (movement/patrol) / more authored content / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2845,3 +2846,81 @@ so it validates the lift is substantively applied, not merely that some emissive
 No waves. No loot. No factions. No procedural encounter generation. No inventory. No combat balancing. No health UI
 beyond the simple sentinel state. No rewrite of Combat-0 / Enemy-0 / Encounter Editor-0. No mutation of the frozen
 slice or the benchmark scene. No `WORLD_DOCUMENT_VERSION` bump.
+
+## ADR-053 — Content-1: Second Authored Combat Beat (prove repeatable composition, add no runtime systems)
+
+**Status.** Accepted. Tag `world-builder-content-1-combat-beats` (local only). Stage 64.
+
+**Context.** Encounter-1 made ONE combat beat read as an intentional moment. Before opening the much larger Enemy-1
+movement/patrol seam — and with the data still saying rendering architecture is not the bottleneck — the right next
+step is to prove the authoring model is REPEATABLE: a designer can stage a SECOND readable combat beat with the existing
+editor/runtime seams and no new runtime code. If two staged sentinels feel enough, more authored content follows; if
+they feel dead, that tells us what Enemy-1 actually needs. Either way the pathing decision is deferred on evidence.
+
+**Decisive finding — the runtime already iterates N beats.** `EncounterRuntime.load/update/snapshot` and
+`EncounterPresentation.load/update` already loop over every authored beat (the single on-screen banner is the
+max-priority across all beats). So a second beat is almost entirely a SAMPLE-DATA addition — not a systems change. This
+is the orchestrate-don't-rewrite doctrine at its purest: the verification surface is bigger than the implementation.
+
+**Decision — author a second beat + thread one optional `label`.** (1) `visualBenchmarkV1.js` authors a second
+`combat-beat.v0` (`vb-cache-sentinel`, `glacial_sentinel`, count 1) at the cache gate — `cache − dir·2.5`, ~10.5m past
+the crossing, framed by the existing tall pass pillars (a tighter "final threshold" vs the open crossing). The crossing
+stays `items[0]` so `encounters[0]` is unchanged for the Encounter-1 gate. (2) The encounter banner was hardcoded to
+"the crossing"; a second beat elsewhere would read the wrong location. So `encounterBannerText` is TEMPLATED on an
+optional per-beat `label` (`guards ${loc}` / `clear ${loc}` / `${Cap(loc)} is clear`); with label "the crossing" the
+three strings are BYTE-IDENTICAL to the pre-Content-1 banner. The crossing beat is labelled "the crossing", the cache
+beat "the pass". The label threads `descriptor → EncounterRuntime.snapshot → EncounterPresentation → banner`.
+
+**The `label` field (the only new data).** `label` is added to the encounter descriptor whitelist
+(`normalizeEncounterDescriptor`). It is UNTRUSTED (save files / imported worlds), so `sanitizeLabel` strips markup
+angle-brackets, C0 control chars + DEL, and Unicode bidi-override / zero-width / BOM formatting (defense in depth — the
+banner already renders via `.textContent`, so there is no injection vector; the strip prevents cosmetic reorder/hide),
+trims, and caps at 48 chars. It is ALWAYS emitted as `string|null` (the persistence-whitelist lesson — absence
+round-trips stably; a null label falls back to the neutral noun "the path"). Ordinary spaces + printable Unicode (emoji)
+are preserved. No `WORLD_DOCUMENT_VERSION` bump — `label` is an additive, backward-compatible whitelist key.
+
+**Independence (the load-bearing property).** The two beats complete + persist INDEPENDENTLY. `EncounterRuntime.update`
+marks each beat complete only when ITS OWN ephemeral actors are all defeated (the two beats project distinct namespaced
+enemies `enc:vb-crossing-sentinel:0` / `enc:vb-cache-sentinel:0`); the whitelist emits `completed` per descriptor, so
+one beat true + one false round-trip through save→load without leaking. Each beat owns its own one-shot clear pulse. The
+banner precedence is emergent + correct: clearing one beat while standing inside the adjacent beat's 22m alert range
+shows the nearer live threat's banner ("the pass") rather than the just-cleared message — the immediate threat reads
+first. (This is why the Encounter-1 gate's cleared-banner check moved to the crossing beat's OWN per-beat `bannerText`
+line, which is precedence-independent — a legitimate fix, not a weakening.)
+
+**Byte-stability.** `src/main.js` is UNTOUCHED (the frame loop + `loadEncounters` already drive all beats). `EnemyRuntime`
+/ `EnemyFeedback` / `EnemyTypes` / `CombatRuntime` / `FrozenCacheSlice` / `SliceCompletion` / `EncounterCompletion` /
+`EncounterMarkers` are ALL zero-diff. The only runtime edits are additive: `label` in two snapshots, the templated
+banner, and a per-beat `bannerText` in the presentation snapshot. Worlds with no encounters (the frozen-cache +
+first-playable slices) are unaffected. Benchmark draws/triangles are unchanged (98 / 499,864 — the two sentinels +
+gate-lights add no measurable draw cost; the perf contract's visual-benchmark scene stays within its locked ceiling, no
+re-lock needed).
+
+**Gates.** `test:content-combat-beats` (5 Node: two distinct beats staged apart with distinct ids/labels; label
+sanitization incl. bidi/zero-width/BOM stripping + emoji preserved + cap; banner location-awareness with the crossing
+banner asserted BYTE-IDENTICAL via `===`; INDEPENDENT completion round-trip in BOTH directions through
+`validateWorldDocument`; determinism) + `test:content-combat-beats-proof` (SwiftShader on `visual-benchmark-1`: two
+beats staged, two DISTINCT ephemeral enemies, two gate-lights, independent phase at the overlook (far cache dormant,
+near crossing live) → defeat beat#1 with `before:[false,false]` precondition → beat#1 completed while beat#2 STILL false
+→ the cache beat's own banner + the live on-screen banner name "the pass" → defeat beat#2 → both completed, each
+`clearPulses===1` (no shared pulse) → relic objective still completable → benchmark within the Performance Contract →
+reload persists BOTH completions + the objective, `clearPulses:[0,0]`, 0 console errors). The three sibling 1-beat gates
+evolved honestly to two beats: `encounter-editor-regression` (the `Object.keys` whitelist set gains `label` + new
+sanitization sub-cases), `visual-benchmark-regression` §7 (1→2 with per-beat type/enemy/count/finite/id/label/staging
+assertions — strictly stronger), `browser-visual-benchmark-proof` (`encounters` 1→2; still fights `encounters[0]`),
+`browser-encounter-polish-proof` (`presentCount` ===1→≥1 with the exact count now owned by the content proof; cleared
+banner via the crossing beat's per-beat line).
+
+**Review.** Fresh-context adversarial review — 4 dimensions (byte-stability/isolation · independence/persistence ·
+label-sanitization/security · proof/gate-rigor), per-finding verify: **0 critical / 0 high / 1 medium / 4 low**, all
+addressed — the content proof's banner check documents + asserts the ~10.5m/22m geometry precondition (and adds the
+precedence-independent per-beat assertion); `sanitizeLabel` hardened to strip bidi/zero-width/BOM Unicode; an explicit
+non-null banner assert added. Council (local model) returned 8 findings, ALL refuted by the actual code + green gates
+(hallucinated unsanitized-label / undefined-`capitalize` / single-beat-render / missing-test — none real). Tree
+re-audited clean after the review (verifier-can-write gotcha).
+
+**Non-goals (held).** No enemy movement / patrol / chase / pathfinding. No waves (each beat is exactly one enemy). No
+loot / rewards / factions / inventory. No AI director. No ranged attacks or enemy damage to the player. No procedural
+encounter generation. No new combat rules or balancing. No new runtime system — the second beat reuses Encounter
+Editor-0 + Combat-0 + Enemy-0 unchanged. No rewrite of the seams. No mutation of the frozen-cache / first-playable
+slices. No `WORLD_DOCUMENT_VERSION` bump.

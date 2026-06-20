@@ -212,7 +212,14 @@ export function buildVisualBenchmarkV1() {
     ],
   };
 
-  // --- Encounter Editor-0: one combat beat on the glacial crossing --------------------------------
+  // --- Encounter Editor-0 + Content-1: two authored combat beats along the corridor ---------------
+  // Beat #1: the glacial crossing skirmish (mid-corridor, open, framed by the short crossing posts).
+  // Beat #2 (Content-1): a final guardian at the cache gate, a few metres in front of the cache, framed
+  // by the existing tall pass pillars — a tighter "threshold" composition vs the open crossing. Same
+  // systems (Encounter Editor-0 orchestration, Combat-0 strike, Enemy-0 sentinel), DIFFERENT staging.
+  // The two beats complete + persist INDEPENDENTLY; each carries a `label` so the banner names its own
+  // location. The crossing stays items[0] (encounters[0]) so the Encounter-1 gate reads it unchanged.
+  const cacheGate = { x: cache.x - dir.x * 2.5, z: cache.z - dir.z * 2.5 }; // 2.5 m in front of the cache
   doc.encounters = {
     version: 1,
     items: [
@@ -225,6 +232,18 @@ export function buildVisualBenchmarkV1() {
         enemyCount: 1,
         completed: false,
         persistCompletion: true,
+        label: "the crossing",
+      },
+      {
+        type: ENCOUNTER_TYPE,
+        id: "vb-cache-sentinel",
+        position: { x: cacheGate.x, y: getHeight(cacheGate.x, cacheGate.z), z: cacheGate.z },
+        radius: 6,
+        enemyType: "glacial_sentinel",
+        enemyCount: 1,
+        completed: false,
+        persistCompletion: true,
+        label: "the pass",
       },
     ],
   };

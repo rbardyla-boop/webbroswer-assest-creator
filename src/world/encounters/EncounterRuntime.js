@@ -117,6 +117,8 @@ export class EncounterRuntime {
         enemyType: e.descriptor.enemyType,
         completed: e.completed,
         persistCompletion: e.descriptor.persistCompletion !== false,
+        // Content-1: the authored banner location label (presentation reads it to name the beat).
+        label: e.descriptor.label ?? null,
         enemyId: e.actors[0]?.id ?? null,
         enemyState: e.actors[0]?.state?.state ?? null,
       })),

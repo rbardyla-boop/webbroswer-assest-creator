@@ -85,6 +85,8 @@
     "test:webgpu-feasibility-proof": "node scripts/browser-webgpu-feasibility-proof.mjs",
     "test:encounter-polish": "node scripts/encounter-polish-regression.mjs",
     "test:encounter-polish-proof": "node scripts/browser-encounter-polish-proof.mjs",
+    "test:content-combat-beats": "node scripts/content-combat-beats-regression.mjs",
+    "test:content-combat-beats-proof": "node scripts/browser-content-combat-beats-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

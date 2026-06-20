@@ -60,18 +60,33 @@ export function telegraphEmissive(baseIntensity, t, phase) {
   return base + lift + amp * (0.5 + 0.5 * Math.sin(t * 4)); // always > base; oscillates within the band
 }
 
+// The neutral fallback location noun when a beat authors no label (Content-1). An unlabelled beat still
+// reads ("guards the path"); a labelled beat names its own location ("the crossing" / "the pass").
+const DEFAULT_BEAT_LABEL = "the path";
+
+function beatLabel(label) {
+  return typeof label === "string" && label.trim() ? label.trim() : DEFAULT_BEAT_LABEL;
+}
+
+function capitalize(text) {
+  return text.length ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
 /**
  * The single-line banner for the beat, or null to yield to the relic-objective banner. `clearedRecently`
- * is the time-windowed flag the presentation computes (the clear message lingers, then releases). Pure.
+ * is the time-windowed flag the presentation computes (the clear message lingers, then releases). `label`
+ * (Content-1) is the beat's authored location noun; the banner names it so two beats read correctly. With
+ * label "the crossing" the strings are byte-identical to the pre-Content-1 banner. Pure.
  */
-export function encounterBannerText(phase, { clearedRecently = false } = {}) {
+export function encounterBannerText(phase, { clearedRecently = false, label = null } = {}) {
+  const loc = beatLabel(label);
   switch (phase) {
     case ENCOUNTER_PHASE.ALERT:
-      return "⚔ A glacial sentinel guards the crossing — ready your weapon";
+      return `⚔ A glacial sentinel guards ${loc} — ready your weapon`;
     case ENCOUNTER_PHASE.ENGAGED:
-      return "⚔ Strike the sentinel to clear the crossing";
+      return `⚔ Strike the sentinel to clear ${loc}`;
     case ENCOUNTER_PHASE.CLEARED:
-      return clearedRecently ? "✓ The crossing is clear — the route ahead is open" : null;
+      return clearedRecently ? `✓ ${capitalize(loc)} is clear — the route ahead is open` : null;
     default:
       return null; // dormant → no encounter banner; the objective banner shows through
   }

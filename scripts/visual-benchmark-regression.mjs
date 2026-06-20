@@ -147,18 +147,36 @@ const shape = (doc) => ({
   ok("authoring: one beacon-trail modifier over a route spline + mask");
 }
 
-// --- 7. one Encounter-0 combat beat on the crossing --------------------------
+// --- 7. two Encounter-0 combat beats (crossing + cache gate), independent, no waves --------------
 {
   const enc = buildVisualBenchmarkV1().encounters;
-  assert.equal(enc.items.length, 1, "exactly one authored combat beat (no waves)");
-  const beat = enc.items[0];
-  assert.equal(beat.type, ENCOUNTER_TYPE, "it is a combat-beat.v0");
-  assert.equal(beat.enemyType, "glacial_sentinel", "it names the Enemy-0 type");
-  assert.equal(beat.enemyCount, 1, "exactly one enemy");
+  // Content-1: a SECOND authored beat proves the authoring model is repeatable. "No waves" is the
+  // per-beat enemyCount===1 invariant — two distinct authored beats are not waves.
+  assert.equal(enc.items.length, 2, "two authored combat beats (Content-1: crossing + cache gate)");
+  for (const beat of enc.items) {
+    assert.equal(beat.type, ENCOUNTER_TYPE, "each beat is a combat-beat.v0");
+    assert.equal(beat.enemyType, "glacial_sentinel", "each names the Enemy-0 type");
+    assert.equal(beat.enemyCount, 1, "each projects exactly one enemy (no waves)");
+    assert.ok(["x", "y", "z"].every((k) => Number.isFinite(beat.position[k])), "finite beat position");
+  }
+  const [crossingBeat, cacheBeat] = enc.items;
+  // The crossing stays items[0] so encounters[0] is stable for the Encounter-1 gate.
+  assert.equal(crossingBeat.id, "vb-crossing-sentinel", "the crossing beat is first (encounters[0] stable)");
+  assert.equal(cacheBeat.id, "vb-cache-sentinel", "the cache-gate beat is second");
+  assert.notEqual(crossingBeat.id, cacheBeat.id, "the two beats have distinct ids");
   const layout = visualBenchmarkLayout();
-  assert.ok(["x", "y", "z"].every((k) => Number.isFinite(beat.position[k])), "finite beat position");
-  assert.ok(distToSegment(beat.position, layout.spawn, layout.cache) <= 12, "the beat sits on the carry crossing");
-  ok("encounter: one combat-beat on the carry crossing (glacial_sentinel, count 1)");
+  assert.ok(distToSegment(crossingBeat.position, layout.spawn, layout.cache) <= 12, "the crossing beat sits on the carry crossing");
+  assert.ok(dist2(cacheBeat.position, layout.cache) <= 6, "the cache-gate beat sits at the cache gate");
+  // Different staging: the two beats are at distinct points along the corridor.
+  assert.ok(dist2(crossingBeat.position, cacheBeat.position) >= 6, `the two beats are staged apart (${dist2(crossingBeat.position, cacheBeat.position).toFixed(1)}m)`);
+  // Per-beat labels (Content-1): each names its own location so the banner reads correctly.
+  assert.equal(crossingBeat.label, "the crossing", "the crossing beat is labelled");
+  assert.equal(cacheBeat.label, "the pass", "the cache-gate beat is labelled");
+  assert.notEqual(crossingBeat.label, cacheBeat.label, "the two beats have distinct banner labels");
+  // Independent completion: the authored beats are both uncompleted (each completes in play).
+  assert.equal(crossingBeat.completed, false, "the crossing beat starts uncompleted");
+  assert.equal(cacheBeat.completed, false, "the cache-gate beat starts uncompleted");
+  ok("encounters: two combat-beats (crossing + cache gate), distinct ids/labels, independent, no waves");
 }
 
 // --- 8. structural budget: the authored objects load within the contract -----

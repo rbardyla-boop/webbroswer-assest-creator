@@ -87,7 +87,9 @@ const run = await withBrowserProof(
       );
       assert.equal(staged.beatPresent, true, "the authored combat beat is present in the runtime");
       assert.ok(staged.zones >= 1, `the encounter zone ring is in the scene (${staged.zones})`);
-      assert.equal(staged.presentCount, 1, "the encounter presentation built a gate-light for the beat");
+      // Content-1 authored a SECOND beat on the benchmark; this Encounter-1 gate proves the crossing beat
+      // (encounters[0]) specifically, so it asserts a gate-light was built (>=1), not the exact count.
+      assert.ok(staged.presentCount >= 1, `the encounter presentation built a gate-light for the beat (${staged.presentCount})`);
       assert.ok(staged.phase && staged.phase !== "cleared", `the staged beat is live, not pre-cleared (${staged.phase})`);
 
       // (1b) far from the crossing → DORMANT (the beat is quiet until approached)
@@ -174,7 +176,11 @@ const run = await withBrowserProof(
             phase: e2.encounters[0].phase,
             pulsesAfterClear: e1.encounters[0].clearPulses,
             pulsesAfterStep: e2.encounters[0].clearPulses,
-            banner: e2.banner,
+            // The crossing beat's OWN banner line. Content-1 stages a second beat ~10m away, so once the
+            // crossing clears the on-screen banner (window-wide max priority) shows the adjacent beat's
+            // alert ("ready your weapon") — the nearer live threat reads first, by design. This gate proves
+            // the CROSSING beat's clear message specifically via its per-beat line.
+            crossingBanner: e2.encounters[0].bannerText,
             cueAttempts: window.__RUNTIME_FEEDBACK__()?.cueAttempts ?? -1,
           };
         })()`
@@ -183,7 +189,8 @@ const run = await withBrowserProof(
       assert.equal(cleared.pulsesAfterClear, 1, "the clear pulse fired exactly once on the completion edge");
       assert.equal(cleared.pulsesAfterStep, 1, "the clear pulse does NOT re-fire on subsequent frames (one-shot)");
       assert.ok(cleared.cueAttempts >= 1, `the encounter-clear audio cue fired (${cleared.cueAttempts})`);
-      assert.match(cleared.banner ?? "", /clear|open/, "the banner announces the route is clear/open");
+      assert.ok(cleared.crossingBanner, "the crossing beat produced a banner line on clear (non-null)");
+      assert.match(cleared.crossingBanner, /clear|open/, "the crossing beat's banner announces the route is clear/open");
 
       // (6) the visual benchmark stays within the Performance Contract (the gate-light beacon is cheap)
       captured = await evalValue(play.cdp, `(() => ({ perf: window.__PERF__.snapshot(), budget: window.__BUDGET__ ? window.__BUDGET__() : null }))()`);

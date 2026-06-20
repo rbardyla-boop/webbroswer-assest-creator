@@ -65,12 +65,22 @@ function inputStub() {
   assert.ok(clean, "a valid beat descriptor normalizes");
   assert.deepEqual(
     Object.keys(clean).sort(),
-    ["completed", "enemyCount", "enemyType", "id", "persistCompletion", "position", "radius", "type"],
+    // Content-1 added `label` (an optional presentation noun) to the whitelist.
+    ["completed", "enemyCount", "enemyType", "id", "label", "persistCompletion", "position", "radius", "type"],
     "only whitelisted keys survive"
   );
   assert.equal(clean.waves, undefined, "an unknown key is dropped");
   assert.equal(clean.completed, false, "completed:false survives (always emitted)");
   assert.equal(clean.persistCompletion, true, "persistCompletion:true survives");
+  assert.equal(clean.label, null, "absent label → null (always emitted; banner falls back to a neutral noun)");
+
+  // Content-1: the optional banner label is sanitized (markup stripped, capped) + always emitted.
+  const labelled = normalizeEncounterDescriptor({ type: ENCOUNTER_TYPE, id: "l", position: { x: 0, y: 0, z: 0 }, enemyType: ENEMY_TYPE, label: "the pass" });
+  assert.equal(labelled.label, "the pass", "an authored label survives normalization");
+  const dirty = normalizeEncounterDescriptor({ type: ENCOUNTER_TYPE, id: "l2", position: { x: 0, y: 0, z: 0 }, enemyType: ENEMY_TYPE, label: "a<b>c" });
+  assert.equal(dirty.label, "abc", "label markup angle-brackets are stripped (defense in depth)");
+  const longLabel = normalizeEncounterDescriptor({ type: ENCOUNTER_TYPE, id: "l3", position: { x: 0, y: 0, z: 0 }, enemyType: ENEMY_TYPE, label: "x".repeat(120) });
+  assert.ok(longLabel.label.length <= 48, "an over-long label is capped");
 
   // Booleans default correctly + survive when falsey.
   const def = normalizeEncounterDescriptor({ type: ENCOUNTER_TYPE, id: "d", position: { x: 0, y: 0, z: 0 }, enemyType: ENEMY_TYPE });
