@@ -22,42 +22,47 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Environment Polish-1 accepted; tag `world-builder-environment-polish-1`).**
-- **62 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Encounter-1 accepted; tag `world-builder-encounter-1`).**
+- **63 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Environment Polish-1 — Visual Benchmark
-  Expansion** (ADR-051): evolves the `visual-benchmark-1` corridor IN PLACE toward a shippable authored slice using ONLY
-  the existing stack (no new rendering architecture, no WebGPU, no terrain/combat/AI) — +4 route-framing landmarks
-  (waypoint cairns + a crossing gateway), PER-SCENE `lighting`/`water`/`atmosphere` readability overrides (applied to the
-  benchmark document ONLY), ambient particle feedback staging the relic/cache/crossing, and an additive encounter-clear
-  audio cue. The next constraint was art-directed quality, not engine infrastructure — the WebGPU gate just proved that.
-- **MEASURED before/after (`docs/VISUAL_BENCHMARK.md`, SwiftShader STRUCTURAL not GPU-FPS):** full scene draws 116→119,
-  tris 512,962→511,720, objs 11→15, batches 2→1 — **the polish is nearly free structurally** (+4 landmarks + 3 particle
-  emitters add ~3 draws + no triangle delta; grass still dominates ~500k). The per-scene `visual-benchmark` ceiling was
-  RE-CAPTURED + RE-LOCKED (`objects` 16→20) at the new baseline+headroom, draws/tris/veg at the shared glacial values;
-  classifies **green**. **LOD finding unchanged: B (defer for this scope)** — polishing toward shipping quality did not
-  move the scene out of its structural band. No "LOD obsolete" / Nanite / GPU-FPS claim.
-- **BYTE-STABILITY (the load-bearing invariant).** The shipped Frozen Cache / first-playable slices stay byte-stable:
-  `src/main.js` edits are PURELY ADDITIVE (a `RuntimeFeedback` import/construct + two `runtimeFeedback.update(snapshot)`
-  hooks + a DEV `__RUNTIME_FEEDBACK__` hook — zero behavior change); `FrozenCacheSlice.js` + `SliceCompletion.js`
-  UNTOUCHED; and overriding the benchmark's `lighting`/`water`/`atmosphere` does NOT mutate the GLOBAL default a vanilla
-  world receives (each config factory returns a fresh object; the regression asserts a vanilla world is unaffected). The
-  relic loop's audio already comes from the always-on slice, so `RuntimeFeedback` only closes the encounter gap; worlds
-  with no encounters fire no cue → no behavior change. No `WORLD_DOCUMENT_VERSION` bump. No new test scripts (the polish
-  reuses `test:visual-benchmark(-proof)` on the same evolved scene).
-- **Environment Polish-1 gates GREEN**: `test:visual-benchmark` (11 Node: + per-scene overrides differ-from-default,
-  global-default-unchanged, ambient particles, the new landmark ids) + `test:visual-benchmark-proof` (overrides applied
-  live + PERSIST across reload, particle feedback live, the encounter-clear cue fires `cueAttempts` 0→1, relic + encounter
-  completable, reload-stable, 0 errors). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
-  override-safety · feedback-correctness · proof-rigor + per-finding verify): **0 critical / 0 high / 0 medium / 0 low**.
-  Full sweep re-run — `build`, `qa`, `test:frozen-cache-proof`, `test:first-playable-proof`,
-  `test:performance-contract-proof` (6 scenes) — all green; shipped worlds byte-stable.
-- **Prior stages:** WebGPU Feasibility Gate-0 (ADR-050, tag `world-builder-webgpu-feasibility-0`) — feasibility-only,
-  go/no-go = B (WebGPU stays an experimental lab; WebGL is production). Visual Benchmark-1 (ADR-049,
-  `world-builder-visual-benchmark-1`) — the original authored corridor; LOD finding B.
-- **Next per ADR-039 roadmap: (await operator pick)** — Encounter-1 (authored combat-beat polish, no AI director),
-  Enemy-1 (basic movement/patrol if needed), or the Nanite-like Shader Feasibility track (only if benchmark data shows a
-  real rendering/detail bottleneck). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Encounter-1 — Authored Combat Beat Polish**
+  (ADR-052): makes the existing combat beat read as an intentional, readable moment using ONLY the shipped Combat-0 /
+  Enemy-0 / Encounter Editor-0 seams — NO AI director, patrol, chase, waves, loot, ranged attacks, or balancing. A new
+  additive `EncounterPresentation` (the `RuntimeFeedback` pattern) derives a player-facing PHASE
+  (dormant → alert → engaged → cleared) from proximity + the Enemy-0 state + completion, and drives: a sentinel
+  idle→alert emissive TELEGRAPH (the threat reads before it fires), a dedicated runtime GATE-LIGHT beacon at the crossing
+  (dim → hostile pulse → steady green + a one-shot clear pulse), an encounter BANNER (takes precedence at a live beat),
+  and the existing Polish-1 clear AUDIO. It is a presentation OBSERVER — it mutates no encounter/enemy STATE.
+- **What already existed vs what Encounter-1 added.** Hit feedback (EnemyFeedback emissive flash + recoil), defeat
+  feedback (color shift + slump + tip), the zone-ring amber→green on completion, the clear audio cue, and persistence were
+  ALREADY shipped — Encounter-1 added the MISSING readability: the telegraph, the encounter phase + banner, and the
+  gate-light/clear marker. The telegraph runs AFTER `EnemyFeedback` each frame and pulses the idle sentinel's emissive only
+  while idle (backs off the instant combat starts → never fights the flash/defeat recolor).
+- **BYTE-STABILITY (the load-bearing invariant).** `src/main.js` edits are PURELY ADDITIVE (an `EncounterPresentation`
+  import/construct + a `load()` inside `loadEncounters` + two `update()` calls + a banner-fallback PREPEND that returns
+  null for encounter-less worlds + a DEV `__ENCOUNTER_PRESENTATION__` hook). `EncounterRuntime` / `EnemyRuntime` /
+  `EnemyFeedback` / `EnemyTypes` / `FrozenCacheSlice` / `SliceCompletion` and the benchmark scene `visualBenchmarkV1.js`
+  are ALL UNTOUCHED (Encounter-1 is pure runtime presentation — no authored-scene change). Worlds with NO encounters build
+  no gate-light + fire no telegraph → the frozen-cache + first-playable slices are byte-stable. No `WORLD_DOCUMENT_VERSION`
+  bump.
+- **Encounter-1 gates GREEN**: `test:encounter-polish` (7 Node: phase derivation, telegraph idle-only, banner per phase,
+  beacon colour/opacity, purity, and an isolation scan proving the layer assigns no encounter/enemy STATE) +
+  `test:encounter-polish-proof` (on `visual-benchmark-1`: staged+visible → dormant→alert→engaged→cleared driven by REAL
+  player teleports, the telegraph substantively lifts the sentinel emissive, hit→defeat via real strikes, the clear pulse
+  fires exactly ONCE, the audio cue fires, reload persists completed/defeated with no re-pulse, benchmark within the
+  Performance Contract, 0 errors). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
+  observer-discipline · phase/feedback-correctness · proof-rigor + per-finding verify): **0 critical / 0 high / 0 medium /
+  1 low** — fixed (the telegraph proof threshold raised from > 0.25 to > 0.6 so it validates the lift is substantively
+  applied). Full sweep re-run — `build`, `qa`, `test:frozen-cache-proof`, `test:first-playable-proof`,
+  `test:visual-benchmark-proof`, `test:performance-contract-proof` (6 scenes), enemy/combat/encounter-editor regressions —
+  all green; shipped worlds byte-stable.
+- **Prior stages:** Environment Polish-1 (ADR-051, `world-builder-environment-polish-1`) — visual benchmark expansion
+  (landmarks + per-scene readability overrides + feedback), still WebGL, frozen slices byte-stable. WebGPU Feasibility
+  Gate-0 (ADR-050) — feasibility-only, go/no-go = B (WebGPU stays an experimental lab). Visual Benchmark-1 (ADR-049) — the
+  original authored corridor; LOD finding B.
+- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-1 (basic movement/patrol, a bigger seam — only if the
+  slice needs it), more authored content/encounters, or the Nanite-like Shader Feasibility track (only if benchmark data
+  shows a real rendering/detail bottleneck). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -136,7 +141,7 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
-Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → **(await operator pick)**.
+Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1886,7 +1891,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 10. Visual Benchmark-1 — one compact area polished to shipping quality  ← SHIPPED (ADR-049)
 11. WebGPU Feasibility Gate-0 — feasibility-only research gate; go/no-go = B (keep as experimental lab)  ← SHIPPED (ADR-050)
 12. Environment Polish-1 — visual benchmark expansion (landmarks + readability overrides + feedback), still WebGL  ← SHIPPED (ADR-051)
-13. (await operator pick) — Encounter-1 (combat-beat polish) / Enemy-1 (movement/patrol) / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
+13. Encounter-1 — authored combat-beat polish (telegraph + gate-light + phase/banner), no AI director  ← SHIPPED (ADR-052)
+14. (await operator pick) — Enemy-1 (movement/patrol) / more authored content / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2783,3 +2789,59 @@ verify, 4 agents): **0 critical / 0 high / 0 medium / 0 low**. Tree re-audited c
 engine. No new combat systems. No enemy AI. No broad world generation. No mutation of the shipped Frozen Cache /
 first-playable slice. No edit to the frozen `FrozenCacheSlice` / `SliceCompletion`. No global lighting/water/
 atmosphere default change. No `WORLD_DOCUMENT_VERSION` bump. No "LOD obsolete" / Nanite / GPU-FPS claim.
+
+## ADR-052 — Encounter-1: Authored Combat Beat Polish (presentation over the seams, not new combat)
+
+**Status.** Accepted. Tag `world-builder-encounter-1` (local only). Stage 63.
+
+**Context.** Environment Polish-1 made the corridor read; the combat beat at the crossing was still flat. The data
+still says rendering architecture is not the bottleneck (draws green, polish cheap, grass dominant) and movement/
+pathing (Enemy-1) is a bigger seam than the slice needs — so the right next step is to make the EXISTING beat feel
+authored and readable: approach → recognize the threat → draw a weapon → defeat the sentinel → clear feedback →
+continue the objective. Using only Combat-0 (the strike), Enemy-0 (the reactive state), and Encounter Editor-0 (the
+authored placement + orchestration).
+
+**Decision — add a presentation OBSERVER; rewrite none of the seams.** A new additive `EncounterPresentation`
+(`src/world/encounters/EncounterPresentation.js`, the `RuntimeFeedback` pattern) reads `EncounterRuntime` + the
+projected Enemy-0 actor + the player and drives readability. Its pure decisions live in
+`EncounterPresentationLogic.js` (no THREE, Node-testable). It is an observer: it mutates only its OWN beacon meshes
+and the sentinel's (fresh, per-enemy) MATERIAL emissive — never encounter or enemy STATE.
+
+**What already existed vs what Encounter-1 added.** Hit feedback (EnemyFeedback emissive flash + recoil), defeat
+feedback (color shift + slump + tip), the zone-ring amber→green on completion, the clear audio cue (Polish-1's
+`RuntimeFeedback`), and persistence were ALREADY shipped. Encounter-1 added the MISSING readability:
+
+- **A player-facing PHASE** — `dormant → alert → engaged → cleared`, derived from player distance, the Enemy-0 state,
+  and completion.
+- **A sentinel idle→alert TELEGRAPH** — the threat reads before it fires. It runs AFTER `EnemyFeedback` each frame and
+  pulses the idle sentinel's emissive ONLY while idle; the instant the enemy is hit-react/defeated it backs off and
+  `EnemyFeedback` owns the material (so the two never fight). Per-enemy materials are fresh, so no bleed.
+- **A dedicated runtime GATE-LIGHT beacon** at the crossing — dim while dormant, hostile pulse while alert/engaged,
+  steady route-open green + a one-shot expand pulse when cleared. Runtime-built from the encounter (never authored/
+  serialized, like the zone ring), so no coupling to `WorldObjectManager` and the authored posts are untouched.
+- **An encounter BANNER** — "ready your weapon" → "strike the sentinel" → "the route is clear", taking precedence at a
+  live/just-cleared beat (prepended to the slice/objective banner chain) and yielding to null otherwise.
+
+**Byte-stability (the load-bearing invariant).** `src/main.js` is edited ADDITIVELY only — an `EncounterPresentation`
+import + construction, a `load()` inside `loadEncounters` (both load paths), two `update(encounterRuntime, player, dt)`
+calls after `runtimeFeedback.update` (the `__ENCOUNTER_DO__` driver + the real frame loop), a banner-fallback PREPEND
+that returns null for encounter-less worlds, and a DEV `__ENCOUNTER_PRESENTATION__` hook. `EncounterRuntime` /
+`EnemyRuntime` / `EnemyFeedback` / `EnemyTypes` / `FrozenCacheSlice` / `SliceCompletion` and the benchmark scene
+`visualBenchmarkV1.js` are ALL UNTOUCHED — Encounter-1 is pure runtime presentation (no authored-scene change). Worlds
+with NO encounters build no gate-light + fire no telegraph → the frozen-cache + first-playable slices are byte-stable.
+No `WORLD_DOCUMENT_VERSION` bump.
+
+**Gates.** `test:encounter-polish` (7 Node: phase derivation, telegraph idle-only, banner per phase, beacon colour/
+opacity, purity, and an assignment-only isolation scan proving the layer mutates no encounter/enemy STATE) +
+`test:encounter-polish-proof` (on `visual-benchmark-1`: staged+visible → `dormant→alert→engaged→cleared` driven by REAL
+player teleports → the telegraph substantively lifts the sentinel emissive → hit→defeat via real strikes → the clear
+pulse fires exactly ONCE and does not re-fire → the audio cue fires → reload persists completed/defeated with no
+re-pulse → benchmark within the Performance Contract → 0 errors). Fresh-context adversarial review (4 dimensions —
+byte-stability/isolation · observer-discipline · phase/feedback-correctness · proof-rigor + per-finding verify, 5
+agents): **0 critical / 0 high / 0 medium / 1 low** — fixed (the telegraph proof threshold raised from > 0.25 to > 0.6
+so it validates the lift is substantively applied, not merely that some emissive was written). Tree re-audited clean.
+
+**Non-goals (held).** No AI director. No movement / patrol / chase. No ranged attacks. No enemy damage to the player.
+No waves. No loot. No factions. No procedural encounter generation. No inventory. No combat balancing. No health UI
+beyond the simple sentinel state. No rewrite of Combat-0 / Enemy-0 / Encounter Editor-0. No mutation of the frozen
+slice or the benchmark scene. No `WORLD_DOCUMENT_VERSION` bump.

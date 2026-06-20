@@ -47,6 +47,7 @@ import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
 import { RuntimeFeedback } from "./world/feedback/RuntimeFeedback.js";
+import { EncounterPresentation } from "./world/encounters/EncounterPresentation.js";
 import { createPagedGeometryStream } from "./world/geometry/PagedGeometryStream.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
 
@@ -161,6 +162,10 @@ const encounterRuntime = runtimeMode ? new EncounterRuntime({ scene, enemyRuntim
 // FrozenCacheSlice). Headless-graceful (cue() no-ops without a gesture); worlds with no encounters get no
 // cue → byte-stable. Never touches the frozen slice.
 const runtimeFeedback = runtimeMode ? new RuntimeFeedback() : null;
+// Encounter-1: additive presentation over the combat beat — a sentinel idle→alert emissive telegraph, a
+// gate-light beacon at the crossing, and an encounter banner. Observes EncounterRuntime + the projected
+// Enemy-0 actor; mutates no encounter/enemy STATE. Worlds with no encounters build nothing → byte-stable.
+const encounterPresentation = runtimeMode ? new EncounterPresentation({ scene, player }) : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -471,6 +476,7 @@ if (import.meta.env.DEV) {
     step: (dt = 1 / 60) => {
       encounterRuntime?.update(dt, player);
       runtimeFeedback?.update(encounterRuntime?.snapshot());
+      encounterPresentation?.update(encounterRuntime, player, dt);
       if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
       return true;
     },
@@ -478,6 +484,9 @@ if (import.meta.env.DEV) {
   // Dev/test-only: the additive encounter-feedback owner's cue counter (audio no-ops headless, so the
   // counter is how a proof confirms the WIRING fired on the completion edge). For Environment Polish-1.
   window.__RUNTIME_FEEDBACK__ = () => runtimeFeedback?.snapshot() ?? null;
+  // Dev/test-only: the encounter PRESENTATION phase snapshot (phase/telegraph/clearPulses + banner) so the
+  // proof can assert the readability arc dormant→alert→engaged→cleared. For Encounter-1.
+  window.__ENCOUNTER_PRESENTATION__ = () => encounterPresentation?.snapshot() ?? null;
   // Dev/test-only: live document + scene-graph counts a browser eval can't otherwise reach (both
   // are module-local). The reload-duplication probe asserts these stay exactly 1 across repeated
   // reloads (no leaked beacon/marker, no appended relic/objective). For test:first-playable-hidden-proof.
@@ -833,6 +842,7 @@ function loadEnemies(document) {
 // set. Grounds onto the terrain single source. Idempotent (load() clears prior rings + ephemerals).
 function loadEncounters(document) {
   encounterRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z) });
+  encounterPresentation?.load({ encounterRuntime }); // encounter-1: build the gate-light beacons after the runtime projects the beats
 }
 
 async function applyLoadedWorld(document) {
@@ -1240,6 +1250,7 @@ function frame(now) {
   if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   encounterRuntime?.update(dt, player); // encounter-editor-0: poll each beat's enemy for defeat (after the enemy FSM ran)
   runtimeFeedback?.update(encounterRuntime?.snapshot()); // environment-polish-1: cue audio on encounter clear
+  encounterPresentation?.update(encounterRuntime, player, dt); // encounter-1: telegraph + gate-light + banner (after EnemyFeedback, so the idle telegraph is the last writer)
   // Persist a freshly-completed beat (only when persistCompletion) — save-on-edge, like enemy defeat.
   if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
@@ -1256,7 +1267,9 @@ function frame(now) {
 
   // Always-on objective banner (runtime only — the editor never reaches this branch).
   if (objectiveBannerEl) {
-    const text = frozenCacheSlice?.bannerText() ?? objectiveRuntime?.bannerText() ?? "";
+    // Encounter-1: the encounter banner takes precedence when the player is at a live/just-cleared beat
+    // (the immediate threat reads first), then yields to the slice / relic-objective banner.
+    const text = encounterPresentation?.bannerText() ?? frozenCacheSlice?.bannerText() ?? objectiveRuntime?.bannerText() ?? "";
     objectiveBannerEl.textContent = text;
     objectiveBannerEl.style.display = text ? "block" : "none";
   }

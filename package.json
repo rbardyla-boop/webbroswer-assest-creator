@@ -83,6 +83,8 @@
     "test:visual-benchmark-proof": "node scripts/browser-visual-benchmark-proof.mjs",
     "test:webgpu-feasibility": "node scripts/webgpu-feasibility-regression.mjs",
     "test:webgpu-feasibility-proof": "node scripts/browser-webgpu-feasibility-proof.mjs",
+    "test:encounter-polish": "node scripts/encounter-polish-regression.mjs",
+    "test:encounter-polish-proof": "node scripts/browser-encounter-polish-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",
