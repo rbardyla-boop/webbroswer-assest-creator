@@ -81,6 +81,8 @@
     "test:geometry-stream-proof": "node scripts/browser-paged-geometry-stream-proof.mjs",
     "test:visual-benchmark": "node scripts/visual-benchmark-regression.mjs",
     "test:visual-benchmark-proof": "node scripts/browser-visual-benchmark-proof.mjs",
+    "test:webgpu-feasibility": "node scripts/webgpu-feasibility-regression.mjs",
+    "test:webgpu-feasibility-proof": "node scripts/browser-webgpu-feasibility-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

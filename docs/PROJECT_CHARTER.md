@@ -22,35 +22,36 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Visual Benchmark-1 accepted; tag `world-builder-visual-benchmark-1`).**
-- **60 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (WebGPU Feasibility Gate-0 accepted; tag `world-builder-webgpu-feasibility-0`).**
+- **61 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Visual Benchmark-1 — one polished, measurable
-  authored corridor** (ADR-049): a NEW authored sample world (`visual-benchmark-1`) composing the Relic Overlook →
-  glacial crossing → cache-pedestal corridor as intentional data — glacial terrain/water/fog, authored primitive
-  landmarks framing a readable route, a Procedural Authoring-1 beacon-trail, an Encounter Editor-0 combat beat, a
-  reference-only validated-GLB cache prop, and the runtime-automatic relic loop. It answers the central question —
-  *can one small authored slice look intentional and stay measurable, reload-safe, and playable?* — **yes.** It does
-  NOT mutate the shipped Frozen Cache / first-playable slice (those stay historical baselines, byte-stable). The only
-  EXISTING files touched are additive (a registered sample, an added benchmark scene, a 5→6 scene-count edit, two test
-  scripts) — main.js untouched, `CONTRACT_BUDGETS` unchanged, no `WORLD_DOCUMENT_VERSION` bump.
-- **MEASURED + LOD FINDING (`docs/VISUAL_BENCHMARK.md`):** baseline (SwiftShader, STRUCTURAL not GPU-FPS) draws 116 /
-  tris 512,962 / objs 11 / batches 2 — **grass dominates triangles (≈513k, like the empty floor); the authored
-  corridor adds ~10 objects + 2 batches and keeps draws green.** Finding: **B — LOD can be deferred for this scoped
-  benchmark** (the dominant cost is grass, managed by patch streaming + the visibility kernel, not per-object LOD).
-  **C** (LOD reducible for streamed procedural detail) **remains an untested hypothesis** — the geometry stream was
-  used for MEASURED STATS ONLY (DEV `__PAGED__`), no production consumer created (per ADR-048). **LOD is
-  deferred-not-deleted**; no "LOD obsolete" / Nanite / "no visible lag" claim anywhere.
-- **Visual Benchmark gates GREEN**: `test:visual-benchmark` (9 Node: valid + deterministic + registered + composed
-  [landmarks frame a readable route · reference-only GLB · beacon-trail · one combat beat] + budget-bounded) +
-  `test:visual-benchmark-proof` (SwiftShader: living world → composition → GLB resolved → geometry-stream stats →
-  Performance Contract → relic AND encounter completed → reload-persists → 0 console errors). The `visual-benchmark`
-  scene is the Performance Contract's 6th gated scene (ceiling captured-then-locked). Fresh-context adversarial review
-  (6 dimensions incl. byte-stability + lod-doctrine + per-finding verify, 219 executed probes): **0 critical / 0 high /
-  1 medium / 2 low** — all 3 fixed (lintel immutability · proof asset-idempotency · paged-completeness assertion). Full
-  regression re-run this session — `qa`, all Node regressions, and browser proofs `test:frozen-cache-proof`,
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **WebGPU Feasibility Gate-0 — feasibility only,
+  WebGL stays production** (ADR-050): an ISOLATED Vite lab (`webgpu-lab.html` → `src/feasibility/webgpu/`) that probes
+  WebGPU honestly, initializes a `WebGPURenderer`, and renders a minimal instanced grass-like field — to answer *is
+  WebGPU worth pursuing for our actual bottlenecks?* WITHOUT touching the production renderer. **MEASURED:** the headless
+  proof ATTEMPTS an adapter (`--enable-unsafe-webgpu --enable-features=Vulkan`); in CI an adapter was granted and the
+  renderer used a live **`webgpu` backend** (4096-instance field rendered, 0 errors) — but `isFallbackAdapter=false` is a
+  SOFTWARE Vulkan path, a STRUCTURAL/CPU signal, **not** a GPU-FPS result. The gate is robust to BOTH outcomes (it also
+  accepts the WebGL2 fallback any adapter-less machine gets).
+- **GO/NO-GO = B — keep WebGPU as an experimental lab only** (`docs/WEBGPU_FEASIBILITY.md`): our bottleneck is grass
+  triangle pressure / content discipline, not renderer architecture or CPU draw cost (draws already green); the GLSL→TSL
+  rewrite of every custom shader is the large cost; not-A (the lab works) / not-C (no bottleneck WebGPU uniquely solves
+  yet) / not-D (no migration). The durable isolated lab IS outcome B. WebGL byte-stable: `src/core/renderer.js` +
+  `src/main.js` UNTOUCHED; only additive edits to `vite.config.js` (a 3rd rollup input) + `package.json` (2 test
+  scripts); the `three/webgpu` code is a SEPARATE build chunk (app bundles unchanged). No "LOD obsolete" / Nanite /
+  GPU-FPS / renderer-migration claim anywhere.
+- **WebGPU gates GREEN**: `test:webgpu-feasibility` (6 Node: probe verdicts across navigator shapes + limit whitelist +
+  field-plan determinism/clamps + structural comparison + isolation/purity static scans) + `test:webgpu-feasibility-proof`
+  (its OWN WebGPU-flagged launcher — shared `scripts/lib/browser.mjs` kept byte-identical; field numbers read off the REAL
+  rendered mesh; the production WebGL app still boots cleanly alongside the lab). Fresh-context adversarial review
+  (4 dimensions: isolation/byte-stability · probe-determinism · proof-rigor · doc-doctrine + per-finding verify):
+  **0 critical / 0 high / 0 medium / 1 low** — fixed (field structural asserts now render-gated off the real mesh, not
+  plan constants). Full sweep re-run this session — `build`, `qa`, and browser proofs `test:frozen-cache-proof`,
   `test:first-playable-proof`, `test:performance-contract-proof` (6 scenes) — all green; shipped worlds byte-stable.
-- **Next per ADR-039 roadmap: WebGPU Feasibility Gate.**
+- **Prior stage:** Visual Benchmark-1 (ADR-049, tag `world-builder-visual-benchmark-1`) — one polished, measurable
+  authored corridor (`visual-benchmark-1`); LOD finding **B** (defer for scope), C untested; `docs/VISUAL_BENCHMARK.md`.
+- **Next per ADR-039 roadmap: (await operator pick)** — a Nanite-like Shader Feasibility track, weapon variety, or
+  deeper environment. WebGPU stays a lab; no renderer migration without a later, separately approved stage.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -129,7 +130,7 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
-Visual Benchmark-1 → **WebGPU Feasibility Gate (next)**.
+Visual Benchmark-1 → WebGPU Feasibility Gate-0 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1877,7 +1878,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 8. Encounter Editor-0 — authored encounter placement  ← SHIPPED (ADR-047)
 9. Geometry Stream Gate-0 — deterministic ≤64k-vertex chunked geometry streaming (infra gate; does NOT replace LOD)  ← SHIPPED (ADR-048)
 10. Visual Benchmark-1 — one compact area polished to shipping quality  ← SHIPPED (ADR-049)
-11. WebGPU Feasibility Gate  ← IMMEDIATE NEXT
+11. WebGPU Feasibility Gate-0 — feasibility-only research gate; go/no-go = B (keep as experimental lab)  ← SHIPPED (ADR-050)
+12. (await operator pick) — Nanite-like Shader Feasibility track / weapon variety / deeper environment
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2656,3 +2658,61 @@ the geometry-stream demo now asserts every page committed).
 WebGPU, no new generator, no new combat, no asset-pipeline expansion, no broad biome overhaul. No new
 production geometry-stream consumer. No "LOD obsolete" language. No `WORLD_DOCUMENT_VERSION` bump. No embedded
 GLB binary. Next per ADR-039: **WebGPU Feasibility Gate** (a future feasibility track, not a commitment).
+
+## ADR-050 — WebGPU Feasibility Gate-0: Feasibility Only, WebGL Stays Production (go/no-go = B)
+
+**Status.** Accepted. Tag `world-builder-webgpu-feasibility-0` (local only). Stage 61.
+
+**Context.** The roadmap (ADR-039) lists a WebGPU Feasibility Gate. The word that governs is *feasibility*,
+not migration. After Visual Benchmark-1 (ADR-049) the measured bottleneck is grass triangle pressure +
+content/streaming discipline — not renderer architecture or CPU draw-call overhead (draws are already green,
+95–116). The question to answer honestly: *does WebGPU materially improve the next 3–5 stages, or is WebGL +
+the existing Performance Contract sufficient?*
+
+**Decision — build a contained, isolated research gate; do NOT migrate.** An experimental WebGPU lab behind
+its OWN Vite entry (`webgpu-lab.html` → `src/feasibility/webgpu/webgpuLabMain.js`, a 3rd rollup input beside
+the app and Arsenal Lab — exactly the established isolated-entry pattern). It imports **nothing** from the
+production renderer (`src/core/renderer.js`), `src/main.js`, or the world. WebGL remains the production path,
+byte-stable.
+
+**What shipped.**
+- **Three pure modules (THREE-free, deterministic, Node-testable):** `WebGPUCapability.js` (`probeWebGPU(nav)`
+  → honest `{apiPresent, available, reason, isFallbackAdapter, limits}`; never throws; never reports available
+  without a granted adapter; whitelisted limits), `WebGPULabComposition.js` (a deterministic structural plan
+  for a minimal instanced grass-like field — 64×64 = 4096 blades × 2 tris = 8192 tris in ONE draw batch;
+  clamped inputs), `WebGLBaselineComparison.js` (architectural comparison vs the recorded Visual Benchmark-1
+  WebGL numbers — 116 draws / 512,962 tris — with explicit "not scene-equal, not GPU-FPS" notes).
+- **The spike (THREE + `three/webgpu`):** `WebGPULabScene.js` builds the InstancedMesh of 2-tri blades via a
+  `MeshBasicNodeMaterial` with seeded placement (the canonical `mulberry32`/`hash2i`, never the platform RNG);
+  `webgpuLabMain.js` probes, initializes a `WebGPURenderer` (no forced backend — it chooses WebGPU when an
+  adapter exists and auto-falls back to WebGL2 otherwise, reporting which it actually got), renders the field,
+  and exposes a DEV-gated `__WEBGPU_LAB__` readout. Field structural numbers are read off the REAL rendered
+  mesh after `renderAsync` (so they stay 0 on a render failure — every proof field-assertion is render-gated).
+
+**Measured result (evidence behind the go/no-go).** The headless proof runs its OWN launcher that ATTEMPTS a
+WebGPU adapter (`--enable-unsafe-webgpu --enable-features=Vulkan`) WITHOUT touching the shared
+`scripts/lib/browser.mjs` (kept byte-identical). In CI an adapter was granted and `WebGPURenderer` used a live
+**`webgpu` backend** to render the 4096-instance field with 0 console errors. **Honesty caveat:**
+`isFallbackAdapter=false` ("hardware-backed") under headless `--enable-features=Vulkan` is almost certainly a
+SOFTWARE Vulkan path (SwiftShader/lavapipe), a STRUCTURAL/CPU signal — **not** a GPU-FPS measurement. The gate
+is robust to BOTH outcomes; an adapter-less machine gets the WebGL2 fallback and the gate still passes.
+
+**Go/No-Go = B — keep WebGPU as an experimental lab only.** Not A (the lab demonstrably initializes + renders,
+so it is worth keeping, not discarding). Not C (a parallel renderer lane is real maintenance the evidence does
+not justify — no current bottleneck WebGPU uniquely solves; its render-bundle lever targets a CPU draw cost we
+do not have; its one possibly-relevant lever, compute culling/placement for vegetation, is an untested
+hypothesis needing a real producer + hardware-GPU run). Not D (migration; out of scope, unjustified). The
+durable isolated lab IS outcome B. Falsifiers that would move it toward C/D are recorded in
+`docs/WEBGPU_FEASIBILITY.md` (a hardware-GPU bottleneck WebGPU uniquely relieves; a real streamed-detail
+producer needing GPU compute; a decision to drop older-device reach).
+
+**Gates.** `test:webgpu-feasibility` (6 Node checks) + `test:webgpu-feasibility-proof` (own WebGPU-flagged
+launcher; production WebGL app still boots). Full sweep re-run green; `src/core/renderer.js` + `src/main.js`
+byte-stable; `three/webgpu` is a separate build chunk (app bundles unchanged). Fresh-context adversarial review
+(4 dimensions + per-finding verify, 5 agents): **0 critical / 0 high / 0 medium / 1 low** — fixed (field
+structural asserts now read the real rendered mesh, not plan constants). Tree re-audited clean.
+
+**Non-goals (held).** No renderer rewrite. No WebGPU in the production path. No drop of WebGL. No port of the
+world. No TSL rewrite of the production shaders. No new production geometry-stream consumer. No "LOD obsolete" /
+Nanite / GPU-FPS / "no visible lag" claim. No `WORLD_DOCUMENT_VERSION` bump. No edit to the shared browser
+harness. No renderer migration without a later, separately approved stage.

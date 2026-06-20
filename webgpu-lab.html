@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>WebGPU Feasibility Lab — Gate-0</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1410; color: #d7e6dc;
+        font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+      #readout { position: fixed; left: 16px; top: 14px; z-index: 20; max-width: 420px; padding: 10px 12px;
+        background: rgba(11, 20, 16, 0.82); border: 1px solid rgba(120, 200, 140, 0.22); border-radius: 10px;
+        font-size: 11px; line-height: 1.6; color: #9fc0ad; backdrop-filter: blur(8px); pointer-events: none; }
+      #readout b { color: #d7e6dc; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="readout"><b>WebGPU Feasibility Lab</b><br>probing…</div>
+    <script type="module" src="/src/feasibility/webgpu/webgpuLabMain.js"></script>
+  </body>
+</html>
