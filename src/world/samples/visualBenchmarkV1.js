@@ -24,6 +24,11 @@ import { createWaterConfig } from "../water/WaterConfig.js";
 import { createAtmosphereConfig } from "../atmosphere/AtmosphereConfig.js";
 import { deriveSites } from "../objectives/RelicWeaponObjective.js";
 import { ENCOUNTER_TYPE } from "../encounters/EncounterTypes.js";
+// Content-2: the optional shrine reward is a generated weapon rebuilt from a recipe at load (never baked).
+// These are the arsenal's PURE recipe modules — the same allowed world→arsenal-recipe dependency already
+// used by RelicWeaponObjective.js and FrozenCacheSlice.js (the boundary scan forbids only the arsenal UI).
+import { generateWeaponRecipe } from "../../arsenal/WeaponGrammar.js";
+import { rollConfig } from "../../arsenal/WeaponConfig.js";
 
 export const VISUAL_BENCHMARK_ID = "visual-benchmark-1";
 // A stable id for the validated-GLB cache prop. The doc carries only this REFERENCE (asset:null) — the
@@ -87,7 +92,7 @@ function benchmarkAtmosphere() {
 
 // --- authored-object helpers --------------------------------------------------
 
-function groundedPrimitive(id, name, kind, p, scale, { rotationY = 0, colliderType = "box", absoluteY = null, particles = null } = {}) {
+function groundedPrimitive(id, name, kind, p, scale, { rotationY = 0, colliderType = "box", absoluteY = null, particles = null, interaction = null } = {}) {
   return {
     id,
     name,
@@ -106,6 +111,9 @@ function groundedPrimitive(id, name, kind, p, scale, { rotationY = 0, colliderTy
     // Ambient particle feedback (Environment Polish-1) — null on most, a spark/dust emitter on the few
     // objects that should draw the eye (relic, cache, crossing). Sanitized by WorldValidation on load.
     particles,
+    // Content-2: optional data-only Interaction (a readable sign at the shrine). null on most objects;
+    // sanitized by WorldValidation (sanitizeInteraction) on load, surfaced by InteractionRuntime in play.
+    interaction,
   };
 }
 
@@ -140,6 +148,29 @@ export function buildVisualBenchmarkV1() {
   // The relic ice shard catches the eye — an additive spark emitter marks the relic as the goal.
   objects.push(groundedPrimitive("vb-ruin-shard", "Ruin Ice Shard", "cylinder", relic, { x: 0.7, y: 3.4, z: 0.7 }, { colliderType: "cylinder", particles: { kind: "spark", rate: 22, max: 90, color: "#bfe4ff", colorEnd: "#3aa0ff", size: 0.18, speed: 2.2, gravity: -1.2 } }));
 
+  // --- Content-2: a frozen shrine alcove tucked beside the relic ruin (an optional discovery) ------
+  // One non-combat authored moment, ~9 m off the route on the relic side (within the 14 m route band,
+  // clear of the carry centerline). It bundles three beats: the shrine STRUCTURE (exploration), a
+  // readable SIGN with wayfinding flavour (objective clarity), a brooding fog POCKET on the idol
+  // (environmental beat), and an optional generated weapon to claim (the reward, authored below in
+  // doc.runtimeAssets). All data-only — InteractionRuntime / ParticleRuntime / PlacedWeaponRuntime
+  // already surface it in play; the editor never triggers it.
+  const shrine = offset(relic, perp, 9); // perpendicular off the relic ruin, away from the carry line
+  const shrineYaw = Math.atan2(relic.x - shrine.x, relic.z - shrine.z); // the idol faces back to the ruin/route
+  objects.push(groundedPrimitive("vb-shrine-base", "Shrine Base", "cube", shrine, { x: 2.4, y: 0.6, z: 2.0 }, { rotationY: shrineYaw }));
+  objects.push(
+    groundedPrimitive("vb-shrine-idol", "Shrine Idol", "cylinder", shrine, { x: 0.7, y: 2.8, z: 0.7 }, {
+      colliderType: "cylinder",
+      rotationY: shrineYaw,
+      // Environmental beat — a thick, brooding fog pocket clinging to the shrine (smoke kind, low + drifting).
+      particles: { kind: "smoke", rate: 8, max: 100, lifetime: 4.2, size: 1.0, sizeEnd: 2.8, color: "#9fb0c4", colorEnd: "#5a6a7d", speed: 0.7, spread: 0.6, gravity: 0.3, emitRadius: 0.3, opacity: 0.4 },
+      // Readable beat — a sign that names the place AND points the player on to the cache (wayfinding).
+      interaction: { role: "sign", text: "An old shrine kneels beside the ruin — its offering still here for the taking. Bear the relic on: past the crossing, the cache waits beyond the pass.", showRadius: 7 },
+    })
+  );
+  objects.push(groundedPrimitive("vb-shrine-ward-l", "Shrine Ward L", "cube", offset(shrine, perp, 0, { x: dir.x * 1.6, z: dir.z * 1.6 }), { x: 0.6, y: 1.6, z: 0.6 }, { rotationY: shrineYaw }));
+  objects.push(groundedPrimitive("vb-shrine-ward-r", "Shrine Ward R", "cube", offset(shrine, perp, 0, { x: -dir.x * 1.6, z: -dir.z * 1.6 }), { x: 0.6, y: 1.6, z: 0.6 }, { rotationY: shrineYaw }));
+
   // --- Waypoint cairns guiding the eye along the route (Environment Polish-1) ---------------------
   // Off the carry centerline (perp side), at one- and two-thirds of the way, so the route reads as a
   // path to follow without obstructing the direct carry line.
@@ -173,6 +204,28 @@ export function buildVisualBenchmarkV1() {
   });
 
   doc.objects = objects;
+
+  // --- Content-2: the shrine's optional reward — a generated weapon REBUILT from a recipe on load ---
+  // A deterministic exotic relic offered on the shrine (NOT the objective relic — a separate id the
+  // player may claim or ignore with F). It lives in runtimeAssets.items beside the runtime-spawned relic;
+  // PlacedWeaponRuntime.load() instantiates it from the recipe (never baked geometry). The recipe is a
+  // pure function of a fixed seed, so the composition stays deterministic.
+  doc.runtimeAssets = {
+    version: 1,
+    items: [
+      {
+        kind: "generated.weapon",
+        id: "vb-shrine-relic-weapon",
+        recipe: generateWeaponRecipe(rollConfig("vb-shrine-relic", "exotic")),
+        transform: {
+          position: { x: shrine.x, y: getHeight(shrine.x, shrine.z) + 1.2, z: shrine.z },
+          rotation: { x: 0, y: shrineYaw, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+        },
+        runtime: { state: "idle", owner: null, durability: 1, visible: true, castShadow: true, receiveShadow: true, slot: null },
+      },
+    ],
+  };
 
   // --- Procedural Authoring-1: a beacon-trail along the spawn → relic → cache route ---------------
   const routeRadius = Math.max(20, Math.hypot(cache.x - spawn.x, cache.z - spawn.z) * 0.6 + 8);

@@ -87,6 +87,8 @@
     "test:encounter-polish-proof": "node scripts/browser-encounter-polish-proof.mjs",
     "test:content-combat-beats": "node scripts/content-combat-beats-regression.mjs",
     "test:content-combat-beats-proof": "node scripts/browser-content-combat-beats-proof.mjs",
+    "test:content-slice-expansion": "node scripts/content-slice-expansion-regression.mjs",
+    "test:content-slice-expansion-proof": "node scripts/browser-content-slice-expansion-proof.mjs",
     "perf:report": "node scripts/perf-report.mjs",
     "qa:skills": "node scripts/threejs-skill-gates.mjs",
     "qa:layout": "node scripts/layout-gates.mjs",

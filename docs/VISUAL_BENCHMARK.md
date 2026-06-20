@@ -120,12 +120,17 @@ What changed, all additive and measured:
 | **Before** — Visual Benchmark-1 (full) | 116 | 512,962 | 11 | 2 | 62 | 2 |
 | **After** — Environment Polish-1 (full) | 119 | 511,720 | 15 | 1 | 62 | 2 |
 | **After** — Environment Polish-1 (budget variant) | 98 | 499,864 | 14 | 1 | 56 | 2 |
+| **After** — Content-2 (full, shrine claimed) | 121 | 501,790 | 19 | 1 | 56 | 3-5 |
+| **After** — Content-2 (budget variant) | 121 | 501,790 | 18 | 1 | 56 | 3 |
 
-The polish is **nearly free structurally**: +4 landmark objects and +3 ambient particle emitters add ~3 draw
-calls and no meaningful triangle delta (grass still dominates, ~500k ≈ the empty floor). The per-scene
-`visual-benchmark` ceiling was **re-captured and re-locked** at the new baseline + headroom — the `objects`
-ceiling moved 16→20 to track the polished authored count, while the draws/triangles/vegetation ceilings stay
-at the shared glacial-grass values (still ample headroom). The scene classifies **green** in the contract.
+The polish is **nearly free structurally**: Environment Polish-1's +4 landmarks + 3 emitters added ~3 draw calls
+and no meaningful triangle delta (grass still dominates, ~500k ≈ the empty floor). **Content-2** then added a
+4-piece off-route frozen shrine (+ a 4th `smoke` emitter + a sign) and one optional `runtimeAssets` reward
+weapon — again nearly free (live objects 15→19; draws still ~121, triangles ~501k; the runtime asset count
+ticks 2→3 with the shrine reward, up to 5 during combat as weapons are placed). The per-scene `visual-benchmark`
+ceiling was **re-captured and re-locked** at each content step — the `objects` ceiling moved 16→20 (Polish-1)
+then **20→24** (Content-2: measured 18 + ~33% headroom), while the draws/triangles/vegetation/runtimeAssets
+ceilings stay at the shared values (still ample headroom). The scene classifies **green** in the contract.
 
 The **LOD finding is unchanged: B (defer for this scope).** Polishing the corridor toward shipping quality did
 not move the scene out of its structural band — the same conclusion the original benchmark recorded. C (LOD

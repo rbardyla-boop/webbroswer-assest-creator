@@ -22,47 +22,49 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Content-1 accepted; tag `world-builder-content-1-combat-beats`).**
-- **64 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-20 (Content-2 accepted; tag `world-builder-content-2-slice-expansion`).**
+- **65 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-1 — Second Authored Combat Beat**
-  (ADR-053): proves the encounter authoring model is REPEATABLE. The visual-benchmark corridor now stages TWO authored
-  combat beats — the glacial-crossing skirmish + a final guardian at the cache gate (~10.5m further on, framed by the
-  existing pass pillars) — on the SAME systems (Encounter Editor-0 orchestration, Combat-0 strike, Enemy-0 sentinel) with
-  NO new runtime code. The two beats complete + persist INDEPENDENTLY; each carries an optional per-beat `label` so the
-  banner names its own location ("guards the crossing" vs "guards the pass"). NO AI/patrol/chase/waves/loot/pathfinding/
-  new combat rules/procedural generation.
-- **The change is almost pure authored DATA.** `EncounterRuntime` / `EncounterPresentation` already iterate over N beats,
-  so the second beat is a sample-data addition + an additive `label` field threaded
-  `descriptor → snapshot → presentation → banner`. The ONLY new field is `label` (whitelisted + sanitized at the
-  untrusted-input boundary — markup/control/bidi/zero-width/BOM stripped, capped at 48, ALWAYS emitted string|null,
-  rendered via `.textContent`). The banner is templated so the crossing beat's text is BYTE-IDENTICAL to before.
-- **BYTE-STABILITY.** `src/main.js`, `EnemyRuntime` / `EnemyFeedback` / `EnemyTypes` / `CombatRuntime` /
-  `FrozenCacheSlice` / `SliceCompletion` / `EncounterCompletion` / `EncounterMarkers` are ALL UNTOUCHED. No
-  `WORLD_DOCUMENT_VERSION` bump. The visual benchmark evolves in place (as under Environment Polish-1); the frozen-cache +
-  first-playable slices (no encounters) are byte-stable. Benchmark draws/triangles unchanged (98 / 499,864 — the two
-  sentinels + gate-lights add no measurable draw cost).
-- **Content-1 gates GREEN**: `test:content-combat-beats` (5 Node: two distinct beats, label sanitization incl. bidi/
-  zero-width stripping, banner location-awareness + crossing byte-identity, INDEPENDENT completion round-trip both
-  directions, determinism) + `test:content-combat-beats-proof` (on `visual-benchmark-1`: two beats staged with two
-  distinct ephemeral enemies + two gate-lights + independent phase at the overlook → defeat beat#1 leaves beat#2 LIVE →
-  banner names "the pass" → defeat beat#2 → each fires its OWN clear pulse → objective still completable → benchmark within
-  the Performance Contract → reload persists BOTH completions + the objective, no re-pulse, 0 errors). The three sibling
-  1-beat gates evolved honestly to 2 beats (encounter-editor key-set, visual-benchmark regression+proof, encounter-polish
-  presentCount→≥1 + a per-beat banner check). Fresh-context adversarial review (4 dimensions: byte-stability/isolation ·
-  independence/persistence · label-sanitization/security · proof/gate-rigor + per-finding verify): **0 critical / 0 high /
-  1 medium / 4 low** — all addressed (geometry precondition documented + asserted; `sanitizeLabel` hardened to strip bidi/
-  zero-width/BOM; non-null banner assert). Council (local) added only refuted hallucinations. Full sweep — `build`, `qa`,
-  `test:frozen-cache-proof`, `test:first-playable-proof`, `test:visual-benchmark-proof`, `test:performance-contract-proof`
-  (6 scenes), enemy/combat/encounter-editor — all green; shipped worlds byte-stable.
-- **Prior stages:** Encounter-1 (ADR-052, `world-builder-encounter-1`) — authored combat-beat polish (telegraph +
-  gate-light + phase/banner), no AI director. Environment Polish-1 (ADR-051) — visual benchmark expansion (landmarks +
-  per-scene readability overrides + feedback), still WebGL. WebGPU Feasibility Gate-0 (ADR-050) — feasibility-only,
-  go/no-go = B (WebGPU stays an experimental lab). Visual Benchmark-1 (ADR-049) — the original authored corridor.
-- **Next per ADR-039 roadmap: (await operator pick)** — Content-1 proved the authoring model scales to a second beat; the
-  evidence-gated fork now is: more authored content (if two staged sentinels feel enough), Enemy-1 movement/patrol (if
-  static sentinels feel dead — a bigger seam), or shader/LOD feasibility (only if visuals become the constraint). Keep
-  converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-2 — Authored Slice Expansion**
+  (ADR-054): turns the visual-benchmark corridor into a fuller authored slice using EXISTING systems only — NO new runtime
+  code, NO movement AI, NO renderer work. One discoverable off-route moment — a 4-piece **frozen shrine alcove** tucked ~9m
+  beside the relic ruin — bundles three beats: EXPLORATION (the shrine structure), READABLE (a data-only **sign** that names
+  the place + points on to the cache — wayfinding/objective clarity), ENVIRONMENT (a brooding **fog pocket** smoke emitter on
+  the idol), and REWARD (an optional **exotic generated weapon** in a new `runtimeAssets` block, claimed with F). The two
+  combat beats + the relic/cache objective are UNCHANGED. NO patrol/chase/attacks/waves/loot/factions/procedural-encounter
+  generation/shader-LOD/renderer work.
+- **Pure authored DATA + a helper extension.** `InteractionRuntime` / `ParticleRuntime` / `PlacedWeaponRuntime` already load
+  their blocks, so the shrine is sample data: 4 `vb-shrine-*` primitives, a `sign` interaction (sanitized at the boundary,
+  rendered via `.textContent`), a `smoke` emitter, and one `generated.weapon` runtimeAsset (a deterministic exotic recipe,
+  `generateWeaponRecipe(rollConfig(seed,'exotic'))` — the allowed world→arsenal-recipe import, same as RelicWeaponObjective/
+  FrozenCacheSlice). `groundedPrimitive` gained an additive `interaction` option (mirrors `particles`). The reward coexists
+  with the auto-spawned relic (distinct id; the objective only completes on the relic).
+- **BYTE-STABILITY.** `src/main.js` and EVERY runtime system are UNTOUCHED — `EnemyRuntime` / `CombatRuntime` /
+  `FrozenCacheSlice` / `SliceCompletion` / the encounters / `placement` / `assets` / `interaction` / `particles` all
+  zero-diff. No `WORLD_DOCUMENT_VERSION` bump. The two combat beats + the relic objective axis are byte-stable. The
+  frozen-cache + first-playable slices don't load the benchmark → byte-stable. The perf `objects` ceiling was re-locked
+  20→24 (a deliberate content-growth re-lock: measured 18 + ~33% headroom; the gate still fails above 24).
+- **Content-2 gates GREEN**: `test:content-slice-expansion` (6 Node: the shrine alcove + route band, the save-stable sign,
+  the fog emitter + ≥4 emitters, the exotic reward weapon validates + deterministic + distinct-from-relic, the two beats +
+  objective axis byte-stable, determinism + budget) + `test:content-slice-expansion-proof` (SwiftShader on `visual-benchmark-1`:
+  shrine visible + sign loaded → reach the shrine, the sign surfaces its wayfinding text → the reward is findable + CLAIMED
+  (`pickUp()` returns the specific id, carried as active) → BOTH combat beats still complete independently → the relic
+  objective still completes → benchmark within the Performance Contract → reload persists the objective + both beats + the
+  reward re-instantiates, 0 errors). Existing benchmark/encounter/byte-stability gates all still green (the shrine fits the
+  route band, +4 objects under the re-locked ceiling, the 4th emitter keeps ≥3). Fresh-context adversarial review (4
+  dimensions: byte-stability/isolation · data-validity/security/determinism · route/perf-relock-honesty · proof/gate-rigor +
+  per-finding verify): **0 critical / 0 high / 0 medium / 4 low** — all fixed (a stale `≤20` ceiling comment corrected to the
+  re-locked 24; the sign-surface proof made deterministic via a synchronous `interactionRuntime.update(0)` instead of a
+  throttled-rAF sleep). One refuted (a "vacuous perf gate" claim — the objects/runtimeAssets metrics are finite + non-zero).
+- **Prior stages:** Content-1 (ADR-053, `world-builder-content-1-combat-beats`) — second authored combat beat (repeatable
+  encounter composition + per-beat label), no AI/waves. Encounter-1 (ADR-052) — authored combat-beat polish (telegraph +
+  gate-light + phase/banner). Environment Polish-1 (ADR-051) — visual benchmark expansion. WebGPU Feasibility Gate-0
+  (ADR-050) — feasibility-only, go/no-go = B (WebGPU stays an experimental lab).
+- **Next per ADR-039 roadmap: (await operator pick)** — Content-2 proved static/reactive sentinels + authored discovery
+  still have room. The evidence-gated fork: more authored content/audio (if the slice feels playable but thin), Enemy-1
+  movement/patrol (if it now feels static — the bigger foundational seam: terrain grounding, water avoidance, combat range,
+  proximity, state transitions, path validity, reload, performance), or shader/LOD feasibility (only if visuals/perf become
+  the constraint). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -1893,7 +1895,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 12. Environment Polish-1 — visual benchmark expansion (landmarks + readability overrides + feedback), still WebGL  ← SHIPPED (ADR-051)
 13. Encounter-1 — authored combat-beat polish (telegraph + gate-light + phase/banner), no AI director  ← SHIPPED (ADR-052)
 14. Content-1 — second authored combat beat (repeatable encounter composition: crossing + cache gate), no AI/waves/loot  ← SHIPPED (ADR-053)
-15. (await operator pick) — Enemy-1 (movement/patrol) / more authored content / Nanite-like Shader Feasibility (only if benchmark data shows a real bottleneck)
+15. Content-2 — authored slice expansion (off-route frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system  ← SHIPPED (ADR-054)
+16. (await operator pick) — Enemy-1 (movement/patrol, the bigger foundational seam) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -2924,3 +2927,76 @@ loot / rewards / factions / inventory. No AI director. No ranged attacks or enem
 encounter generation. No new combat rules or balancing. No new runtime system — the second beat reuses Encounter
 Editor-0 + Combat-0 + Enemy-0 unchanged. No rewrite of the seams. No mutation of the frozen-cache / first-playable
 slices. No `WORLD_DOCUMENT_VERSION` bump.
+
+## ADR-054 — Content-2: Authored Slice Expansion (a fuller slice on existing systems, add no runtime code)
+
+**Status.** Accepted. Tag `world-builder-content-2-slice-expansion` (local only). Stage 65.
+
+**Context.** Content-1 proved a second staged sentinel works. Before opening the much larger Enemy-1 movement/patrol seam
+(terrain grounding, water avoidance, combat range, proximity, state transitions, path validity, reload, performance), the
+operator chose one more content pass: turn the corridor from "two combat beats + relic objective" into a fuller authored
+slice — more variety + pacing — with all enemies still static/reactive and every system unchanged.
+
+**Decisive finding — the loaders already iterate N items.** `InteractionRuntime`, `ParticleRuntime`, and
+`PlacedWeaponRuntime` already load their respective WorldDocument blocks (interactions on `object.userData.interaction`,
+particles on `object.particles`, weapons in `runtimeAssets.items`). So the expansion is almost entirely SAMPLE DATA — no
+new runtime code, no `src/main.js` change. The verification surface (2 new gates + a perf re-lock) is larger than the
+implementation.
+
+**Decision — one discoverable "frozen shrine" alcove that bundles the three minimum-scope beats.** Rather than three
+scattered additions, Content-2 authors a single cohesive off-route moment, `shrine = relic + perp·9` (~9m beside the relic
+ruin, within the 14m route band, clear of the carry centerline and both combat zones):
+- **Exploration** — four `vb-shrine-*` primitives (base, idol, two ward stones).
+- **Readable** — a data-only `sign` Interaction on the idol whose text names the place AND points the player on to the
+  cache (wayfinding → objective clarity). Sanitized by `sanitizeInteraction`; rendered via `.textContent` (no XSS).
+- **Environment** — a brooding `smoke` fog-pocket particle emitter on the idol (the 4th ambient emitter).
+- **Reward** — one optional `generated.weapon` in a new `doc.runtimeAssets` block: a deterministic **exotic** recipe
+  (`generateWeaponRecipe(rollConfig("vb-shrine-relic", "exotic"))`), `state: "idle"` (findable), claimed with F. It
+  coexists with the runtime-spawned relic (distinct id `vb-shrine-relic-weapon`; the objective completes only on the relic).
+
+**Implementation surface (minimal).** (1) `groundedPrimitive` gained an additive `interaction` option (mirrors the existing
+`particles` option) — existing objects pass `interaction: null`, a harmless new key that survives validation. (2) The sample
+imports `generateWeaponRecipe` + `rollConfig` from the arsenal PURE recipe modules — the SAME allowed world→arsenal-recipe
+direction already used by `RelicWeaponObjective.js` and `FrozenCacheSlice.js` (the boundary scan forbids only the arsenal
+UI; `test:arsenal-world` still passes). (3) The encounters block + the relic objective axis are UNCHANGED (the two combat
+beats stay byte-stable — repositioning them would re-open Content-1's tagged byte-state for marginal gain; "encounter
+pacing" is satisfied by keeping the new content off-route + the sign's wayfinding).
+
+**Performance — a deliberate content-growth re-lock.** The shrine adds 4 primitives (live objects 15→19; perf-scene 14→18
+with the GLB dropped). The `visual-benchmark` perf `objects` ceiling was re-locked **20→24** in `BenchmarkScenes.js`
+(measured 18 + ~33% headroom; capture-then-lock; the gate still FAILS above 24). Every other ceiling is unchanged with
+ample headroom (live draws 121-142 ≤ 160, triangles ~501k ≤ 700k, runtimeAssets 3-5 ≤ 12 — grass still dominates
+triangles; the shrine + fog + reward add little). The frozen-cache / first-playable slices don't load the benchmark → no
+re-capture needed there.
+
+**Byte-stability.** `src/main.js` and EVERY runtime system are zero-diff (enemies / combat / slice / encounters / placement
+/ assets / interaction / particles). No `WORLD_DOCUMENT_VERSION` bump. Content-2 touches exactly five files:
+`visualBenchmarkV1.js` (the shrine + reward + the helper option + two imports), `BenchmarkScenes.js` (the objects re-lock),
+`package.json` (two scripts), and the two new gate scripts.
+
+**Gates.** `test:content-slice-expansion` (6 Node: the 4-piece shrine within the route band + clear of the carry midpoint;
+the sign role/text/showRadius + save-stable; the smoke fog emitter + ≥4 emitters; the exotic reward validates via
+`normalizeRuntimeAssetDescriptor` + is deterministic + distinct from the relic id; the two combat beats + the no-objectives
+relic axis byte-stable; determinism + the authored-primitive budget) + `test:content-slice-expansion-proof` (SwiftShader on
+`visual-benchmark-1`: the four shrine primitives load + the sign is registered → teleport to the shrine, drive
+`interactionRuntime.update(0)`, the sign surfaces its wayfinding text → the reward is placed + `pickUp()` returns
+`vb-shrine-relic-weapon` specifically, carried as the active weapon (carriedBefore 0 → after 1, non-vacuous) → BOTH combat
+beats still complete independently (`before:[false,false]`, beat#1 done while beat#2 live, then beat#2) → the relic
+objective completes → benchmark within the Performance Contract → reload persists the objective + both beats + the reward
+re-instantiates, 0 console errors). Full sweep — `test:visual-benchmark(-proof)`, `test:content-combat-beats(-proof)`,
+`test:encounter-polish-proof`, `test:frozen-cache-proof`, `test:first-playable-proof`, `test:performance-contract(-proof)`
+(6 scenes), `test:arsenal-world` (boundary), enemy/combat, `build`, `qa` — all green; shipped worlds byte-stable.
+
+**Review.** Fresh-context adversarial review (4 dimensions: byte-stability/isolation · data-validity/security/determinism ·
+route/perf-relock-honesty · proof/gate-rigor) + per-finding verify: **0 critical / 0 high / 0 medium / 4 low**, all fixed —
+a stale `≤20` ceiling comment in the new regression corrected to the re-locked 24 (3 reviewers flagged the same line), and
+the sign-surface proof made DETERMINISTIC via a synchronous `interactionRuntime.update(0)` after the teleport (instead of a
+throttled-rAF `sleep`). One finding refuted (a "vacuous perf gate" claim — `objects`/`runtimeAssets` are finite + non-zero,
+so `collectBreaches` runs real comparisons; the cited `drawCalls>0` guard does not exist in the sibling proof). Tree
+re-audited clean after the review (the verifier-can-write gotcha — code-reviewer agents have Bash).
+
+**Non-goals (held).** No enemy movement / patrol / chase / pathfinding. No enemy attacks or damage to the player. No waves.
+No loot SYSTEM (the reward is one authored optional weapon, not drops/tables/rarity). No factions. No inventory. No AI
+director. No procedural encounter generation. No shader/LOD experiments or renderer work. No new runtime system — the
+shrine reuses Interaction / Particle / Arsenal loaders unchanged. No `src/main.js` change. No mutation of the two combat
+beats, the relic objective, or the frozen-cache / first-playable slices. No `WORLD_DOCUMENT_VERSION` bump.

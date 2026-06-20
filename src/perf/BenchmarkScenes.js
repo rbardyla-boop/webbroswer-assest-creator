@@ -237,18 +237,18 @@ export function assetInstancesScene({ assetId = "gltf-fixture", count = 24 } = {
 export function visualBenchmarkScene() {
   const doc = buildVisualBenchmarkV1();
   doc.objects = doc.objects.filter((o) => o.type !== "gltf");
-  // Baseline RE-CAPTURED + RE-LOCKED for Environment Polish-1 (SwiftShader budget variant — GLB dropped):
-  // draws 98, tris 499,864, objs 14, batches 1, vegPatch 56, rtAssets 2 — default glacial GRASS still
-  // dominates triangles (like the empty floor); the polished landmark set (~14 authored primitives) + the
-  // 3 ambient particle emitters + the beacon trail + the runtime relic + the projected encounter sentinel
-  // add little. Ceilings = measured baseline + headroom (the gate FAILS if set below the real number;
-  // draws/tris/veg match the other glacial-grass scenes — grass dominates). The objects ceiling (16→20)
-  // tracks the polished authored count with headroom, far under the global red. See docs/VISUAL_BENCHMARK.md
-  // for the before/after numbers + the LOD finding.
+  // Baseline RE-CAPTURED + RE-LOCKED for Content-2 (the authored slice expansion; SwiftShader budget
+  // variant — GLB dropped): draws ~119-121, tris ~501,790, objs 18 (perf-scene; 19 live with the GLB),
+  // batches 1, vegPatch 56-62, rtAssets up to 5 (relic + tutorial + shrine reward + any combat-placed) —
+  // default glacial GRASS still dominates triangles. Content-2 added a 4-piece frozen shrine alcove (+ a
+  // smoke fog emitter + a sign) and one optional runtimeAssets reward weapon. The objects ceiling moves
+  // 20→24 (measured 18 + ~33% headroom; a deliberate content-growth re-lock — the gate still FAILS if set
+  // below the real number and stays far under the global red). draws/tris/veg keep their Polish-1 ceilings
+  // (huge headroom — grass dominates, the shrine adds little). See docs/VISUAL_BENCHMARK.md.
   const gated = {
     drawCalls: 160,
     triangles: 700_000,
-    objects: 20,
+    objects: 24,
     instancedBatches: 8,
     visibleVegetationPatches: 120,
     runtimeAssets: 12,
