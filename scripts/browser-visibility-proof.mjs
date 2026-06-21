@@ -71,13 +71,14 @@ const run = await withBrowserProof(
       const far = vis.agents.find((a) => a.id === "obj-far");
       assert.ok(near && far, "both authored rigs present in snapshot");
 
-      // The kernel registers EVERY placed agent. This world authors two animated rigs; since FP-1 the
-      // objective also auto-spawns the relic weapon in any runtime world, which the kernel registers as
-      // a third agent. Assert the intended set explicitly (rather than a bare count) so the expected
-      // total tracks real runtime state and a future change to what auto-registers trips this on purpose.
+      // The kernel registers EVERY placed agent. This world authors two animated rigs; the first-playable
+      // runtime also auto-spawns the relic and field tutorial weapons. Assert the intended set explicitly
+      // so additions/removals trip this proof with a useful identity-level failure.
       const relic = vis.agents.find((a) => a.id === "relic-weapon-fp1");
+      const tutorial = vis.agents.find((a) => a.id === "frozen-cache-field-weapon");
       assert.ok(relic, "the FP-1 relic weapon is registered with the kernel (auto-spawned in runtime)");
-      assert.equal(vis.total, 3, `2 authored rigs + 1 auto-spawned relic = 3 agents, got ${vis.total}`);
+      assert.ok(tutorial, "the frozen-cache tutorial weapon is registered with the kernel (auto-spawned in runtime)");
+      assert.equal(vis.total, 4, `2 authored rigs + 2 auto-spawned weapons = 4 agents, got ${vis.total}`);
       assert.equal(vis.visible + vis.warm + vis.sleeping + vis.unloaded, vis.total, "tiers sum to total");
       assert.equal(near.awake, true, `near rig awake (tier ${near.tier})`);
       assert.equal(far.awake, false, `far rig asleep (tier ${far.tier})`);
