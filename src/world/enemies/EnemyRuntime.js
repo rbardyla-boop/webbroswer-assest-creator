@@ -11,6 +11,7 @@ import * as THREE from "three";
 import { ENEMY_STATE, HIT_DAMAGE, HIT_REACT_TIME, createEnemyState, archetypeFor, MOVEMENT_HOVER } from "./EnemyTypes.js";
 import { applyDamage, advanceState, isDefeated } from "./EnemyValidation.js";
 import { createPatrolMotion, advancePatrol } from "./PatrolMotion.js";
+import { bearingTo, stepYaw, hoverBias, leanAmount, proximityActive } from "./EnemyProximityLogic.js";
 import { EnemyTargetAdapter } from "./EnemyTargetAdapter.js";
 import { EnemyFeedback } from "./EnemyFeedback.js";
 
@@ -23,6 +24,7 @@ const HIT_RECOIL = 0.16; // metres the body dips on a fresh strike
 const DEFEAT_SINK = 0.55; // metres the body slumps when defeated
 const DEFEAT_TIP = 0.5; // radians the body tips over when defeated
 const WISP_DEFEAT_DROP = 0.15; // metres above ground a defeated wisp settles (it falls out of the air)
+const ZERO_BIAS = Object.freeze({ x: 0, z: 0 }); // shared no-op proximity bias (read-only)
 
 export class EnemyRuntime {
   constructor({ scene = null, combatRuntime = null } = {}) {
@@ -32,6 +34,7 @@ export class EnemyRuntime {
     this.enemies = new Map(); // id -> actor
     this._document = null;
     this._persistDirty = false;
+    this._lastPlayer = null; // last player ref seen in update() — for the proximityView DEV reader
   }
 
   // (Re)spawn enemies from the loaded world. Idempotent: clears prior actors (+ unregisters their
@@ -87,6 +90,12 @@ export class EnemyRuntime {
       bobPhase: 0,
       animPhase: 0, // monotonic anim clock (drives the wisp idle flicker; accumulated in update())
       hitFresh: false,
+      // Enemy-3 light proximity response. `zone` (the encounter centre+radius) is threaded for ALL
+      // archetypes so a STATIONARY sentinel can also react — a doc-authored / no-encounter enemy has no zone
+      // → no response (dormant). `faceYaw` is the clamped-turn facing; `proximity` is the archetype's caps.
+      zone: desc.zone ?? null,
+      faceYaw: group.rotation.y,
+      proximity: archetype.proximity ?? null,
     };
     // Enemy-2: a hover archetype (the wisp) floats above its grounded spawn and drifts in a bounded
     // volume — an archetype-intrinsic motion overlay (NOT authored per-encounter, so it ignores any
@@ -170,6 +179,7 @@ export class EnemyRuntime {
 
   update(dt, player) {
     const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    this._lastPlayer = player ?? this._lastPlayer ?? null; // for the proximityView DEV reader (no extra tick)
     for (const actor of this.enemies.values()) {
       actor.state = advanceState(actor.state, step);
       // A single monotonic anim clock, accumulated BEFORE feedback so the wisp's idle flicker reads the
@@ -202,15 +212,28 @@ export class EnemyRuntime {
     }
 
     const g = actor.group;
+    const reacting = actor.state.state === ENEMY_STATE.HIT_REACT;
 
     if (actor.hitFresh && player?.position) {
       const yaw = Math.atan2(player.position.x - g.position.x, player.position.z - g.position.z);
-      if (Number.isFinite(yaw)) g.rotation.y = yaw; // turn-to-face only; no movement, no chase
+      if (Number.isFinite(yaw)) { g.rotation.y = yaw; actor.faceYaw = yaw; } // instant turn-to-face on a hit (wins)
+    } else if (proximityActive({ hasZone: !!actor.zone, inZone: this._playerInZone(actor, player), reacting }) && player?.position) {
+      // Enemy-3: a stationary sentinel ORIENTS toward an in-zone player at a clamped turn rate + a small
+      // forward lean — orientation only, the body never moves (no chase). Bounded by the archetype caps.
+      const p = actor.proximity ?? {};
+      const target = bearingTo(g.position.x, g.position.z, player.position.x, player.position.z);
+      actor.faceYaw = stepYaw(actor.faceYaw, target, (p.turnRate ?? 0) * dt);
+      if (Number.isFinite(actor.faceYaw)) g.rotation.y = actor.faceYaw;
+      const distToCentre = Math.hypot(player.position.x - actor.zone.x, player.position.z - actor.zone.z);
+      const lean = leanAmount(distToCentre, actor.zone.radius, p.maxLean ?? 0);
+      if (Number.isFinite(lean)) g.rotation.x = lean;
+    } else if (g.rotation.x !== 0) {
+      g.rotation.x = 0; // not responding → relax the lean to neutral (defeated never reaches here)
     }
 
     actor.bobPhase += dt;
     const bob = Math.sin(actor.bobPhase * IDLE_BOB_SPEED) * IDLE_BOB_AMP;
-    const recoil = actor.state.state === ENEMY_STATE.HIT_REACT ? HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME) : 0;
+    const recoil = reacting ? HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME) : 0;
     const y = actor.baseY + bob - recoil;
     if (Number.isFinite(y)) g.position.y = y;
   }
@@ -299,6 +322,17 @@ export class EnemyRuntime {
       ? actor._hoverRestY - HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME)
       : actor._hoverRestY + bob;
 
+    // Enemy-3: an in-zone player biases the drift slightly AWAY (bounded ≤ proximity.maxBias). Added BEFORE
+    // the zone clamp below, so the body still cannot leave the zone. Dormant when reacting / out of zone. The
+    // exact bias vector is recorded (actor._bias) so the proof can verify it directly, non-flakily.
+    let bias = ZERO_BIAS;
+    if (!reacting && actor.zone && this._playerInZone(actor, player) && player?.position) {
+      bias = hoverBias(x, z, player.position.x, player.position.z, actor.proximity?.maxBias ?? 0);
+      x += bias.x;
+      z += bias.z;
+    }
+    actor._bias = bias;
+
     // Defense in depth: never leave the encounter zone (home is the zone centre, so this never actually
     // triggers — but it makes the "bounded to radius" guarantee hold for any future home/radius).
     if (actor.zone) {
@@ -358,6 +392,34 @@ export class EnemyRuntime {
     return out;
   }
 
+  // Enemy-3 DEV-only reader: the proximity-response state of every actor that CAN respond (has an encounter
+  // zone). `responding` is computed live from the last player position (the single dormancy gate); `yaw`/
+  // `lean` are the live facing/tilt. Separate from snapshot() (determinism rule), like patrol/liveView.
+  proximityView() {
+    const out = [];
+    const player = this._lastPlayer;
+    for (const a of this.enemies.values()) {
+      if (!a.zone) continue; // only zone-bearing (encounter-projected) actors can respond
+      const g = a.group;
+      const defeated = isDefeated(a.state);
+      const reacting = a.state.state === ENEMY_STATE.HIT_REACT;
+      const responding = proximityActive({ hasZone: true, inZone: this._playerInZone(a, player), defeated, reacting });
+      out.push({
+        id: a.id,
+        type: a.type,
+        position: [g.position.x, g.position.y, g.position.z],
+        yaw: g.rotation.y,
+        lean: g.rotation.x,
+        // The exact hover bias applied this frame (hover archetypes only) — null for grounded actors. Lets
+        // the proof verify the wisp's drift bias directly (bounded ≤ maxBias, away-from-player), non-flakily.
+        bias: a.hover ? [a._bias?.x ?? 0, a._bias?.z ?? 0] : null,
+        responding,
+        defeated,
+      });
+    }
+    return out;
+  }
+
   _applyDefeatPose(actor) {
     // A defeated wisp falls OUT of the air to just above the ground (the archetype's dim emissive does the
     // rest of the "extinguished" read); a grounded sentinel slumps DOWN into the ground (byte-identical).
@@ -402,6 +464,7 @@ export class EnemyRuntime {
     this.enemies.clear();
     this._persistDirty = false;
     this._document = null;
+    this._lastPlayer = null;
   }
 
   dispose() {

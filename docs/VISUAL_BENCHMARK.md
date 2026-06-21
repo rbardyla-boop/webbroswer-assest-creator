@@ -178,6 +178,18 @@ Performance Contract needed **no re-lock**. The two-beat gates (`content-combat-
 shipping corridor) — the two sentinel beats stay byte-stable and the beat proofs now additionally assert the wisp stays **live**
 when the sentinels are defeated (a stronger independence check). The LOD finding (B — defer) is unaffected.
 
+## Enemy-3 — light proximity response (ADR-059)
+
+Enemy-3 makes the mixed cache engagement feel **aware**: the stationary `glacial_sentinel` ORIENTS (a clamped
+turn) + LEANS toward the player while they stand in the gate; the `frost_wisp` BIASES its hover drift slightly
+**away** from the player — both bounded, both dormant outside the zone, both stopping permanently on defeat. It
+is a **motion overlay** (a new pure `EnemyProximityLogic` + a thin `EnemyRuntime` hook) reusing the encounter
+zone + `EncounterPresentation`'s existing **brighten** telegraph — `CombatRuntime` / `EnemyTargetAdapter` /
+`EncounterPresentation` / the Enemy-1 patrol facing are **byte-unchanged**, and the response writes only the
+transform so `snapshot()` stays deterministic. It is **structurally free** (no scene geometry): the benchmark's
+counts are **unchanged** (draws 121, tris ~501,790, objs 19) and the Performance Contract needed **no re-lock**.
+Worlds without encounters (frozen-cache / first-playable) have no zone → the response is dormant + byte-stable.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -198,3 +210,7 @@ when the sentinels are defeated (a stronger independence check). The LOD finding
   defeats both (same `weaponId`, the wisp strike resolving to the wisp); each beat completes independently
   (defeating one leaves the other live) and reload-persists while the crossing stays live; schema unchanged
   (`enemyCount` clamps to 1, no new key); benchmark counts unchanged, 0 errors.
+- `test:enemy-proximity(-proof)` — the light proximity response (Enemy-3): outside the cache zone both enemies
+  are dormant; inside, the sentinel orients (yaw converges to the bearing) + leans and the wisp's drift biases
+  away (bounded, away-from-player, body stays in-zone); both stay combat targets + are defeated by one weapon;
+  defeat stops the response + freezes the pose; reload-persists; benchmark counts unchanged, 0 errors.

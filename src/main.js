@@ -460,6 +460,15 @@ if (import.meta.env.DEV) {
       player.syncMesh();
       return true;
     },
+    // Enemy-3: deterministic player placement at an arbitrary (x,z) on the ground — for the proximity proof
+    // to stand the player to the SIDE of a target (a +Z approach coincides with a sentinel's spawn facing).
+    // Test-only positioning, like teleportNearTarget; combat itself never teleports.
+    teleportTo: (x, z) => {
+      player.position.set(x, getHeight(x, z) + 0.1, z);
+      player.velocityY = 0;
+      player.syncMesh();
+      return true;
+    },
     aimAt: (x, y, z) => {
       const dx = x - player.position.x;
       const dy = y - (player.position.y + player.eyeHeight);
@@ -484,6 +493,9 @@ if (import.meta.env.DEV) {
   // Enemy-2 dev/test-only: the LIVE transform + kind/mode of EVERY moving actor (patrol AND hover). The
   // archetype proof samples this to prove the frost_wisp drifts, stays bounded + finite, and freezes on defeat.
   window.__ENEMY_LIVE__ = () => enemyRuntime?.liveView() ?? null;
+  // Enemy-3 dev/test-only: the proximity-response state (responding/yaw/lean) of every zone-bearing actor.
+  // The proof reads it to prove the sentinel orients + the wisp biases inside the zone, dormant outside.
+  window.__ENEMY_PROXIMITY__ = () => enemyRuntime?.proximityView() ?? null;
   // Dev/test-only: tick the enemy runtime + flush the defeat-persist exactly as the main loop does.
   // The headless rAF is throttled (~5fps), so the proof drives this synchronously after firing to
   // advance hit-react/defeated state + persist a defeat deterministically (input-equivalent, no state mutation).

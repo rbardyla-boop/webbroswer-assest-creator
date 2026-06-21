@@ -47,6 +47,9 @@ export const ENEMY_ARCHETYPES = Object.freeze({
       flickerAmp: 0, // no idle flicker (byte-stable)
       flickerSpeed: 0,
     }),
+    // Enemy-3 light proximity response: a STATIONARY sentinel turns toward + leans toward an in-zone player
+    // (orientation only, bounded — never moves/chases). The patrolling sentinel uses its Enemy-1 alert instead.
+    proximity: Object.freeze({ turnRate: 2.5, maxLean: 0.18 }), // rad/s turn cap; rad forward-lean cap
   }),
   [WISP_TYPE]: Object.freeze({
     type: WISP_TYPE,
@@ -68,6 +71,9 @@ export const ENEMY_ARCHETYPES = Object.freeze({
       bobAmp: 0.35, // metres of vertical bob
       driftSpeed: 0.6, // drift angular rate
     }),
+    // Enemy-3 light proximity response: an in-zone player biases the hover drift slightly AWAY (bounded;
+    // added before the hover zone clamp so the wisp stays in-zone). Small vs the ~1.4 m drift radius.
+    proximity: Object.freeze({ maxBias: 0.5 }), // metres of bounded drift bias
   }),
 });
 

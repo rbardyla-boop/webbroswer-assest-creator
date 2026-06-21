@@ -79,6 +79,8 @@
     "test:enemy-patrol-proof": "node scripts/browser-enemy-patrol-proof.mjs",
     "test:enemy-archetypes": "node scripts/enemy-archetypes-regression.mjs",
     "test:enemy-archetypes-proof": "node scripts/browser-enemy-archetypes-proof.mjs",
+    "test:enemy-proximity": "node scripts/enemy-proximity-regression.mjs",
+    "test:enemy-proximity-proof": "node scripts/browser-enemy-proximity-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",

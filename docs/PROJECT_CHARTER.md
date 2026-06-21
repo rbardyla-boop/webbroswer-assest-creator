@@ -22,49 +22,44 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-21 (Content-3 accepted; tag `world-builder-content-3-mixed-encounter`).**
-- **69 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-21 (Enemy-3 accepted; tag `world-builder-enemy-3-proximity`).**
+- **70 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-3 — Mixed Enemy Encounter Composition**
-  (ADR-058): a `glacial_sentinel` and a `frost_wisp` staged TOGETHER as one mixed engagement at the benchmark's cache gate, through
-  AUTHORED COMPOSITION ALONE — no new enemy systems, no schema change, no attacks, no AI director, no waves. The cache gate is now a
-  mixed final guardian; the player faces both archetypes in one overlapping zone, each its own independent beat.
-- **Approach B over A — authored adjacency, not a runtime model change.** The encounter stack was ALREADY multi-beat
-  (`EncounterPresentation` iterates all beats with multi-beat banner precedence; `allDefeated` is per-beat; combat raycasts all
-  targets → nearest), so two adjacent single-enemy beats is a first-class case needing ZERO runtime change. Approach A
-  (multi-enemy-in-one-descriptor) was rejected — it would have removed the `clampCount` hard-1 (the no-waves gate) and rippled a
-  schema/version change through every sibling proof. The ONLY authored change is `visualBenchmarkV1.js`: a THIRD encounter
-  `vb-cache-wisp` (frost_wisp, `enemyCount:1`) APPENDED at `items[2]`, perp-offset ~3 m so its radius-6 zone OVERLAPS the cache
-  sentinel's; `items[0]`/`[1]` (crossing + cache sentinel) byte-identical. `EncounterTypes`/`EncounterRuntime`/`EnemyRuntime`/
-  `CombatRuntime`/`EncounterPresentation` byte-UNCHANGED; no `WORLD_DOCUMENT_VERSION` bump.
-- **No-waves invariants held.** `enemyCount` clamps to exactly 1 per beat — the benchmark has THREE INDEPENDENT single-enemy beats
-  (no shared spawn, no reinforcement, no director). `test:content-3` pins the schema (whitelist gained no key; `clampCount`
-  enforces 1) and the mixed pair's INDEPENDENT completion (defeat one, the other persists uncompleted — both directions).
-- **Deliberate benchmark rebaseline (the playable corridor itself got the stronger fight).** The benchmark went 2→3 beats, so the
-  gates that hard-counted 2 were rebaselined (deliberately, operator-chosen): `content-combat-beats`/`visual-benchmark`/
-  `content-slice-expansion` (Node + proofs) and `enemy-patrol-proof` (`staged.ids`). The two SENTINEL beats stay byte-stable
-  (filtered); `content-combat-beats-proof` + `content-slice-expansion-proof` now assert the wisp beat stays LIVE while the
-  sentinels are defeated (reload `completed = [true,true,false]` — a STRONGER independence check, not a loosened one).
-  `encounter-polish-proof` + `audio-feedback-proof` index `[0]` → UNAFFECTED. The wisp is not a `WorldObject` and the far cache
-  enemies are frustum-culled at the spawn capture → benchmark draws 121 / tris 501,790 / objs 19 UNCHANGED → within the existing
-  perf ceiling, NO re-lock.
-- **Content-3 gates GREEN**: `test:content-3` (5 Node) + `test:content-3-proof` (SwiftShader on the benchmark, ports 5257/9392:
-  three beats; the cache pairs a sentinel + a hovering wisp both combat-targeted with OVERLAPPING zones, the wisp the lone hover
-  actor; standing at the gate telegraphs BOTH; ONE weapon defeats the sentinel AND the wisp — same `weaponId`, the wisp strike
-  resolving to the WISP's id, not the adjacent sentinel; defeating the sentinel leaves the wisp ALIVE + the separate crossing
-  untouched; reload persists both cache completions while the crossing stays live; benchmark within the contract; 0 console
-  errors). Full sweep — content-combat-beats / visual-benchmark / content-slice-expansion / enemy-patrol / encounter-polish /
-  audio-feedback / performance-contract proofs + enemy / enemy-archetypes / frozen-cache / first-playable proofs, all Node, build,
-  qa — all green; the runtime + the two sentinel beats + frozen slices are byte-stable.
-- **Prior stages:** Enemy-2 (ADR-057, `world-builder-enemy-2-archetypes`) — second enemy archetype `frost_wisp` via an archetype
-  REGISTRY in `EnemyTypes` + a bounded hover overlay (the archetype data Content-3's mixed engagement composes); sentinel
-  byte-stable, Combat-0 untouched. Enemy-1 (ADR-056) — bounded sentinel patrol (motion overlay, NOT AI). Audio/Feedback-1
-  (ADR-055) — slice sensory polish. Content-2 (ADR-054) — off-route frozen shrine + optional exotic reward. Content-1 (ADR-053) —
-  second authored combat beat. Hygiene-1 (chore `e4c6b9a`) — tracked three codex working-tree artifacts in a separate commit.
-- **Next per ADR-039 roadmap: (await operator pick)** — Content-3 proved the stack produces a mixed engagement through composition
-  alone. The evidence-gated fork: more enemy variety/behaviour (Enemy-3: a 3rd type / wider patrol authoring / light proximity) or
-  enemy attacks (only if the mixed fight feels flat), more authored content+audio, or Nanite-like shader/LOD feasibility (only if
-  visuals/perf become the constraint). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-3 — Light Proximity Response**
+  (ADR-059): enemies feel AWARE of the player — a stationary `glacial_sentinel` ORIENTS (clamped turn) + LEANS toward an in-zone
+  player; a `frost_wisp` BIASES its hover drift slightly away — WITHOUT attacks, player damage, chase, pathfinding, navmesh, waves,
+  factions, loot, or director. It is a THIRD motion overlay, like Enemy-1 patrol + Enemy-2 hover. The operator deferred enemy
+  attacks (a much larger seam) + shader/LOD (no evidence pressure) in favour of this bounded awareness layer.
+- **Most of the seam already existed.** "Brighten" is ALREADY owned by `EncounterPresentation`'s telegraph (Enemy-3 does NOT
+  duplicate it). The PATROLLING sentinel already faces via Enemy-1's `alert` — `_patrol` stays byte-stable; the gap was the
+  STATIONARY sentinel. Proximity is encounter-gated: `EncounterRuntime` already threads `zone` into every projected enemy, so
+  assigning `actor.zone` for ALL archetypes (was hover/patrol only) gates the response on zone presence — a no-encounter enemy
+  (frozen-cache / first-playable) has no zone → never responds.
+- **`EnemyProximityLogic` (pure) + a thin `EnemyRuntime` overlay; everything else byte-stable.** The new pure module carries the
+  bounded math (`bearingTo`, `stepYaw` clamped-turn, `hoverBias` ≤ maxBias away-from-player, `leanAmount`, `proximityActive` the
+  single dormancy gate). `EnemyTypes` archetypes gain a frozen `proximity` field (sentinel turnRate/maxLean; wisp maxBias) — the
+  feedback constants untouched. `EnemyRuntime`'s stationary `_animate` orients/leans (ORIENTATION ONLY — the body never moves, no
+  chase); `_hover` adds the bounded bias before its zone clamp; a `proximityView()` DEV reader records the exact per-frame bias.
+  The response writes only the TRANSFORM — `snapshot()` stays deterministic. `CombatRuntime` / `EnemyTargetAdapter` /
+  `EncounterPresentation` / `_patrol` byte-UNCHANGED; no `WORLD_DOCUMENT_VERSION` bump.
+- **Enemy-3 gates GREEN**: `test:enemy-proximity` (5 Node: stepYaw shortest-path/clamp/idempotent incl. the ±π seam; hoverBias
+  bounded + away-from-player; leanAmount range; the dormancy gate; the archetype caps + the unchanged sentinel feedback) +
+  `test:enemy-proximity-proof` (SwiftShader on the benchmark mixed cache engagement, ports 5258/9393: OUTSIDE → both dormant;
+  INSIDE (player to the SIDE) → the sentinel yaw CONVERGES to the bearing + leans, the wisp's recorded bias is non-zero ≤ maxBias
+  away-from-player while the body stays in-zone; both remain combat targets + one weapon defeats both; defeat STOPS the response +
+  freezes the pose; reload persists; benchmark draws 121 / tris 501,790 / objs 19 UNCHANGED — no re-lock; 0 console errors). Full
+  sweep — enemy / enemy-archetypes / enemy-patrol / combat / encounter-editor / content-3 / content-combat-beats / encounter-polish
+  / visual-benchmark / content-slice-expansion / audio-feedback / performance-contract / frozen-cache / first-playable proofs, all
+  Node, build, qa — all green; the patrol facing + combat + the no-zone Enemy-0 path are byte-stable.
+- **Prior stages:** Content-3 (ADR-058, `world-builder-content-3-mixed-encounter`) — a glacial_sentinel + frost_wisp staged
+  together as one mixed engagement at the benchmark cache gate via authored adjacency over the already-multi-beat stack (the
+  composition Enemy-3 brings to life); runtime byte-stable, no waves. Enemy-2 (ADR-057) — second archetype `frost_wisp` via an
+  archetype registry + bounded hover. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1 (ADR-055) — slice sensory
+  polish. Content-2 (ADR-054) — frozen shrine + reward. Hygiene-1 (chore `e4c6b9a`) — tracked three codex working-tree artifacts.
+- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-3 made the mixed fight feel aware without combat escalation. The
+  evidence-gated fork the operator named: if the mixed fight still feels HARMLESS → plan **Combat-1: enemy attack/damage
+  feasibility** (the bigger seam — player health, damage rules, fail states, recovery, balance, UI); if it feels ALIVE enough →
+  continue authored content; shader/LOD only if visuals/perf become the constraint. Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -144,7 +139,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1901,7 +1896,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 17. Enemy-1 — bounded sentinel patrol (a glacial_sentinel walks an authored 2–4-point line/loop inside its encounter zone; terrain-safe, combat-target-compatible, halt/track/none alert, defeat freezes; motion overlay, NOT AI), no chase/attacks/navmesh/waves  ← SHIPPED (ADR-056)
 18. Enemy-2 — second enemy archetype (frost_wisp: a floating glacial spirit beside glacial_sentinel; archetype registry in EnemyTypes, bounded hover overlay, lighter health, distinct silhouette/feedback; same StrikeEvent path, dedicated enemy-archetype-lab scene, benchmark byte-stable), no attacks/chase/projectiles/waves/AI  ← SHIPPED (ADR-057)
 19. Content-3 — mixed enemy encounter composition (a glacial_sentinel + a frost_wisp staged together as one mixed engagement at the benchmark cache gate, via authored adjacency over the already-multi-beat stack; two independent single-enemy beats, overlapping zones, no schema change, no waves; deliberate benchmark gate rebaseline)  ← SHIPPED (ADR-058)
-20. (await operator pick) — more enemy variety/behaviour (Enemy-3: a 3rd type / wider patrol authoring / light proximity) or enemy attacks (only if the mixed fight feels flat) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+20. Enemy-3 — light proximity response (a stationary glacial_sentinel orients+leans toward an in-zone player; a frost_wisp biases its hover drift away; bounded, dormant outside encounters, defeated stops it; a third motion overlay reusing EncounterPresentation's brighten + the encounter zone), no attacks/damage/chase/navmesh/waves/AI  ← SHIPPED (ADR-059)
+21. (await operator pick) — if the mixed fight still feels HARMLESS → Combat-1: enemy attack/damage feasibility (player health, damage rules, fail states, recovery, balance, UI) / else continue authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3278,6 +3274,59 @@ guards the cache gate (the climactic mixed final guardian, lowest proof interfer
 **Non-goals (held).** No attacks, player damage, projectiles, chase, navmesh, waves, loot, factions, AI director, new combat
 rules, animation system, or schema expansion. No new enemy systems. The wisp is a `CombatTarget` adapter like the sentinel (no
 forked targeting). No `WORLD_DOCUMENT_VERSION` bump. The runtime + frozen-cache + first-playable slices are byte-untouched.
+
+## ADR-059 — Enemy-3: Light Proximity Response (a third motion overlay, not a combat system)
+
+**Status.** Accepted. Tag `world-builder-enemy-3-proximity` (local only). Stage 70.
+
+**Context.** The mixed cache engagement (Content-3) had a stationary sentinel + a hovering wisp that ignored the player.
+Enemy-3 makes enemies feel AWARE — orient/lean toward the player, bias the hover drift — WITHOUT attacks, player damage, chase,
+pathfinding, navmesh, waves, factions, loot, or director logic. It is a THIRD motion overlay, like Enemy-1 patrol + Enemy-2 hover.
+The operator deferred enemy attacks (a much larger seam: player health, damage rules, fail states, balance, UI) and shader/LOD
+(no evidence pressure) in favour of this bounded awareness layer.
+
+**Decisive findings (most of the seam already existed).** (1) "Brighten" is ALREADY owned by `EncounterPresentation`'s telegraph
+(it lifts the idle sentinel + wisp emissive when the beat is alert) — Enemy-3 does NOT duplicate it; the new work is orientation
++ drift bias. (2) The PATROLLING sentinel already responds via Enemy-1's `alert` (halt/track face the in-zone player) — `_patrol`
+stays byte-stable; the gap is the STATIONARY sentinel (it faced only on a fresh hit). (3) Proximity is naturally encounter-gated:
+`EncounterRuntime` already threads `zone:{x,z,radius}` into every projected enemy, but `_spawn` only assigned `actor.zone` in the
+hover/patrol branches — assigning it for ALL archetypes gates proximity on zone presence, so a doc-authored / no-encounter enemy
+(frozen-cache / first-playable) has no zone and never responds. (4) The wisp's `_hover` already has a zone clamp, so a small bias
+added before it stays bounded for free. (5) The response writes only the animated TRANSFORM (yaw/lean/position), never logical
+state, so `snapshot()` stays deterministic — exactly like patrol/hover.
+
+**Decision — `EnemyProximityLogic` (pure) + a thin `EnemyRuntime` overlay; everything else byte-stable.** A NEW pure module
+`EnemyProximityLogic.js` carries the bounded math: `bearingTo`, `stepYaw` (shortest-path turn clamped to `maxStep`, idempotent at
+the target), `hoverBias` (magnitude provably ≤ `maxBias`, away-from-player, stronger-when-closer), `leanAmount` (∈ [0, maxLean], 0
+at the zone edge), and `proximityActive` (the single dormancy gate: alive + in-zone + not-reacting + has-zone). `EnemyTypes`
+archetypes gain a frozen `proximity` field (sentinel `{turnRate, maxLean}`; wisp `{maxBias}`) — the feedback constants are
+untouched. `EnemyRuntime`: `_spawn` assigns `actor.zone` for all archetypes + `faceYaw` + `proximity`; the stationary `_animate`
+path orients/leans toward an in-zone player (a clamped turn + a small forward lean, ORIENTATION ONLY — the body never moves, no
+chase); `_hover` adds the bounded bias before its zone clamp; a `proximityView()` DEV reader. A test-only `__COMBAT_DO__.teleportTo`
+hook (deterministic player placement to a target's SIDE) lets the proof observe the turn (a +Z approach coincides with the
+sentinel's spawn facing). `CombatRuntime`, `EnemyTargetAdapter`, `EncounterPresentation`, and `_patrol` are byte-UNCHANGED; no
+`WORLD_DOCUMENT_VERSION` bump; no schema change (`zone` was already threaded).
+
+**Bounded + dormant invariants (held + checked).** Turn ≤ `maxStep`/frame, bias ≤ `maxBias`, lean ≤ `maxLean`; the biased wisp
+still passes the zone clamp (stays in-zone). Dormant unless alive + in-zone + not-reacting; a defeated enemy (the `_animate` early
+return) never responds; a hit-reacting enemy yields to combat feedback; a no-zone enemy never responds (frozen-cache /
+first-playable dormant + byte-stable). The DEV reader records the exact per-frame bias (`actor._bias`) so the proof verifies it
+directly (the drift's windowed mean would otherwise confound an averaged check).
+
+**Gates.** `test:enemy-proximity` (5 Node: bearingTo + stepYaw shortest-path/clamp/idempotent incl. the ±π seam; hoverBias bounded
+over a distance sweep + away-direction + stronger-when-closer; leanAmount range; proximityActive gate; the archetype caps frozen +
+bounded with the sentinel feedback unchanged) + `test:enemy-proximity-proof` (SwiftShader on the benchmark mixed cache engagement,
+ports 5258/9393: OUTSIDE the zone both cache enemies report responding:false; INSIDE the zone — player placed to the SIDE — the
+sentinel yaw CONVERGES to the bearing (Δ ≈ 0) + leans, and the wisp's recorded bias is non-zero, ≤ maxBias, away-from-player, with
+the body staying in-zone; both remain combat targets and one weapon defeats both; defeat STOPS the response + freezes the pose;
+reload persists the completions; benchmark draws 121 / tris 501,790 / objs 19 UNCHANGED — no re-lock; 0 console errors). Full
+sweep — enemy / enemy-archetypes / enemy-patrol / combat / encounter-editor / content-3 / content-combat-beats / encounter-polish /
+visual-benchmark / content-slice-expansion / audio-feedback / performance-contract / frozen-cache / first-playable proofs, all
+Node, build, qa — green; the patrol facing + combat + the no-zone Enemy-0 path are byte-stable.
+
+**Non-goals (held).** No attacks, player damage, projectiles, chase, pathfinding, navmesh, waves, factions, loot, AI director, new
+combat rules, or animation system. The response is orientation/lean/bias only — the body never moves toward the player.
+CombatRuntime / EnemyTargetAdapter / EncounterPresentation / `_patrol` byte-untouched. No `WORLD_DOCUMENT_VERSION` bump.
 
 ---
 
