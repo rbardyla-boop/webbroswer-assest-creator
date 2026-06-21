@@ -273,6 +273,14 @@ export function buildVisualBenchmarkV1() {
   // The two beats complete + persist INDEPENDENTLY; each carries a `label` so the banner names its own
   // location. The crossing stays items[0] (encounters[0]) so the Encounter-1 gate reads it unchanged.
   const cacheGate = { x: cache.x - dir.x * 2.5, z: cache.z - dir.z * 2.5 }; // 2.5 m in front of the cache
+  // Enemy-1: the crossing sentinel walks a short line across the corridor (perp ±3 m — just inside the
+  // crossing posts at ±3.4, well within the radius-8 zone, on the same walkable/dry ground the route uses).
+  // Grounded points; "halt" alert stops + faces the player as a telegraph when they enter the zone. The
+  // cache sentinel below stays STATIONARY (no patrol) so the slice proves both behaviours coexist.
+  const crossingPatrolPoint = (side) => {
+    const q = offset(crossing, perp, side);
+    return { x: q.x, y: getHeight(q.x, q.z), z: q.z };
+  };
   doc.encounters = {
     version: 1,
     items: [
@@ -286,6 +294,14 @@ export function buildVisualBenchmarkV1() {
         completed: false,
         persistCompletion: true,
         label: "the crossing",
+        patrol: {
+          enabled: true,
+          points: [crossingPatrolPoint(3), crossingPatrolPoint(-3)],
+          speed: 0.8,
+          pauseSec: 1.0,
+          loop: false,
+          alert: "halt",
+        },
       },
       {
         type: ENCOUNTER_TYPE,

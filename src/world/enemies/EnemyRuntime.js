@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { ENEMY_STATE, HIT_DAMAGE, HIT_REACT_TIME, createEnemyState } from "./EnemyTypes.js";
 import { applyDamage, advanceState, isDefeated } from "./EnemyValidation.js";
+import { createPatrolMotion, advancePatrol } from "./PatrolMotion.js";
 import { EnemyTargetAdapter } from "./EnemyTargetAdapter.js";
 import { EnemyFeedback } from "./EnemyFeedback.js";
 
@@ -76,6 +77,24 @@ export class EnemyRuntime {
       bobPhase: 0,
       hitFresh: false,
     };
+    // Enemy-1 (encounter-owned): if a resolved patrol rode in on the descriptor, arm the motion overlay
+    // and START the body on the route's first point (so frame 0 doesn't snap it from the centre). A null
+    // patrol leaves every field unset → the actor is a stationary Enemy-0 (byte-stable). Doc-authored
+    // enemies never reach here with a patrol (their validator whitelist drops it) — patrol is encounter-only.
+    if (desc.patrol && Array.isArray(desc.patrol.points) && desc.patrol.points.length >= 2) {
+      actor.patrol = desc.patrol;
+      actor.zone = desc.zone ?? null;
+      actor.motion = createPatrolMotion();
+      actor.patrolMode = "patrol";
+      const p0 = desc.patrol.points[0];
+      if (Number.isFinite(p0.x) && Number.isFinite(p0.y) && Number.isFinite(p0.z)) {
+        group.position.set(p0.x, p0.y, p0.z);
+        actor.home = { x: p0.x, y: p0.y, z: p0.z };
+        actor.baseY = p0.y;
+        actor._patrolY = p0.y;
+      }
+    }
+
     this.enemies.set(desc.id, actor);
 
     // Consume the combat seam: combat raycasts `group`; on a hit it calls adapter.registerHit, which
@@ -141,7 +160,15 @@ export class EnemyRuntime {
   // idle bob, a recoil dip while hit-reacting, and a one-shot turn toward the player on a fresh hit.
   // Defeated actors hold the slump pose set on the defeat edge (no per-frame motion).
   _animate(actor, dt, player) {
-    if (isDefeated(actor.state)) return;
+    if (isDefeated(actor.state)) return; // defeated → frozen; movement stops permanently (Enemy-1 too)
+
+    // Enemy-1 motion overlay: a patroller walks its authored route instead of idle-bobbing in place. The
+    // combat FSM is untouched — hit-react/defeated still win inside _patrol (no patrol = the path below).
+    if (actor.patrol) {
+      this._patrol(actor, dt, player);
+      return;
+    }
+
     const g = actor.group;
 
     if (actor.hitFresh && player?.position) {
@@ -154,6 +181,82 @@ export class EnemyRuntime {
     const recoil = actor.state.state === ENEMY_STATE.HIT_REACT ? HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME) : 0;
     const y = actor.baseY + bob - recoil;
     if (Number.isFinite(y)) g.position.y = y;
+  }
+
+  // True when the player is inside this patroller's encounter zone (planar disk). Used to gate the alert
+  // reaction. No zone or no player → false (treated as outside).
+  _playerInZone(actor, player) {
+    const z = actor.zone;
+    if (!z || !player?.position) return false;
+    const dx = player.position.x - z.x;
+    const dz = player.position.z - z.z;
+    return dx * dx + dz * dz <= z.radius * z.radius;
+  }
+
+  // Enemy-1: advance one patroller. hit-react FREEZES travel (the existing recoil dip + a one-shot
+  // turn-to-face play, exactly like the stationary path) so combat feedback always wins; defeat is handled
+  // by _animate's early return (frozen forever). Otherwise the alert mode decides: "halt" stops + faces the
+  // player while in-zone; "track" keeps walking but faces the player; "none" / out-of-zone just patrols.
+  // Movement comes only from the resolved (radius-bounded, terrain-safe) points, so the body never leaves
+  // the zone or chases. Every transform write is finite-guarded.
+  _patrol(actor, dt, player) {
+    const g = actor.group;
+    const reacting = actor.state.state === ENEMY_STATE.HIT_REACT;
+    const inZone = this._playerInZone(actor, player);
+    const alert = actor.patrol.alert;
+    const halt = !reacting && inZone && alert === "halt";
+    const track = !reacting && inZone && alert === "track";
+    const travel = !reacting && !halt; // patrol + track travel; halt + hit-react freeze in place
+    const facePlayer = reacting ? actor.hitFresh : halt || track;
+    let mode = reacting ? "hit-react" : inZone && alert !== "none" ? "alert" : "patrol";
+
+    if (travel) {
+      const r = advancePatrol(actor.motion, actor.patrol, dt);
+      actor.motion = r.motion;
+      const pos = r.position;
+      if (Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
+        if (!facePlayer) {
+          const dx = pos.x - g.position.x;
+          const dz = pos.z - g.position.z;
+          if (Math.abs(dx) > 1e-5 || Math.abs(dz) > 1e-5) {
+            const yaw = Math.atan2(dx, dz);
+            if (Number.isFinite(yaw)) g.rotation.y = yaw; // face travel direction
+          }
+        }
+        g.position.set(pos.x, pos.y, pos.z);
+        actor._patrolY = pos.y;
+      }
+      if (mode === "patrol" && actor.motion.pauseLeft > 0) mode = "paused";
+    }
+
+    if (facePlayer && player?.position) {
+      const yaw = Math.atan2(player.position.x - g.position.x, player.position.z - g.position.z);
+      if (Number.isFinite(yaw)) g.rotation.y = yaw; // telegraph: face the player (no approach)
+    }
+
+    if (reacting) {
+      // Recoil dip on Y, measured from the FROZEN route height (don't accumulate into the route).
+      const baseY = Number.isFinite(actor._patrolY) ? actor._patrolY : g.position.y;
+      const y = baseY - HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME);
+      if (Number.isFinite(y)) g.position.y = y;
+    } else if (halt && Number.isFinite(actor._patrolY)) {
+      g.position.y = actor._patrolY; // standing telegraph: hold the route height (clear any recoil dip)
+    }
+
+    actor.patrolMode = mode;
+  }
+
+  // DEV-only liveness reader (the proof reads it): the LIVE transform + mode of every patrolling actor.
+  // Deliberately separate from snapshot() — snapshot stays the logical, deterministic view (and still
+  // filters ephemerals), so this never pollutes it with an animated transform.
+  patrolView() {
+    const out = [];
+    for (const a of this.enemies.values()) {
+      if (!a.patrol) continue;
+      const p = a.group.position;
+      out.push({ id: a.id, position: [p.x, p.y, p.z], mode: a.patrolMode ?? "patrol", defeated: isDefeated(a.state) });
+    }
+    return out;
   }
 
   _applyDefeatPose(actor) {

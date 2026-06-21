@@ -10,6 +10,7 @@
 // value modules + encounter-internal modules.
 
 import { DEFAULT_MAX_HEALTH } from "../enemies/EnemyTypes.js";
+import { resolvePatrol } from "../enemies/PatrolTypes.js";
 import { allDefeated } from "./EncounterCompletion.js";
 import { buildZoneRing, paintZoneRing, disposeZoneRing, RING_Y_OFFSET } from "./EncounterMarkers.js";
 
@@ -26,10 +27,11 @@ export class EncounterRuntime {
   // MUST run AFTER loadEnemies() (which clears + respawns the doc-authored enemies) so the ephemerals
   // this projects join a fresh enemy set. `groundHeight(x,z)` grounds the ring + enemy onto the
   // support surface when provided. Returns the spawned count.
-  load({ scene, document, groundHeight = null }) {
+  load({ scene, document, groundHeight = null, terrain = null }) {
     this.clear();
     if (scene) this.scene = scene;
     this._document = document ?? null;
+    this._terrain = terrain ?? null;
     const items = document?.encounters?.items;
     if (!Array.isArray(items) || !this.scene) return 0;
     let count = 0;
@@ -65,6 +67,15 @@ export class EncounterRuntime {
     // A persisted-completed encounter is already cleared → DON'T project its enemy (never resurrect a
     // baked, pre-dead enemy). Otherwise project exactly one ephemeral enemy at the encounter centre.
     if (!entry.completed) {
+      // Enemy-1: resolve the authored patrol against THIS zone (centre + radius) and the terrain. The
+      // resolve grounds + bounds + safety-checks each point; a failing patrol resolves to null → the
+      // sentinel stays stationary (Enemy-0 behaviour). The zone is threaded so the enemy can compute its
+      // alert reaction without importing the encounter.
+      const patrol = resolvePatrol(desc.patrol, {
+        center: { x, z },
+        radius: desc.radius,
+        terrain: this._terrain,
+      });
       const actor = this.enemyRuntime?.spawnEphemeral(
         {
           type: desc.enemyType,
@@ -72,6 +83,8 @@ export class EncounterRuntime {
           position: { x, y, z },
           maxHealth: DEFAULT_MAX_HEALTH,
           defeated: false,
+          patrol,
+          zone: { x, z, radius: desc.radius },
         },
         groundHeight
       );
@@ -119,6 +132,9 @@ export class EncounterRuntime {
         persistCompletion: e.descriptor.persistCompletion !== false,
         // Content-1: the authored banner location label (presentation reads it to name the beat).
         label: e.descriptor.label ?? null,
+        // Enemy-1: the AUTHORED patrol descriptor (logical intent — never the live transform, which the
+        // determinism rule keeps out of the snapshot). null when the beat's sentinel is stationary.
+        patrol: e.descriptor.patrol ?? null,
         enemyId: e.actors[0]?.id ?? null,
         enemyState: e.actors[0]?.state?.state ?? null,
       })),
@@ -137,6 +153,7 @@ export class EncounterRuntime {
     this.encounters.clear();
     this._persistDirty = false;
     this._document = null;
+    this._terrain = null;
   }
 
   dispose() {

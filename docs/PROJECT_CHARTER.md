@@ -22,52 +22,51 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-21 (Audio/Feedback-1 accepted; tag `world-builder-audio-feedback-1`).**
-- **66 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-21 (Enemy-1 accepted; tag `world-builder-enemy-1-patrol`).**
+- **67 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Audio/Feedback-1 — Slice Sensory Polish**
-  (ADR-055): makes the authored slice feel intentional by giving its key events differentiated audio + a visual mirror, by
-  OBSERVING the existing seams and reusing the existing `ProceduralAudio` engine — NO new audio engine, NO movement AI, NO
-  renderer work, NO scene objects. New runtime-only observer `SliceSensory` (over a pure `SliceSensoryLogic` edge-detector)
-  fires differentiated cues: combat **HIT** (per strike) + **DEFEAT** (the kill), **DISCOVERY** (entering the shrine alcove),
-  **REWARD** (claiming the authored exotic), and a **cache payoff** (objective completion) — each one-shot, in order; plus a
-  small `CueOverlay` milestone **toast** mirrors them for accessibility. The encounter-clear chord stays RuntimeFeedback's
-  (CLEAR is logged silently to avoid a double-fire). NO attacks/damage/inventory/new-combat/shader-LOD.
-- **Observe the seams, don't rewrite them.** `SliceSensory` reads `EncounterRuntime.snapshot()` (hit/defeat/clear),
-  `carry.slotOf(id)` (reward carried), sign proximity (shrine), and the relic objective (payoff) — mutating NO
-  combat/enemy/arsenal/objective/interaction state. The audio engine is HOISTED: one shared `ProceduralAudio` injected into
-  both `RuntimeFeedback` and `SliceSensory` (no third wind bed; RuntimeFeedback now owns disposal only when it created it).
-  New cue kinds are additive to `AudioCues` (the original four unchanged → FrozenCacheSlice/RuntimeFeedback byte-stable).
-- **DORMANCY = the byte-stability guarantee.** The layer activates ONLY for slices with AUTHORED content the runtime never
-  injects — **encounters or sign interactions** (NOT runtimeAssets, because the runtime places the relic + tutorial weapons
-  into `runtimeAssets` in every world). Reward cues additionally EXCLUDE those system weapons. So frozen-cache / first-playable
-  carry no encounters/signs → the layer is fully dormant → those shipped slices (and their audio) are byte-stable. One-shots
-  are baseline-seeded on bind → a reload never replays a completed cue. `src/main.js` gains only additive wiring; the
-  Performance Contract is unaffected (no geometry → no re-lock; the toast is DOM).
-- **Audio/Feedback-1 gates GREEN**: `test:audio-feedback` (10 Node: new cues valid + originals unchanged; the dormancy
-  invariant — runtime-placed weapons alone do NOT activate; the shrine sign + ONLY the authored exotic extracted, system
-  weapons excluded; seed-then-silence; HIT/DEFEAT/CLEAR order; defeat audible / clear silent; one-shot per id; payoff once;
-  dormant = silent; pure-module scans) + `test:audio-feedback-proof` (SwiftShader on `visual-benchmark-1`: active + ambient
-  + one shared engine → discovery once (visual toast mirrors) → reward once → combat hit→defeat→clear in order (+ RuntimeFeedback
-  fired the clear chord) → carrying the relic fires NO reward → cache payoff once → reload replays no one-shot; objective +
-  beat persist; 0 console errors). Full sweep — `test:frozen-cache-proof`, `test:encounter-polish-proof`,
-  `test:first-playable-proof`, `test:visual-benchmark(-proof)`, `test:content-combat-beats(-proof)`,
-  `test:content-slice-expansion(-proof)`, `test:performance-contract(-proof)`, enemy/combat/world, `build`, `qa` — all green;
-  shipped slices byte-stable. Fresh-context adversarial review (4 dims: byte-stability/no-double-fire · one-shot/reload ·
-  isolation/wiring · proof-rigor + per-finding verify): **2 high + 1 medium + 4 low**, all fixed — the high/medium were one
-  root cause (activation keyed on `runtimeAssets generated.weapon`, which the runtime pollutes with the relic/tutorial → the
-  layer would wake in frozen-cache/first-playable and double the COMPLETE chord); fixed by keying activation on encounters/signs
-  and excluding the system weapons from rewards. 2 refuted (both structurally unreachable). Tree re-audited clean.
-- **Prior stages:** Content-2 (ADR-054, `world-builder-content-2-slice-expansion`) — authored slice expansion (off-route
-  frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system. Content-1 (ADR-053,
-  `world-builder-content-1-combat-beats`) — second authored combat beat (repeatable encounter composition + per-beat label).
-  Encounter-1 (ADR-052) — authored combat-beat polish (telegraph + gate-light + phase/banner). Environment Polish-1 (ADR-051)
-  — visual benchmark expansion + the original `RuntimeFeedback` encounter-clear cue.
-- **Next per ADR-039 roadmap: (await operator pick)** — Audio/Feedback-1 closed the sensory-glue gap; the slice now reads as
-  intentional moment-to-moment. The evidence-gated fork: more authored content/audio (if the slice feels playable but thin),
-  **Enemy-1** movement/patrol (if it now feels static — the bigger foundational seam: terrain grounding, water avoidance,
-  combat range, proximity, state transitions, path validity, reload, performance), or shader/LOD feasibility (only if
-  visuals/perf become the constraint). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-1 — Bounded Sentinel Patrol**
+  (ADR-056): the smallest enemy MOVEMENT seam — a `glacial_sentinel` walks a tiny AUTHORED 2–4-point line/loop INSIDE its
+  encounter zone, terrain-safe, still a live combat target, still encounter-owned, defeat stops it permanently. NOT AI: no
+  chase, attacks, player damage, pathfinding, navmesh, flocking, waves, director, loot, or animation system.
+- **Movement is a MOTION OVERLAY, not a 4th FSM state.** The combat FSM `ENEMY_STATE = {idle, hit-react, defeated}` stays
+  byte-identical (test:enemy/test:combat green by construction); patrol is a motion layer keyed off `actor.patrol` in
+  `EnemyRuntime._animate` (a patroller routes to `_patrol`; a non-patroller takes the UNCHANGED stationary path). hit-react
+  freezes travel (recoil/turn-to-face still play); defeat freezes movement permanently. CombatRuntime is byte-UNTOUCHED —
+  combat already reads the live world position every strike, so a moving enemy is hittable for free.
+- **Ownership held.** EncounterRuntime owns the descriptor + zone (centre/radius) + completion → it RESOLVES the authored
+  patrol (radius-bound + terrain-safe via the wildlife `habitatOK` authority: REJECTS the whole patrol → stationary on any
+  out-of-radius / water / snow / steep point) and threads it onto the ephemeral enemy; EnemyRuntime owns the per-frame motion
+  state. Two new PURE modules: `PatrolTypes` (`normalizePatrol` structural boundary + `resolvePatrol` terrain gate) and
+  `PatrolMotion` (`advancePatrol` deterministic; every position is a convex blend of two in-zone points ⇒ provably BOUNDED to
+  the radius). The encounter `patrol` key is whitelisted + always-emitted (object|null); the AUTHORED patrol is in `snapshot()`
+  (the live transform is NOT — determinism rule). `alert` has THREE authored modes — `halt`/`track`/`none` (never chase).
+- **Data-driven; benchmark proves coexistence.** The crossing sentinel authors a 2-point `alert:"halt"` patrol while the cache
+  sentinel stays STATIONARY — moving + static in one scene. No scene geometry → benchmark draws 121 / tris 501,790 / objs 19
+  UNCHANGED → Performance Contract unaffected (no re-lock). frozen-cache / first-playable have no encounters → byte-stable.
+- **Enemy-1 gates GREEN**: `test:enemy-patrol` (6 Node: normalizePatrol whitelist/2–4/clamps/alert-allow-list/round-trip;
+  resolvePatrol water/snow/steep/out-of-radius each reject NON-VACUOUSLY + grounds Y + auto-degrades; advancePatrol
+  deterministic + bounded + dwell + ping-pong≠loop + NaN-safe; encounter `patrol` round-trips + ZERO new warnings on a
+  patrol-less beat; benchmark crossing patrols while cache stays static; pure-module scans) + `test:enemy-patrol-proof`
+  (SwiftShader, ports 5255/9390: sentinel MOVES 4.48 m, stays in-radius + terrain-safe, mode never `alert` while the player is
+  away, exactly ONE patroller; approach → `halt` telegraph; a strike's CONTACT POINT lands ≈3.4 m off the authored centre —
+  combat resolved against the LIVE displaced mesh; defeat FREEZES movement; reload persists completion with the cache beat
+  intact; 0 console errors). Full sweep — frozen-cache / first-playable / content-combat-beats / encounter-editor /
+  encounter-polish / visual-benchmark / content-slice-expansion / audio-feedback / performance-contract proofs,
+  enemy/combat/world, `build`, `qa` — all green; shipped slices byte-stable. Fresh-context adversarial review (4 dims:
+  FSM/overlay · boundedness/terrain-safety · persistence/byte-stability · proof-integrity + per-finding verify): three dims
+  ZERO findings; one MEDIUM proof-honesty (a stale header claim) fixed with a STRONGER non-tautological contact-off-centre
+  assertion + a DEV-only `__SCENE_SYNC__` hook (the synchronous proof runs no render between steps, so a moved patroller's
+  child collision meshes needed the matrix refresh the render loop normally does; combat stays byte-untouched). Re-audited clean.
+- **Prior stages:** Audio/Feedback-1 (ADR-055, `world-builder-audio-feedback-1`) — slice sensory polish (differentiated combat
+  hit/defeat + discovery/reward/cache-payoff cues + a milestone toast, reusing the existing `ProceduralAudio` engine), no
+  audio-engine/AI; the layer is DORMANT off any slice with authored encounters/signs (frozen-cache / first-playable byte-stable).
+  Content-2 (ADR-054) — authored slice expansion (off-route frozen shrine + optional exotic reward). Content-1 (ADR-053) —
+  second authored combat beat. Encounter-1 (ADR-052) — combat-beat polish (telegraph + gate-light + phase/banner).
+- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-1 opened the movement seam narrowly (the sentinel now patrols,
+  telegraphs on approach, and is hittable while displaced). The evidence-gated fork: more enemy behaviour (Enemy-2: a 2nd type /
+  wider patrol authoring / light proximity), more authored content+audio (if the slice feels thin), or Nanite-like shader/LOD
+  feasibility (only if visuals/perf become the constraint). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -1900,7 +1899,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 14. Content-1 — second authored combat beat (repeatable encounter composition: crossing + cache gate), no AI/waves/loot  ← SHIPPED (ADR-053)
 15. Content-2 — authored slice expansion (off-route frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system  ← SHIPPED (ADR-054)
 16. Audio/Feedback-1 — slice sensory polish (differentiated combat hit/defeat + discovery/reward/cache-payoff cues + a visual milestone toast, reusing the existing ProceduralAudio engine), no audio-engine/AI  ← SHIPPED (ADR-055)
-17. (await operator pick) — Enemy-1 (movement/patrol, the bigger foundational seam) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+17. Enemy-1 — bounded sentinel patrol (a glacial_sentinel walks an authored 2–4-point line/loop inside its encounter zone; terrain-safe, combat-target-compatible, halt/track/none alert, defeat freezes; motion overlay, NOT AI), no chase/attacks/navmesh/waves  ← SHIPPED (ADR-056)
+18. (await operator pick) — more enemy behaviour (Enemy-2: a 2nd type / wider patrol authoring / light proximity) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3069,3 +3069,82 @@ verifier-can-write gotcha — code-reviewer agents have Bash).
 renderer work. No shader/LOD experiments. No full audio engine, mixer UI, asset-based sound library, voiceover, or music
 system — only small procedural cues through the EXISTING `ProceduralAudio`. No mutation of the combat beats, the relic
 objective, or the frozen-cache / first-playable slices. No `WORLD_DOCUMENT_VERSION` bump.
+
+## ADR-056 — Enemy-1: Bounded Sentinel Patrol (open the movement seam, narrowly)
+
+**Status.** Accepted. Tag `world-builder-enemy-1-patrol` (local only). Stage 67.
+
+**Context.** Audio/Feedback-1 closed the sensory gap; the slice now reads as intentional moment-to-moment. The remaining
+obvious gameplay weakness was that enemies are static props with hit reactions. The operator chose to open the movement seam
+**narrowly**: a `glacial_sentinel` walks a tiny AUTHORED 2–4-point line/loop INSIDE its encounter zone — still terrain-safe,
+still a live combat target, still encounter-owned, stops permanently on defeat. NOT AI: no chase, attacks, player damage,
+pathfinding, navmesh, flocking, waves, director, factions, loot, animation system, or procedural encounter generation.
+
+**Decisive findings (recon).** (1) Enemies are purely static in X/Z today — `EnemyRuntime._animate` only bobs Y + does a
+one-shot turn-to-face, so there is no movement to preserve/break. (2) Combat ALREADY reads the live world position every
+strike (`CombatRuntime._queryHit` calls `object3D.updateWorldMatrix` per strike) — so a moving enemy is hittable for free and
+the hard constraint "movement never rewrites combat query logic" holds with ZERO combat changes. (3) The benchmark sentinels
+are encounter-OWNED ephemerals (`EncounterRuntime._spawnEncounter` builds the descriptor and calls `spawnEphemeral`), so
+patrol is authored on the ENCOUNTER descriptor and threaded into the enemy; `normalizeEncounterDescriptor` whitelists fields
+and DROPS unknown keys → `patrol` had to be added to the whitelist (the recurring persistence lesson). (4) The combat FSM
+`ENEMY_STATE = {idle, hit-react, defeated}` is frozen + test-pinned, so a 4th state would ripple through test:enemy/test:combat.
+
+**Decision — movement is a MOTION OVERLAY, not a 4th FSM state.** The combat FSM stays byte-identical; patrol is a motion layer
+keyed off `actor.patrol` in `EnemyRuntime._animate` (a patroller routes to `_patrol`; a non-patroller takes the unchanged
+stationary path). hit-react FREEZES travel (the existing recoil/turn-to-face still play); defeat freezes movement permanently
+(the early return). This kept Enemy-0/Combat-0 green by construction.
+
+**Ownership (hard constraints, honored).** EncounterRuntime owns the descriptor + zone (centre/radius) + completion → it
+RESOLVES the authored patrol (radius-bound + terrain-safe) and threads it onto the ephemeral enemy descriptor. EnemyRuntime
+owns enemy state → it owns the per-frame patrol MOTION state + the position write. CombatRuntime is UNTOUCHED.
+
+**Build (2 new PURE modules) + thin wiring.** `PatrolTypes.js` — `normalizePatrol` (structural boundary: 2–4 finite points,
+clamp speed/pause, `alert` allow-list, `enabled`; <2 valid → null → stationary) + `resolvePatrol` (terrain-safe gate via
+INJECTED samplers `{height, waterLevel, slope, snowline}`: REJECTS the whole patrol → null → stationary if any point leaves
+the radius or lands on water/snow/steep ground — mirrors the wildlife `habitatOK` authority; grounds each kept point's Y).
+`PatrolMotion.js` — `createPatrolMotion` + `advancePatrol` (deterministic: move at speed, dwell `pauseSec`, ping-pong or loop;
+Y lerped between grounded points; every reported position is a convex blend of two in-zone points ⇒ provably BOUNDED to the
+radius). Additive edits: EncounterTypes whitelists + always-emits `patrol` (object|null); EncounterRuntime widens
+`load({terrain})`, resolves, threads `patrol`+`zone` into `spawnEphemeral`, and reports the AUTHORED patrol in `snapshot()`
+(logical intent — never the live transform, keeping the determinism rule); EnemyRuntime gains `_patrol`/`_playerInZone`/
+`patrolView()`; `main.js` builds the terrain bundle for both load paths + a `__ENEMY_PATROL__` DEV hook; the benchmark crossing
+sentinel authors a 2-point `alert:"halt"` patrol while the cache sentinel stays STATIONARY (both behaviours coexist in one scene).
+
+**Operator decisions.** (1) `alert` is a per-patrol authored field with THREE implemented modes — `halt` (stop + face the player;
+the benchmark default), `track` (keep walking but face the player), `none` (ignore the player) — never chase. (2) Patrol is
+data-driven on ANY encounter (both sentinels CAN patrol); the benchmark authors crossing=patrol / cache=static to prove
+coexistence in-scene, with a Node fixture covering both-patrol + each alert mode.
+
+**Gates.** `test:enemy-patrol` (6 Node: normalizePatrol whitelist/2–4/clamps/alert-allow-list/round-trip; resolvePatrol
+water/snow/steep/out-of-radius each reject NON-VACUOUSLY + grounds Y + auto-degrades on a dry profile; advancePatrol
+deterministic + bounded + dwell + ping-pong≠loop + NaN-safe; encounter `patrol` round-trips + degrades safely + ZERO new
+warnings on a patrol-less beat; the benchmark crossing patrols in-zone while the cache stays static; pure-module scans) +
+`test:enemy-patrol-proof` (SwiftShader on `visual-benchmark-1`, ports 5255/9390: the crossing sentinel MOVES 4.48 m, stays
+WITHIN the radius + on safe ground across samples, mode never `alert` while the player is away (proving out-of-zone patrol),
+exactly ONE patroller (the cache is static); approach → the `halt` telegraph (mode `alert`); a strike lands a HIT whose CONTACT
+POINT is ≈3.4 m off the authored centre — combat resolved against the LIVE displaced mesh, not the authored spawn; defeat
+FREEZES the position across further steps; reload persists the crossing completion (no enemy re-projected) with the cache beat
+intact; benchmark draws 121 / tris 501,790 / objs 19 UNCHANGED (no scene geometry → Performance Contract unaffected, no re-lock);
+0 console errors). Full sweep — frozen-cache / first-playable / content-combat-beats / encounter-editor / encounter-polish /
+visual-benchmark / content-slice-expansion / audio-feedback / performance-contract proofs, enemy/combat/world, build, qa — all
+green; shipped slices byte-stable.
+
+**Review.** Fresh-context adversarial workflow (4 dims: combat-FSM/overlay · boundedness/terrain-safety · persistence/
+byte-stability · proof-integrity, each finding adversarially verified). Three dimensions raised ZERO findings (the core code is
+clean); the one confirmed-real finding was MEDIUM proof-honesty — a stale header comment claimed a contrastive "centre misses /
+live hits" test that the strike no longer executed, and the surviving hit-assertion was somewhat tautological. Fixed with a
+STRONGER, non-tautological proof: assert the strike's CONTACT POINT is ≈3 m off the authored centre (proving combat raycasts
+the live displaced mesh; a position-caching bug would miss). Surfacing this exposed a synchronous-proof artifact — combat's
+`updateWorldMatrix(true, false)` updates the moved group but not its child collision meshes, which the render loop normally
+refreshes; the proof drives combat+enemy with no render between steps. Fixed honestly with a DEV-only `__SCENE_SYNC__` hook
+(does what the render loop does each frame; a no-op for production; combat stays byte-untouched). Tree re-audited clean.
+
+**Gotchas (for the memory).** Combat's hitscan starts at the procedural weapon MUZZLE (which varies per rolled weapon and can
+sit well to the side), so headless strikes need a shallow stand-off + fire-until-hit, exactly like the sibling beat proofs;
+a steep close down-shot passes under a thin body. The two sibling proofs (content-combat-beats, encounter-polish) now aim at
+the patroller's LIVE position (with a centre fallback for static beats) — the benchmark crossing moving under them would have
+made a centre-aimed strike a latent flake.
+
+**Non-goals (held).** No attacks, player health, chase, pathfinding, navmesh, flocking, waves, director, factions, loot,
+animation system, or procedural encounter generation. No new renderer/shader/LOD work. No mutation of the frozen-cache /
+first-playable slices or the relic objective. No `WORLD_DOCUMENT_VERSION` bump. CombatRuntime byte-untouched.

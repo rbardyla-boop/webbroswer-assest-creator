@@ -56,7 +56,10 @@ const defeatBeat = (index) => `(() => {
   const wid = C.place({ x: beat.position[0] + 3, z: beat.position[2] + 1 });
   C.equip(wid, 'rightHand');
   D.teleportNearTarget(beat.enemyId, 6);
-  const fire = () => { D.aimAt(beat.position[0], beat.position[1] + 1.0, beat.position[2]); D.useActiveWeapon(); D.step(); };
+  // Enemy-1: the crossing sentinel patrols, so aim at its LIVE position (a patroller appears in the patrol
+  // view); a static beat (the cache gate) falls back to its authored centre. Correct for both.
+  const live = () => window.__ENEMY_PATROL__().find((p) => p.id === beat.enemyId)?.position ?? beat.position;
+  const fire = () => { const q = live(); D.aimAt(q[0], q[1] + 1.0, q[2]); D.useActiveWeapon(); D.step(); };
   const before = window.__ENCOUNTER__().encounters.map((e) => e.completed);
   fire();
   window.__ENEMY_DO__.step();

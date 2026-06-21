@@ -11,7 +11,7 @@ import { createCamera, resizeCamera } from "./core/camera.js";
 import { createLights } from "./core/lights.js";
 import { Input } from "./core/input.js";
 
-import { findGoodSpawn, getHeight, getWaterLevel, getActiveTerrainProfile } from "./terrain/terrainSampling.js";
+import { findGoodSpawn, getHeight, getWaterLevel, getSlope, getActiveTerrainProfile } from "./terrain/terrainSampling.js";
 
 import { ColliderSystem } from "./physics/ColliderSystem.js";
 
@@ -477,6 +477,10 @@ if (import.meta.env.DEV) {
   // Dev/test-only: enemy snapshot (logical state/health/defeated per actor). The enemy IS a combat
   // target, so __COMBAT_DO__ already teleports/aims/fires at it; this exposes the reaction. For test:enemy-proof.
   window.__ENEMY__ = () => enemyRuntime?.snapshot() ?? null;
+  // Enemy-1 dev/test-only: the LIVE transform + mode of every patrolling sentinel (separate from the
+  // deterministic snapshot, which stays logical + ephemeral-filtered). The proof samples this over frames
+  // to prove real movement, zone-boundedness, terrain-safety, and the defeat freeze.
+  window.__ENEMY_PATROL__ = () => enemyRuntime?.patrolView() ?? null;
   // Dev/test-only: tick the enemy runtime + flush the defeat-persist exactly as the main loop does.
   // The headless rAF is throttled (~5fps), so the proof drives this synchronously after firing to
   // advance hit-react/defeated state + persist a defeat deterministically (input-equivalent, no state mutation).
@@ -487,6 +491,11 @@ if (import.meta.env.DEV) {
       return true;
     },
   };
+  // Dev/test-only: force the scene world-matrix update the render loop normally does each frame. A proof
+  // that drives combat + enemy steps SYNCHRONOUSLY (no render between them) must call this so a moved
+  // patroller's child collision meshes have a current matrixWorld before a hit-test (combat's per-target
+  // updateWorldMatrix updates the group, not its children). A no-op for production (the renderer does this).
+  window.__SCENE_SYNC__ = () => (scene.updateMatrixWorld(true), true);
   // Dev/test-only: encounter snapshot (beat identity + completion + the projected enemy's id/state). The
   // projected enemy IS a combat target, so __COMBAT_DO__ teleports/aims/fires at it (via enemyId). For test:encounter-editor-proof.
   window.__ENCOUNTER__ = () => encounterRuntime?.snapshot() ?? null;
@@ -870,7 +879,16 @@ function loadEnemies(document) {
 // AFTER loadEnemies() (which clears + respawns the doc-authored enemy set) so the ephemerals join a fresh
 // set. Grounds onto the terrain single source. Idempotent (load() clears prior rings + ephemerals).
 function loadEncounters(document) {
-  encounterRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z) });
+  // Enemy-1: the terrain-authority bundle the encounter passes to resolvePatrol — grounds + bounds +
+  // safety-checks each authored patrol point (mirrors the wildlife habitat gate). Only `height` is
+  // required; the rest let a patrol clear water, stay below the snowline, and keep to walkable ground.
+  const terrain = {
+    height: (x, z) => getHeight(x, z),
+    waterLevel: (x, z) => getWaterLevel(x, z),
+    slope: (x, z) => getSlope(x, z),
+    snowline: (x, z) => getActiveTerrainProfile().snowlineAt(x, z),
+  };
+  encounterRuntime?.load({ scene, document, groundHeight: (x, z) => getHeight(x, z), terrain });
   encounterPresentation?.load({ encounterRuntime }); // encounter-1: build the gate-light beacons after the runtime projects the beats
 }
 

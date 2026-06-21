@@ -147,7 +147,10 @@ const run = await withBrowserProof(
           const wid = C.place({ x: beat.position[0] + 3, z: beat.position[2] + 1 });
           C.equip(wid, 'rightHand');
           D.teleportNearTarget(beat.enemyId, 6);
-          const aimFire = () => { D.aimAt(beat.position[0], beat.position[1] + 1.0, beat.position[2]); D.useActiveWeapon(); D.step(); };
+          // Enemy-1: the crossing sentinel patrols, so aim at its LIVE position (a patroller appears in the
+          // patrol view); fall back to the authored centre for a static beat. Correct for both.
+          const live = () => window.__ENEMY_PATROL__().find((p) => p.id === beat.enemyId)?.position ?? beat.position;
+          const aimFire = () => { const q = live(); D.aimAt(q[0], q[1] + 1.0, q[2]); D.useActiveWeapon(); D.step(); };
           const healthBefore = window.__ENCOUNTER__().encounters[0].enemyState; // state string; health via enemy debug below
           const before = window.__ENCOUNTER__().encounters[0].completed;
           aimFire();

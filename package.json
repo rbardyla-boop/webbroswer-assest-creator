@@ -75,6 +75,8 @@
     "test:combat-proof": "node scripts/browser-combat-proof.mjs",
     "test:enemy": "node scripts/enemy-regression.mjs",
     "test:enemy-proof": "node scripts/browser-enemy-proof.mjs",
+    "test:enemy-patrol": "node scripts/enemy-patrol-regression.mjs",
+    "test:enemy-patrol-proof": "node scripts/browser-enemy-patrol-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",

@@ -269,8 +269,9 @@ function inputStub() {
 // --- 8. static scans: determinism + isolation (enemy imports no combat/arsenal/objective) ------
 {
   const dir = new URL("../src/world/enemies/", import.meta.url);
-  const files = ["EnemyTypes.js", "EnemyValidation.js", "EnemyTargetAdapter.js", "EnemyFeedback.js", "EnemyRuntime.js"];
-  const allowed = (p) => p === "three" || /^\.\/Enemy[A-Za-z]+\.js$/.test(p);
+  const files = ["EnemyTypes.js", "EnemyValidation.js", "EnemyTargetAdapter.js", "EnemyFeedback.js", "EnemyRuntime.js", "PatrolTypes.js", "PatrolMotion.js"];
+  // Enemy-1: the pure Patrol* value/motion modules are enemy-internal (same isolation bar as Enemy*).
+  const allowed = (p) => p === "three" || /^\.\/(Enemy|Patrol)[A-Za-z]+\.js$/.test(p);
   const importRe = /(?:from\s+["']([^"']+)["'])|(?:import\s+["']([^"']+)["'])|(?:import\s*\(\s*["']([^"']+)["']\s*\))/g;
   const extractImports = (src) => [...src.matchAll(importRe)].map((m) => m[1] || m[2] || m[3]);
   for (const f of files) {

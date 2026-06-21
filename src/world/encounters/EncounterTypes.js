@@ -14,6 +14,7 @@
 // ONLY new field; it changes no combat/runtime behaviour (presentation text only).
 
 import { ENEMY_TYPES } from "../enemies/EnemyTypes.js";
+import { normalizePatrol } from "../enemies/PatrolTypes.js";
 
 export const ENCOUNTER_TYPE = "combat-beat.v0"; // the single Encounter-0 beat type
 export const ENCOUNTER_TYPES = Object.freeze([ENCOUNTER_TYPE]); // allow-list (one kind)
@@ -79,7 +80,7 @@ export function sanitizeLabel(value) {
 /**
  * Normalize one untrusted encounter descriptor, or null if it can't yield a valid encounter.
  * Whitelists exactly { type, id, position, radius, enemyType, enemyCount, completed, persistCompletion,
- * label }; unknown keys are dropped.
+ * label, patrol }; unknown keys are dropped.
  * @param {unknown} item
  */
 export function normalizeEncounterDescriptor(item) {
@@ -104,5 +105,9 @@ export function normalizeEncounterDescriptor(item) {
     // Content-1: the optional banner location label (presentation only). ALWAYS emit the key (a string
     // or null) so the absence round-trips stably; the banner falls back to a neutral noun when null.
     label: sanitizeLabel(item.label),
+    // Enemy-1: the optional bounded patrol the beat's sentinel walks (structural validation only — the
+    // terrain-safe resolve happens at spawn). ALWAYS emit the key (the normalized object or null) so the
+    // absence round-trips stably; null leaves the sentinel stationary (Enemy-0 byte-stable).
+    patrol: normalizePatrol(item.patrol),
   };
 }

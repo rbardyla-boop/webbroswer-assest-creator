@@ -65,11 +65,12 @@ function inputStub() {
   assert.ok(clean, "a valid beat descriptor normalizes");
   assert.deepEqual(
     Object.keys(clean).sort(),
-    // Content-1 added `label` (an optional presentation noun) to the whitelist.
-    ["completed", "enemyCount", "enemyType", "id", "label", "persistCompletion", "position", "radius", "type"],
+    // Content-1 added `label` (an optional presentation noun); Enemy-1 added `patrol` (object|null).
+    ["completed", "enemyCount", "enemyType", "id", "label", "patrol", "persistCompletion", "position", "radius", "type"],
     "only whitelisted keys survive"
   );
   assert.equal(clean.waves, undefined, "an unknown key is dropped");
+  assert.equal(clean.patrol, null, "a beat without a patrol emits patrol:null (always-emit key, stationary)");
   assert.equal(clean.completed, false, "completed:false survives (always emitted)");
   assert.equal(clean.persistCompletion, true, "persistCompletion:true survives");
   assert.equal(clean.label, null, "absent label → null (always emitted; banner falls back to a neutral noun)");
@@ -240,7 +241,10 @@ function inputStub() {
     p === "three" ||
     /^\.\/Encounter[A-Za-z]+\.js$/.test(p) ||
     p === "../enemies/EnemyTypes.js" ||
-    p === "../enemies/EnemyValidation.js";
+    p === "../enemies/EnemyValidation.js" ||
+    // Enemy-1: PatrolTypes is a PURE enemy value/validation module (normalize + terrain-safe resolve),
+    // the same kind of cross-layer value import as EnemyTypes — never the THREE-bound enemy runtime.
+    p === "../enemies/PatrolTypes.js";
   const importRe = /(?:from\s+["']([^"']+)["'])|(?:import\s+["']([^"']+)["'])|(?:import\s*\(\s*["']([^"']+)["']\s*\))/g;
   const extractImports = (src) => [...src.matchAll(importRe)].map((m) => m[1] || m[2] || m[3]);
   for (const f of files) {

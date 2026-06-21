@@ -148,6 +148,19 @@ benchmark's draws/triangles/objects are **unchanged** (draws ~121, tris ~501,790
 Performance Contract needed **no re-lock**. The layer is dormant on any slice without authored encounters or
 sign interactions (frozen-cache / first-playable stay byte-stable). The LOD finding (B — defer) is unaffected.
 
+## Enemy-1 — bounded sentinel patrol (ADR-056)
+
+Enemy-1 gave the benchmark's **crossing** sentinel a tiny authored patrol: it walks a 2-point line across
+the corridor (perp ±3 m, inside the radius-8 zone, on the same walkable/dry ground the route uses) at
+0.8 m/s with a 1 s dwell, `alert:"halt"` (it stops + faces the player when they enter the zone). The
+**cache** sentinel stays **stationary**, so the slice now proves moving + static sentinels coexist and
+reload-correctly in one scene. Movement is a **motion overlay** on the Enemy-0 combat target (the combat
+FSM is byte-identical; CombatRuntime is untouched) — terrain-safe (rejects any out-of-radius / water /
+snow / steep point → the sentinel stays stationary), provably **bounded** to the encounter radius,
+deterministic, and frozen permanently on defeat. It is **structurally free**: it adds **no scene geometry**,
+so the benchmark's draws/triangles/objects are **unchanged** (draws 121, tris ~501,790, objs 19) and the
+Performance Contract needed **no re-lock**. The LOD finding (B — defer) is unaffected.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -160,3 +173,6 @@ sign interactions (frozen-cache / first-playable stay byte-stable). The LOD find
 - `test:performance-contract(-proof)` — the `visual-benchmark` scene is a gated benchmark scene (6th scene).
 - `test:audio-feedback(-proof)` — the slice sensory layer (Audio/Feedback-1): differentiated combat /
   discovery / reward / cache cues + a visual toast, one-shot + reload-safe, dormant off-benchmark, 0 errors.
+- `test:enemy-patrol(-proof)` — the bounded sentinel patrol (Enemy-1): the crossing sentinel moves in-zone +
+  terrain-safe, halt-telegraphs on approach, is struck on its live displaced mesh, freezes on defeat, and
+  reload-persists while the cache sentinel stays static; benchmark counts unchanged, 0 errors.
