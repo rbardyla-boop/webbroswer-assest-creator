@@ -481,6 +481,9 @@ if (import.meta.env.DEV) {
   // deterministic snapshot, which stays logical + ephemeral-filtered). The proof samples this over frames
   // to prove real movement, zone-boundedness, terrain-safety, and the defeat freeze.
   window.__ENEMY_PATROL__ = () => enemyRuntime?.patrolView() ?? null;
+  // Enemy-2 dev/test-only: the LIVE transform + kind/mode of EVERY moving actor (patrol AND hover). The
+  // archetype proof samples this to prove the frost_wisp drifts, stays bounded + finite, and freezes on defeat.
+  window.__ENEMY_LIVE__ = () => enemyRuntime?.liveView() ?? null;
   // Dev/test-only: tick the enemy runtime + flush the defeat-persist exactly as the main loop does.
   // The headless rAF is throttled (~5fps), so the proof drives this synchronously after firing to
   // advance hit-react/defeated state + persist a defeat deterministically (input-equivalent, no state mutation).

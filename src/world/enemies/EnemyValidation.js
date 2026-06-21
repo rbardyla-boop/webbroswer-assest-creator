@@ -14,6 +14,7 @@ import {
   isFiniteNumber,
   finiteVec3,
   clampMaxHealth,
+  defaultMaxHealthFor,
 } from "./EnemyTypes.js";
 
 function sanitizeId(value, fallback) {
@@ -37,7 +38,9 @@ export function normalizeEnemyDescriptor(item) {
     type: item.type,
     id: sanitizeId(item.id, item.type),
     position,
-    maxHealth: clampMaxHealth(item.maxHealth),
+    // Default an absent/non-finite health to THIS archetype's value (sentinel 3 / wisp 2), not a
+    // single global constant — so an authored wisp is lighter regardless of spawn path.
+    maxHealth: clampMaxHealth(item.maxHealth, defaultMaxHealthFor(item.type)),
     // Boolean — ALWAYS emit the key so `false` survives save→load (read back on reload to restore
     // the defeated state). Never `item.defeated ?? ...` / conditional emission.
     defeated: item.defeated === true,

@@ -4,15 +4,18 @@
 
 import { buildVerticalSliceV1, VERTICAL_SLICE_ID } from "./verticalSliceV1.js";
 import { buildVisualBenchmarkV1, VISUAL_BENCHMARK_ID } from "./visualBenchmarkV1.js";
+import { buildEnemyArchetypeLab, ENEMY_ARCHETYPE_LAB_ID } from "./enemyArchetypeLab.js";
 
 const SAMPLE_BUILDERS = {
   [VERTICAL_SLICE_ID]: buildVerticalSliceV1,
   [VISUAL_BENCHMARK_ID]: buildVisualBenchmarkV1,
+  [ENEMY_ARCHETYPE_LAB_ID]: buildEnemyArchetypeLab,
 };
 
 const SAMPLE_LABELS = {
   [VERTICAL_SLICE_ID]: "Vertical Slice v1",
   [VISUAL_BENCHMARK_ID]: "Visual Benchmark 1",
+  [ENEMY_ARCHETYPE_LAB_ID]: "Enemy Archetype Lab",
 };
 
 export function getSampleWorld(id) {

@@ -22,51 +22,51 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-21 (Enemy-1 accepted; tag `world-builder-enemy-1-patrol`).**
-- **67 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-21 (Enemy-2 accepted; tag `world-builder-enemy-2-archetypes`).**
+- **68 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-1 — Bounded Sentinel Patrol**
-  (ADR-056): the smallest enemy MOVEMENT seam — a `glacial_sentinel` walks a tiny AUTHORED 2–4-point line/loop INSIDE its
-  encounter zone, terrain-safe, still a live combat target, still encounter-owned, defeat stops it permanently. NOT AI: no
-  chase, attacks, player damage, pathfinding, navmesh, flocking, waves, director, loot, or animation system.
-- **Movement is a MOTION OVERLAY, not a 4th FSM state.** The combat FSM `ENEMY_STATE = {idle, hit-react, defeated}` stays
-  byte-identical (test:enemy/test:combat green by construction); patrol is a motion layer keyed off `actor.patrol` in
-  `EnemyRuntime._animate` (a patroller routes to `_patrol`; a non-patroller takes the UNCHANGED stationary path). hit-react
-  freezes travel (recoil/turn-to-face still play); defeat freezes movement permanently. CombatRuntime is byte-UNTOUCHED —
-  combat already reads the live world position every strike, so a moving enemy is hittable for free.
-- **Ownership held.** EncounterRuntime owns the descriptor + zone (centre/radius) + completion → it RESOLVES the authored
-  patrol (radius-bound + terrain-safe via the wildlife `habitatOK` authority: REJECTS the whole patrol → stationary on any
-  out-of-radius / water / snow / steep point) and threads it onto the ephemeral enemy; EnemyRuntime owns the per-frame motion
-  state. Two new PURE modules: `PatrolTypes` (`normalizePatrol` structural boundary + `resolvePatrol` terrain gate) and
-  `PatrolMotion` (`advancePatrol` deterministic; every position is a convex blend of two in-zone points ⇒ provably BOUNDED to
-  the radius). The encounter `patrol` key is whitelisted + always-emitted (object|null); the AUTHORED patrol is in `snapshot()`
-  (the live transform is NOT — determinism rule). `alert` has THREE authored modes — `halt`/`track`/`none` (never chase).
-- **Data-driven; benchmark proves coexistence.** The crossing sentinel authors a 2-point `alert:"halt"` patrol while the cache
-  sentinel stays STATIONARY — moving + static in one scene. No scene geometry → benchmark draws 121 / tris 501,790 / objs 19
-  UNCHANGED → Performance Contract unaffected (no re-lock). frozen-cache / first-playable have no encounters → byte-stable.
-- **Enemy-1 gates GREEN**: `test:enemy-patrol` (6 Node: normalizePatrol whitelist/2–4/clamps/alert-allow-list/round-trip;
-  resolvePatrol water/snow/steep/out-of-radius each reject NON-VACUOUSLY + grounds Y + auto-degrades; advancePatrol
-  deterministic + bounded + dwell + ping-pong≠loop + NaN-safe; encounter `patrol` round-trips + ZERO new warnings on a
-  patrol-less beat; benchmark crossing patrols while cache stays static; pure-module scans) + `test:enemy-patrol-proof`
-  (SwiftShader, ports 5255/9390: sentinel MOVES 4.48 m, stays in-radius + terrain-safe, mode never `alert` while the player is
-  away, exactly ONE patroller; approach → `halt` telegraph; a strike's CONTACT POINT lands ≈3.4 m off the authored centre —
-  combat resolved against the LIVE displaced mesh; defeat FREEZES movement; reload persists completion with the cache beat
-  intact; 0 console errors). Full sweep — frozen-cache / first-playable / content-combat-beats / encounter-editor /
-  encounter-polish / visual-benchmark / content-slice-expansion / audio-feedback / performance-contract proofs,
-  enemy/combat/world, `build`, `qa` — all green; shipped slices byte-stable. Fresh-context adversarial review (4 dims:
-  FSM/overlay · boundedness/terrain-safety · persistence/byte-stability · proof-integrity + per-finding verify): three dims
-  ZERO findings; one MEDIUM proof-honesty (a stale header claim) fixed with a STRONGER non-tautological contact-off-centre
-  assertion + a DEV-only `__SCENE_SYNC__` hook (the synchronous proof runs no render between steps, so a moved patroller's
-  child collision meshes needed the matrix refresh the render loop normally does; combat stays byte-untouched). Re-audited clean.
-- **Prior stages:** Audio/Feedback-1 (ADR-055, `world-builder-audio-feedback-1`) — slice sensory polish (differentiated combat
-  hit/defeat + discovery/reward/cache-payoff cues + a milestone toast, reusing the existing `ProceduralAudio` engine), no
-  audio-engine/AI; the layer is DORMANT off any slice with authored encounters/signs (frozen-cache / first-playable byte-stable).
-  Content-2 (ADR-054) — authored slice expansion (off-route frozen shrine + optional exotic reward). Content-1 (ADR-053) —
-  second authored combat beat. Encounter-1 (ADR-052) — combat-beat polish (telegraph + gate-light + phase/banner).
-- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-1 opened the movement seam narrowly (the sentinel now patrols,
-  telegraphs on approach, and is hittable while displaced). The evidence-gated fork: more enemy behaviour (Enemy-2: a 2nd type /
-  wider patrol authoring / light proximity), more authored content+audio (if the slice feels thin), or Nanite-like shader/LOD
-  feasibility (only if visuals/perf become the constraint). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-2 — Second Enemy Archetype**
+  (ADR-057): a SECOND readable enemy type — `frost_wisp`, a small floating glacial spirit — beside `glacial_sentinel`. It is
+  authored in an encounter, registered as a combat target, hit by the EXISTING StrikeEvent path, defeated, and persisted,
+  differing through health (2 vs 3), scale, silhouette, movement (bounded hover vs grounded), and feedback (brighter/flicker/dim
+  vs flash/slump). NOT AI: no attacks, player damage, projectiles, chase, navmesh, waves, loot, factions, director, or animation.
+- **An archetype REGISTRY in `EnemyTypes`; hover is a motion overlay like patrol.** `ENEMY_ARCHETYPES` (pure, frozen, keyed by
+  type) is the single source of per-type DATA `{maxHealth, movement, silhouette, feedback, hover}` — THREE never appears there;
+  `EnemyRuntime` builds the mesh/material and `EnemyFeedback` reads the feedback spec off a handle. The SENTINEL archetype's
+  feedback equals the legacy `EnemyFeedback` constants EXACTLY (a regression pins it) → the original enemy is byte-identical. The
+  wisp hovers via a deterministic bounded drift keyed off `actor.hover` in `_animate` (the same overlay pattern as `actor.patrol`):
+  the planar offset rides a sub-radius ellipse ⇒ provably BOUNDED below the hover radius (+ a zone clamp); hit-react dips Y + faces
+  the player; defeat freezes movement permanently and drops the wisp out of the air with a dim emissive.
+- **Ownership held.** `EnemyTypes` owns the archetype descriptors; `EnemyRuntime` owns the actor lifecycle (mesh dispatch + hover
+  motion state + the position write); `CombatRuntime` is UNCHANGED (the same `registerTarget`/raycast/`registerHit` path drives
+  both — a regression + the proof assert ONE `weaponId` strikes both, no forked targeting); `EncounterRuntime` only NAMES the type
+  and projects `defaultMaxHealthFor(enemyType)` (the archetype's own default — sentinel 3 / wisp 2, inventing no number).
+- **Demonstrated in a DEDICATED scene; benchmark byte-stable.** The benchmark's Node gates pin a two-sentinel composition, so the
+  wisp gets a new sample world `enemy-archetype-lab` (one sentinel beat + one wisp beat, loadable via `?world=enemy-archetype-lab`)
+  — the benchmark + frozen slices are untouched. No `WORLD_DOCUMENT_VERSION` bump.
+- **Enemy-2 gates GREEN**: `test:enemy-archetypes` (6 Node: the registry exposes both types + resolves descriptors + defaults
+  health per type; the SENTINEL feedback equals the legacy constants EXACTLY while the wisp's deliberately differs;
+  `normalizeEnemyDescriptor` accepts a wisp + defaults it lighter + round-trips defeat for both; an encounter may name the wisp
+  while an unknown enemyType is still rejected; distinct movement profiles with a bounded finite hover spec; the lab is
+  registered + valid with zero new warnings + stages both archetypes as two independent beats) + `test:enemy-archetypes-proof`
+  (SwiftShader on `enemy-archetype-lab`, ports 5256/9391: both beats project an enemy + register as combat targets, the wisp is
+  the lone HOVER actor; the wisp drifts 2.74 m, every sample finite + within the radius + a tight hover bound + FLOATS above
+  ground; ONE equipped weapon defeats the sentinel AND hits the wisp — the SAME `weaponId`; defeating the sentinel leaves the wisp
+  ALIVE + its beat incomplete; reload persists the sentinel's defeat while the wisp respawns idle — independence across reload;
+  then the wisp is defeated, movement freezes permanently, a final reload shows BOTH beats completed projecting no enemy; the lab
+  classifies within the contract — yellow grass pressure, not red; 0 console errors). Full sweep — enemy/combat/encounter-editor/
+  enemy-patrol/content-combat-beats/encounter-polish/visual-benchmark/content-slice-expansion/audio-feedback/performance-contract/
+  world (Node), build, qa, and the enemy/enemy-patrol/content-combat-beats/encounter-polish/visual-benchmark/performance-contract/
+  audio-feedback/frozen-cache/first-playable browser proofs — all green; the sentinel + benchmark + frozen slices are byte-stable.
+- **Prior stages:** Enemy-1 (ADR-056, `world-builder-enemy-1-patrol`) — bounded sentinel patrol (a `glacial_sentinel` walks an
+  authored 2–4-point line/loop inside its encounter zone; terrain-safe via the wildlife `habitatOK` authority; `halt`/`track`/`none`
+  alert; defeat freezes; motion overlay, NOT AI), benchmark byte-stable; this is the overlay pattern Enemy-2's hover reuses.
+  Audio/Feedback-1 (ADR-055) — slice sensory polish (combat/discovery/reward cues + a milestone toast), no audio-engine/AI.
+  Content-2 (ADR-054) — off-route frozen shrine + optional exotic reward. Content-1 (ADR-053) — second authored combat beat.
+- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-2 proved the enemy system generalizes to a second archetype without
+  touching Combat-0 or patrol logic. The evidence-gated fork: more enemy variety/behaviour (Enemy-3: a 3rd type / wider patrol
+  authoring / light proximity), more authored content+audio (if the slice feels thin), or Nanite-like shader/LOD feasibility (only
+  if visuals/perf become the constraint). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -145,7 +145,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the gate):**
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
-Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → **(await operator pick)**.
+Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1900,7 +1901,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 15. Content-2 — authored slice expansion (off-route frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system  ← SHIPPED (ADR-054)
 16. Audio/Feedback-1 — slice sensory polish (differentiated combat hit/defeat + discovery/reward/cache-payoff cues + a visual milestone toast, reusing the existing ProceduralAudio engine), no audio-engine/AI  ← SHIPPED (ADR-055)
 17. Enemy-1 — bounded sentinel patrol (a glacial_sentinel walks an authored 2–4-point line/loop inside its encounter zone; terrain-safe, combat-target-compatible, halt/track/none alert, defeat freezes; motion overlay, NOT AI), no chase/attacks/navmesh/waves  ← SHIPPED (ADR-056)
-18. (await operator pick) — more enemy behaviour (Enemy-2: a 2nd type / wider patrol authoring / light proximity) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+18. Enemy-2 — second enemy archetype (frost_wisp: a floating glacial spirit beside glacial_sentinel; archetype registry in EnemyTypes, bounded hover overlay, lighter health, distinct silhouette/feedback; same StrikeEvent path, dedicated enemy-archetype-lab scene, benchmark byte-stable), no attacks/chase/projectiles/waves/AI  ← SHIPPED (ADR-057)
+19. (await operator pick) — more enemy variety/behaviour (Enemy-3: a 3rd type / wider patrol authoring / light proximity) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3148,3 +3150,79 @@ made a centre-aimed strike a latent flake.
 **Non-goals (held).** No attacks, player health, chase, pathfinding, navmesh, flocking, waves, director, factions, loot,
 animation system, or procedural encounter generation. No new renderer/shader/LOD work. No mutation of the frozen-cache /
 first-playable slices or the relic objective. No `WORLD_DOCUMENT_VERSION` bump. CombatRuntime byte-untouched.
+
+## ADR-057 — Enemy-2: Second Enemy Archetype (`frost_wisp`, prove the system generalizes)
+
+**Status.** Accepted. Tag `world-builder-enemy-2-archetypes` (local only). Stage 68.
+
+**Context.** Enemy-1 opened the movement seam and proved static + moving sentinels coexist. Before expanding patrol authoring,
+the operator chose to prove the enemy system supports a SECOND readable archetype without rewriting Combat-0, EncounterRuntime
+targeting, or patrol logic: `frost_wisp`, a small floating glacial spirit that differs from `glacial_sentinel` through health,
+scale, silhouette, movement profile, and feedback. It is authored in an encounter, registered as a combat target, hit by the
+EXISTING StrikeEvent path, defeated, and persisted. NOT an AI step: no attacks, player damage, projectiles, chase, navmesh,
+waves, loot, factions, director, new combat rules, or animation system.
+
+**Decisive findings (recon).** (1) `CombatRuntime` / `EnemyTargetAdapter` are already archetype-agnostic — the adapter
+duck-types any `Object3D` and combat reads its live matrix per strike, so a wisp is a combat target for free (the "do not fork
+combat targeting" constraint holds with ZERO combat changes). (2) The enemy system hardcoded ONE archetype end to end:
+`EnemyTypes` exported a single type + one `DEFAULT_MAX_HEALTH`; `EnemyRuntime` always built the sentinel mesh; `EnemyFeedback`
+used fixed module constants; `EncounterRuntime` projected a hardcoded `DEFAULT_MAX_HEALTH`. (3) The benchmark CANNOT host the
+wisp — `content-combat-beats` / `visual-benchmark` Node gates hard-assert a TWO-beat composition where every beat is
+`glacial_sentinel`; a third wisp beat there breaks shipped gates. (4) The combat FSM is frozen + test-pinned, so (as in Enemy-1)
+movement must be a motion OVERLAY, not a state.
+
+**Decision — an archetype REGISTRY in `EnemyTypes` + hover as a motion overlay like patrol.** `ENEMY_ARCHETYPES` (pure, frozen,
+keyed by type) is the single source of per-type DATA: `{maxHealth, movement(ground|hover), silhouette, feedback{...}, hover{...}}`.
+THREE never appears here — feedback colours are hex numbers, sizes are scalars; `EnemyRuntime` builds the mesh + material and
+`EnemyFeedback` reads the feedback spec off a handle. The SENTINEL archetype's feedback values are EXACTLY the legacy
+`EnemyFeedback` constants (a regression pins this), so the original enemy stays byte-identical. The wisp hovers via a deterministic
+bounded drift keyed off `actor.hover` in `EnemyRuntime._animate` — the same overlay pattern as `actor.patrol`; the planar offset
+rides a sub-radius ellipse (semi-axes 0.7·radius) so it is provably BOUNDED below the hover radius (and a zone clamp makes the
+encounter bound airtight). hit-react dips Y + faces the player; defeat freezes movement permanently (the `_animate` early return)
+and drops the wisp out of the air with a dim "extinguished" emissive.
+
+**Ownership (hard constraints, honored).** `EnemyTypes` owns the archetype descriptors. `EnemyRuntime` owns the actor lifecycle
+(mesh dispatch + the hover motion state + the position write). `CombatRuntime` is UNCHANGED — the same `registerTarget` / raycast
+/ `registerHit` path drives both archetypes (a regression + the proof assert ONE `weaponId` strikes both). `EncounterRuntime`
+only NAMES the type — it now projects `maxHealth: defaultMaxHealthFor(desc.enemyType)` (the archetype's own default; sentinel 3 /
+wisp 2), inventing no number. `EncounterTypes` already accepted any `enemyType` in `ENEMY_TYPES`, so naming the wisp validates.
+
+**Build (thin, archetype-keyed).** `EnemyTypes` gains `SENTINEL_TYPE`/`WISP_TYPE`, `ENEMY_TYPES=[sentinel,wisp]`,
+`MOVEMENT_GROUND`/`MOVEMENT_HOVER`, `ENEMY_ARCHETYPES`, `archetypeFor`, `defaultMaxHealthFor`; `clampMaxHealth` gains an
+archetype-default fallback (existing callers unchanged) so a doc-authored wisp is lighter regardless of spawn path.
+`EnemyFeedback.sync(handle, state, phase)` reads `handle.feedback` (defaults reproduce the sentinel exactly) and adds an idle
+flicker (amp 0 for the sentinel → byte-stable). `EnemyRuntime` dispatches the mesh by `archetype.silhouette` (`buildWispMesh` =
+an emissive octahedron core + three shard slivers, one shared material), arms the hover overlay, accumulates a single
+`animPhase` for the flicker, adds `_hover` + `liveView()` (the patrol view stays byte-stable for the Enemy-1 hook). A NEW
+dedicated sample world `enemy-archetype-lab` stages one sentinel beat + one wisp beat (registered in `samples/index.js`,
+loadable via `?world=enemy-archetype-lab`); the benchmark is left BYTE-STABLE. `main.js` adds an additive `__ENEMY_LIVE__` DEV hook.
+
+**Gates.** `test:enemy-archetypes` (6 Node: the registry exposes both types + resolves descriptors + defaults health per type;
+the SENTINEL feedback equals the legacy constants EXACTLY — byte-stability guard — while the wisp's deliberately differs;
+`normalizeEnemyDescriptor` accepts a wisp + defaults it lighter + round-trips defeat for both; an encounter may name the wisp
+while an unknown enemyType is still rejected; the movement profiles are distinct with a bounded finite hover spec; the lab scene
+is registered, valid with zero new warnings, and stages both archetypes as two independent beats) + `test:enemy-archetypes-proof`
+(SwiftShader on `enemy-archetype-lab`, ports 5256/9391: both beats project an enemy + register as combat targets, the wisp is the
+lone HOVER actor; the wisp drifts 2.74 m and every sample is finite + within the radius + within a tight hover bound + FLOATS
+above ground; ONE equipped weapon defeats the sentinel AND hits the wisp — the SAME `weaponId`, the wisp's contact resolving to
+the wisp's own id; defeating the sentinel leaves the wisp ALIVE + its beat incomplete; reload persists the sentinel's defeat
+while the wisp respawns idle — independence across reload; the wisp is then defeated, its movement freezes permanently, and a
+final reload shows BOTH beats completed re-projecting no enemy; the lab classifies within the contract — yellow grass pressure,
+not red; 0 console errors). Full sweep — enemy/combat/encounter-editor/enemy-patrol/content-combat-beats/encounter-polish/
+visual-benchmark/content-slice-expansion/audio-feedback/performance-contract/world (Node), build, qa:skills 32/0/0, qa:layout
+43/0/0, and the enemy/enemy-patrol/content-combat-beats/encounter-polish/visual-benchmark/performance-contract/audio-feedback/
+frozen-cache/first-playable browser proofs — all green; the sentinel + benchmark + frozen slices are byte-stable.
+
+**Operator decisions.** Recommended type `frost_wisp` adopted (small floating shard-light). Health 2 (lighter than the
+sentinel's 3). Movement = a bounded hover (NOT authored per-encounter — patrol authoring is deliberately NOT expanded this stage).
+
+**Non-goals (held).** No attacks, player health, enemy projectiles, chase, group AI, waves, loot, factions, director, new combat
+rules, animation system, shader/LOD experiments, or Skybreak import. No forked combat targeting (the wisp is a `CombatTarget`
+adapter like the sentinel). No mutation of the benchmark / frozen-cache / first-playable slices. No `WORLD_DOCUMENT_VERSION`
+bump. CombatRuntime byte-untouched.
+
+---
+
+## Note — External blueprint rejected (defensive breadcrumb, not a stage)
+
+- External Three.js/AI/MMO/decentralized-state blueprint evaluated and rejected in `docs/BLUEPRINT_RECONCILIATION.md`: no source changes warranted; overlapping grass/terrain/player/debug systems are already superior in-repo, and networking/factions/ZK/on-chain state remain forbidden absent a charter-level ADR.

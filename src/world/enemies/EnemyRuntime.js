@@ -8,19 +8,21 @@
 // API — not its code. Imports only THREE + the enemy-internal modules.
 
 import * as THREE from "three";
-import { ENEMY_STATE, HIT_DAMAGE, HIT_REACT_TIME, createEnemyState } from "./EnemyTypes.js";
+import { ENEMY_STATE, HIT_DAMAGE, HIT_REACT_TIME, createEnemyState, archetypeFor, MOVEMENT_HOVER } from "./EnemyTypes.js";
 import { applyDamage, advanceState, isDefeated } from "./EnemyValidation.js";
 import { createPatrolMotion, advancePatrol } from "./PatrolMotion.js";
 import { EnemyTargetAdapter } from "./EnemyTargetAdapter.js";
 import { EnemyFeedback } from "./EnemyFeedback.js";
 
-const BODY_COLOR = 0x86b2d6; // glacial ice blue
-const BASE_EMISSIVE_INTENSITY = 0.25;
+const BODY_COLOR = 0x86b2d6; // glacial ice blue (sentinel)
+const WISP_COLOR = 0xbfe9ff; // pale shard-light (frost wisp)
+const BASE_EMISSIVE_INTENSITY = 0.25; // sentinel idle emissive (== sentinel archetype feedback.baseEmissive)
 const IDLE_BOB_AMP = 0.06; // metres the body bobs at rest (visual only)
 const IDLE_BOB_SPEED = 1.4;
 const HIT_RECOIL = 0.16; // metres the body dips on a fresh strike
 const DEFEAT_SINK = 0.55; // metres the body slumps when defeated
 const DEFEAT_TIP = 0.5; // radians the body tips over when defeated
+const WISP_DEFEAT_DROP = 0.15; // metres above ground a defeated wisp settles (it falls out of the air)
 
 export class EnemyRuntime {
   constructor({ scene = null, combatRuntime = null } = {}) {
@@ -58,12 +60,20 @@ export class EnemyRuntime {
     // Never add a NaN-posed mesh to the scene (the data path is validated, but ground sampling is not).
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
 
-    const group = buildSentinelMesh();
+    // Enemy-2: the archetype (sentinel | wisp) decides the silhouette + feedback + movement. Unknown
+    // types fall back to the sentinel (defense in depth — the validator already gates the allow-list).
+    const archetype = archetypeFor(desc.type);
+    const group = buildArchetypeMesh(archetype);
     group.position.set(x, y, z);
     group.userData.objectId = desc.id; // so combat _ownerId resolves to the registration key
     this.scene.add(group);
 
-    const handle = { materials: collectMaterials(group), baseEmissiveIntensity: BASE_EMISSIVE_INTENSITY, defeatedApplied: false };
+    const handle = {
+      materials: collectMaterials(group),
+      baseEmissiveIntensity: archetype.feedback.baseEmissive, // sentinel 0.25 (== legacy), wisp 0.9
+      feedback: archetype.feedback, // archetype-driven flash/defeat/flicker (EnemyFeedback reads this)
+      defeatedApplied: false,
+    };
     const state = createEnemyState({ health: desc.defeated ? 0 : desc.maxHealth, maxHealth: desc.maxHealth });
     const actor = {
       id: desc.id,
@@ -75,13 +85,25 @@ export class EnemyRuntime {
       home: { x, y, z },
       baseY: y,
       bobPhase: 0,
+      animPhase: 0, // monotonic anim clock (drives the wisp idle flicker; accumulated in update())
       hitFresh: false,
     };
-    // Enemy-1 (encounter-owned): if a resolved patrol rode in on the descriptor, arm the motion overlay
-    // and START the body on the route's first point (so frame 0 doesn't snap it from the centre). A null
-    // patrol leaves every field unset → the actor is a stationary Enemy-0 (byte-stable). Doc-authored
-    // enemies never reach here with a patrol (their validator whitelist drops it) — patrol is encounter-only.
-    if (desc.patrol && Array.isArray(desc.patrol.points) && desc.patrol.points.length >= 2) {
+    // Enemy-2: a hover archetype (the wisp) floats above its grounded spawn and drifts in a bounded
+    // volume — an archetype-intrinsic motion overlay (NOT authored per-encounter, so it ignores any
+    // patrol). The hover REST height sits `hover.height` above the ground; _hover keeps the body inside
+    // its zone (if threaded). A ground archetype takes the Enemy-1 patrol path below instead.
+    if (archetype.movement === MOVEMENT_HOVER && archetype.hover) {
+      actor.hover = archetype.hover;
+      actor.zone = desc.zone ?? null;
+      const restY = y + (Number.isFinite(archetype.hover.height) ? archetype.hover.height : 0);
+      actor._hoverRestY = restY;
+      if (Number.isFinite(restY)) group.position.y = restY; // float on spawn (frame 0 doesn't snap up)
+      actor.hoverMode = "hover";
+    } else if (desc.patrol && Array.isArray(desc.patrol.points) && desc.patrol.points.length >= 2) {
+      // Enemy-1 (encounter-owned): if a resolved patrol rode in on the descriptor, arm the motion overlay
+      // and START the body on the route's first point (so frame 0 doesn't snap it from the centre). A null
+      // patrol leaves every field unset → the actor is a stationary Enemy-0 (byte-stable). Doc-authored
+      // enemies never reach here with a patrol (their validator whitelist drops it) — patrol is encounter-only.
       actor.patrol = desc.patrol;
       actor.zone = desc.zone ?? null;
       actor.motion = createPatrolMotion();
@@ -150,7 +172,10 @@ export class EnemyRuntime {
     const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
     for (const actor of this.enemies.values()) {
       actor.state = advanceState(actor.state, step);
-      this.feedback.sync(actor.handle, actor.state);
+      // A single monotonic anim clock, accumulated BEFORE feedback so the wisp's idle flicker reads the
+      // current phase. The sentinel's flickerAmp is 0 → phase is ignored → emissive is byte-identical.
+      actor.animPhase = (Number.isFinite(actor.animPhase) ? actor.animPhase : 0) + step;
+      this.feedback.sync(actor.handle, actor.state, actor.animPhase);
       this._animate(actor, step, player);
       actor.hitFresh = false;
     }
@@ -160,7 +185,14 @@ export class EnemyRuntime {
   // idle bob, a recoil dip while hit-reacting, and a one-shot turn toward the player on a fresh hit.
   // Defeated actors hold the slump pose set on the defeat edge (no per-frame motion).
   _animate(actor, dt, player) {
-    if (isDefeated(actor.state)) return; // defeated → frozen; movement stops permanently (Enemy-1 too)
+    if (isDefeated(actor.state)) return; // defeated → frozen; movement stops permanently (all archetypes)
+
+    // Enemy-2 motion overlay: a hover archetype (the wisp) drifts in its bounded volume instead of
+    // idle-bobbing in place. Combat FSM untouched — hit-react/defeated still win inside _hover.
+    if (actor.hover) {
+      this._hover(actor, dt, player);
+      return;
+    }
 
     // Enemy-1 motion overlay: a patroller walks its authored route instead of idle-bobbing in place. The
     // combat FSM is untouched — hit-react/defeated still win inside _patrol (no patrol = the path below).
@@ -246,6 +278,53 @@ export class EnemyRuntime {
     actor.patrolMode = mode;
   }
 
+  // Enemy-2: advance one hover archetype (the wisp). Deterministic bounded drift around `home` driven by
+  // the monotonic anim clock — no RNG, no wall-clock. The planar offset rides a sub-radius ellipse (semi
+  // axes 0.7·radius), so |offset| ≤ 0.7·radius·√2 ≈ 0.99·radius < radius — provably BOUNDED to the hover
+  // envelope; a zone clamp (home == zone centre, drift ≪ radius) makes the encounter bound airtight too.
+  // hit-react dips Y + faces the player (the existing feedback wins); defeat is handled by _animate's
+  // early return (frozen forever). Every transform write is finite-guarded.
+  _hover(actor, dt, player) {
+    const g = actor.group;
+    const h = actor.hover;
+    const reacting = actor.state.state === ENEMY_STATE.HIT_REACT;
+    const phase = Number.isFinite(actor.animPhase) ? actor.animPhase : 0;
+
+    const a = h.radius * 0.7; // ellipse semi-axis (keeps the planar offset strictly under the radius)
+    const bob = Math.sin(phase * h.driftSpeed * 2.0) * h.bobAmp;
+    let x = actor.home.x + Math.cos(phase * h.driftSpeed) * a;
+    let z = actor.home.z + Math.sin(phase * h.driftSpeed * 1.3) * a;
+    // Recoil dip from the FROZEN rest height on a react (don't accumulate into the rest); else float + bob.
+    let y = reacting
+      ? actor._hoverRestY - HIT_RECOIL * (actor.state.reactTimer / HIT_REACT_TIME)
+      : actor._hoverRestY + bob;
+
+    // Defense in depth: never leave the encounter zone (home is the zone centre, so this never actually
+    // triggers — but it makes the "bounded to radius" guarantee hold for any future home/radius).
+    if (actor.zone) {
+      const ox = x - actor.zone.x;
+      const oz = z - actor.zone.z;
+      const d = Math.hypot(ox, oz);
+      const maxR = Math.max(0, actor.zone.radius - 0.5);
+      if (d > maxR && d > 1e-6) {
+        x = actor.zone.x + (ox / d) * maxR;
+        z = actor.zone.z + (oz / d) * maxR;
+      }
+    }
+
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) g.position.set(x, y, z);
+
+    if (reacting && player?.position) {
+      const yaw = Math.atan2(player.position.x - g.position.x, player.position.z - g.position.z);
+      if (Number.isFinite(yaw)) g.rotation.y = yaw; // telegraph: face the player (no approach)
+    } else {
+      const yaw = phase * 0.5; // gentle ambient spin (a drifting spirit-light)
+      if (Number.isFinite(yaw)) g.rotation.y = yaw;
+    }
+
+    actor.hoverMode = reacting ? "hit-react" : "hover";
+  }
+
   // DEV-only liveness reader (the proof reads it): the LIVE transform + mode of every patrolling actor.
   // Deliberately separate from snapshot() — snapshot stays the logical, deterministic view (and still
   // filters ephemerals), so this never pollutes it with an animated transform.
@@ -259,8 +338,30 @@ export class EnemyRuntime {
     return out;
   }
 
+  // Enemy-2 DEV-only liveness reader: the LIVE transform + kind/mode of EVERY moving actor (patrol AND
+  // hover). The archetype proof reads this to assert the wisp drifts, stays bounded + finite, and freezes
+  // on defeat. Separate from snapshot() for the same determinism reason as patrolView().
+  liveView() {
+    const out = [];
+    for (const a of this.enemies.values()) {
+      if (!a.patrol && !a.hover) continue;
+      const p = a.group.position;
+      out.push({
+        id: a.id,
+        type: a.type,
+        position: [p.x, p.y, p.z],
+        kind: a.hover ? "hover" : "patrol",
+        mode: a.hover ? a.hoverMode ?? "hover" : a.patrolMode ?? "patrol",
+        defeated: isDefeated(a.state),
+      });
+    }
+    return out;
+  }
+
   _applyDefeatPose(actor) {
-    const y = actor.baseY - DEFEAT_SINK;
+    // A defeated wisp falls OUT of the air to just above the ground (the archetype's dim emissive does the
+    // rest of the "extinguished" read); a grounded sentinel slumps DOWN into the ground (byte-identical).
+    const y = actor.hover ? actor.baseY + WISP_DEFEAT_DROP : actor.baseY - DEFEAT_SINK;
     if (Number.isFinite(y)) actor.group.position.y = y; // guard at the site, like every other transform write
     actor.group.rotation.z = DEFEAT_TIP; // a finite constant
   }
@@ -311,6 +412,12 @@ export class EnemyRuntime {
   }
 }
 
+// Build the mesh for an archetype's silhouette. Dispatches on the archetype's `silhouette` key; an
+// unknown silhouette falls back to the sentinel (matches archetypeFor's fallback).
+function buildArchetypeMesh(archetype) {
+  return archetype?.silhouette === "wisp" ? buildWispMesh(archetype) : buildSentinelMesh();
+}
+
 // A cheap, visible glacial-sentinel silhouette: a tapered body + a crystal head. Fresh geometry +
 // materials per enemy (so a per-enemy flash doesn't bleed across actors, and disposal is simple).
 function buildSentinelMesh() {
@@ -331,6 +438,37 @@ function sentinelMat() {
     emissiveIntensity: BASE_EMISSIVE_INTENSITY,
     roughness: 0.5,
     metalness: 0.1,
+  });
+}
+
+// A small floating frost-wisp silhouette: a glowing octahedron core ringed by three shard slivers. The
+// group origin floats at the hover REST height (EnemyRuntime sets group.position.y); the whole group
+// spins. ONE shared emissive material (so the hit "burst" reads uniformly and EnemyFeedback modulates a
+// single emissiveIntensity); tiny triangle count. Much smaller than the sentinel — the readable contrast.
+function buildWispMesh(archetype) {
+  const group = new THREE.Group();
+  group.name = "FrostWisp";
+  const mat = wispMat(archetype?.feedback?.baseEmissive ?? 0.9);
+  group.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.34), mat));
+  const shardGeo = new THREE.TetrahedronGeometry(0.16);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const shard = new THREE.Mesh(shardGeo, mat);
+    shard.position.set(Math.cos(a) * 0.42, Math.sin(a * 1.5) * 0.18, Math.sin(a) * 0.42);
+    group.add(shard);
+  }
+  return group;
+}
+
+function wispMat(baseEmissive) {
+  return new THREE.MeshStandardMaterial({
+    color: WISP_COLOR,
+    emissive: WISP_COLOR,
+    emissiveIntensity: Number.isFinite(baseEmissive) ? baseEmissive : 0.9,
+    roughness: 0.3,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.85,
   });
 }
 

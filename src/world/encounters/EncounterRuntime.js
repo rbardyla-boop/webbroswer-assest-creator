@@ -9,7 +9,7 @@
 // not its code (mirrors how EnemyRuntime injects combatRuntime). Imports only THREE + the pure enemy
 // value modules + encounter-internal modules.
 
-import { DEFAULT_MAX_HEALTH } from "../enemies/EnemyTypes.js";
+import { defaultMaxHealthFor } from "../enemies/EnemyTypes.js";
 import { resolvePatrol } from "../enemies/PatrolTypes.js";
 import { allDefeated } from "./EncounterCompletion.js";
 import { buildZoneRing, paintZoneRing, disposeZoneRing, RING_Y_OFFSET } from "./EncounterMarkers.js";
@@ -81,7 +81,9 @@ export class EncounterRuntime {
           type: desc.enemyType,
           id: ephemeralEnemyId(desc.id, 0),
           position: { x, y, z },
-          maxHealth: DEFAULT_MAX_HEALTH,
+          // Enemy-2: the projected enemy's health is its ARCHETYPE's default (sentinel 3 / wisp 2) — this
+          // layer only NAMES the type; it invents no number. The archetype owns its own toughness.
+          maxHealth: defaultMaxHealthFor(desc.enemyType),
           defeated: false,
           patrol,
           zone: { x, z, radius: desc.radius },
