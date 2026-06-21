@@ -91,6 +91,8 @@
     "test:encounter-polish-proof": "node scripts/browser-encounter-polish-proof.mjs",
     "test:content-combat-beats": "node scripts/content-combat-beats-regression.mjs",
     "test:content-combat-beats-proof": "node scripts/browser-content-combat-beats-proof.mjs",
+    "test:content-3": "node scripts/content-3-regression.mjs",
+    "test:content-3-proof": "node scripts/browser-content-3-proof.mjs",
     "test:content-slice-expansion": "node scripts/content-slice-expansion-regression.mjs",
     "test:content-slice-expansion-proof": "node scripts/browser-content-slice-expansion-proof.mjs",
     "test:audio-feedback": "node scripts/audio-feedback-regression.mjs",

@@ -176,7 +176,7 @@ const run = await withBrowserProof(
           };
         })()`
       );
-      assert.deepEqual(staged.ids, ["vb-crossing-sentinel", "vb-cache-sentinel"], "both beats present (crossing first)");
+      assert.deepEqual(staged.ids, ["vb-crossing-sentinel", "vb-cache-sentinel", "vb-cache-wisp"], "all three beats present (the crossing patroller stays first; Content-3 appended the cache wisp)");
       assert.ok(staged.crossingPatrol && staged.crossingPatrol.points === 2, "the crossing sentinel carries a 2-point patrol");
       assert.equal(staged.crossingPatrol.alert, "halt", "the crossing patrol uses the halt telegraph");
       assert.equal(staged.cachePatrol, null, "the cache sentinel is stationary (no patrol)");

@@ -273,6 +273,10 @@ export function buildVisualBenchmarkV1() {
   // The two beats complete + persist INDEPENDENTLY; each carries a `label` so the banner names its own
   // location. The crossing stays items[0] (encounters[0]) so the Encounter-1 gate reads it unchanged.
   const cacheGate = { x: cache.x - dir.x * 2.5, z: cache.z - dir.z * 2.5 }; // 2.5 m in front of the cache
+  // Content-3: a frost_wisp shares the cache gate with the sentinel — a MIXED final guardian. Perp-offset
+  // ~3 m so its radius-6 zone OVERLAPS the cache sentinel's (entering the gate telegraphs BOTH) while its
+  // body (the hover archetype also floats it) stays off the sentinel's strike line so combat resolves each.
+  const cacheWisp = offset(cacheGate, perp, 3);
   // Enemy-1: the crossing sentinel walks a short line across the corridor (perp ±3 m — just inside the
   // crossing posts at ±3.4, well within the radius-8 zone, on the same walkable/dry ground the route uses).
   // Grounded points; "halt" alert stops + faces the player as a telegraph when they enter the zone. The
@@ -309,6 +313,20 @@ export function buildVisualBenchmarkV1() {
         position: { x: cacheGate.x, y: getHeight(cacheGate.x, cacheGate.z), z: cacheGate.z },
         radius: 6,
         enemyType: "glacial_sentinel",
+        enemyCount: 1,
+        completed: false,
+        persistCompletion: true,
+        label: "the pass",
+      },
+      // Content-3 (mixed composition): the frost_wisp guardian beside the cache sentinel. APPENDED at
+      // items[2] so items[0] (crossing) + items[1] (cache sentinel) round-trip byte-identical. Still ONE
+      // enemy (enemyCount clamps to 1) — two INDEPENDENT single-enemy beats authored adjacently, not a wave.
+      {
+        type: ENCOUNTER_TYPE,
+        id: "vb-cache-wisp",
+        position: { x: cacheWisp.x, y: getHeight(cacheWisp.x, cacheWisp.z), z: cacheWisp.z },
+        radius: 6,
+        enemyType: "frost_wisp",
         enemyCount: 1,
         completed: false,
         persistCompletion: true,

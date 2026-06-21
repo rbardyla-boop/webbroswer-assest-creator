@@ -118,13 +118,15 @@ const SHRINE_IDS = ["vb-shrine-base", "vb-shrine-idol", "vb-shrine-ward-l", "vb-
 {
   const doc = buildVisualBenchmarkV1();
   const L = visualBenchmarkLayout();
-  // Encounters: still exactly the two Content-1 beats, ids/labels/order unchanged (pacing kept byte-stable).
+  // Encounters: the two Content-1 SENTINEL beats are byte-stable (Content-2 added no encounter). Content-3
+  // later APPENDED one frost_wisp beat at items[2]; items[0]/[1] (the sentinels) stay byte-identical.
   const enc = doc.encounters.items;
-  assert.equal(enc.length, 2, "still exactly two combat beats (Content-2 added no encounter)");
-  assert.deepEqual(enc.map((b) => b.id), ["vb-crossing-sentinel", "vb-cache-sentinel"], "the two beats are byte-stable (id/order)");
-  assert.deepEqual(enc.map((b) => b.label), ["the crossing", "the pass"], "the two beat labels are unchanged");
+  assert.equal(enc.length, 3, "three combat beats (Content-2 added none; Content-3 appended the cache wisp)");
+  assert.deepEqual(enc.slice(0, 2).map((b) => b.id), ["vb-crossing-sentinel", "vb-cache-sentinel"], "the two Content-1 sentinel beats are byte-stable (id/order — Content-2 added no encounter)");
+  assert.deepEqual(enc.slice(0, 2).map((b) => b.label), ["the crossing", "the pass"], "the two sentinel beat labels are unchanged");
   assert.equal(enc[0].radius, 8, "the crossing beat radius is unchanged");
   assert.equal(enc[1].radius, 6, "the cache-gate beat radius is unchanged");
+  assert.equal(enc[2].id, "vb-cache-wisp", "Content-3 appended the frost_wisp beat at items[2] (sentinels unmoved)");
   // The relic/cache objective axis is unchanged (the runtime auto-objective is untouched — no objectives block).
   assert.equal(doc.objectives.items.length, 0, "no authored objectives block (the runtime still owns the relic loop)");
   // The spawn + the carry axis are unchanged.

@@ -135,7 +135,7 @@ const run = await withBrowserProof(
 
       // (4) BOTH combat beats still complete INDEPENDENTLY (Content-1 unbroken by the new content).
       const first = await evalValue(play.cdp, defeatBeat(0));
-      assert.deepEqual(first.before, [false, false], "both beats were live before the first fight (non-vacuous)");
+      assert.deepEqual(first.before, [false, false, false], "all three beats were live before the first fight (non-vacuous)");
       assert.equal(first.after[0].completed, true, "beat #1 (the crossing) completed");
       assert.equal(first.after[1].completed, false, "beat #2 (the cache gate) stayed live — independent completion");
       const second = await evalValue(play.cdp, defeatBeat(1));
@@ -184,7 +184,7 @@ const run = await withBrowserProof(
           return { completed: enc.map((e) => e.completed), objectiveCompleted: obj.completed, shrinePresent };
         })()`
       );
-      assert.deepEqual(reloaded.completed, [true, true], "both beat completions persisted across reload");
+      assert.deepEqual(reloaded.completed, [true, true, false], "the two defeated sentinel beats persisted; the untouched cache wisp stayed live");
       assert.equal(reloaded.objectiveCompleted, true, "the relic objective completion persisted across reload");
       assert.equal(reloaded.shrinePresent, true, "the shrine's reward weapon re-instantiates after reload (recipe-rebuilt)");
       assert.deepEqual(replay.consoleErrors, [], `reload: zero console errors\n${replay.consoleErrors.join("\n")}`);

@@ -30,13 +30,17 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 // --- 1. the benchmark authors TWO distinct, independent combat beats ----------
 {
   const enc = buildVisualBenchmarkV1().encounters;
-  assert.equal(enc.items.length, 2, "two authored combat beats (the crossing skirmish + the cache gate)");
+  // Content-3 appended a THIRD beat (the frost_wisp sharing the cache gate). The two SENTINEL beats remain
+  // Content-1's repeatable composition; the schema invariant (combat-beat.v0 / enemyCount===1 / no waves)
+  // holds for EVERY beat regardless of type. The mixed-engagement assertions live in test:content-3.
+  assert.equal(enc.items.length, 3, "three authored combat beats (crossing + cache gate + the mixed cache wisp)");
+  assert.equal(enc.items.filter((b) => b.enemyType === "glacial_sentinel").length, 2, "two glacial_sentinel beats (the crossing skirmish + the cache gate)");
+  assert.equal(enc.items.filter((b) => b.enemyType === "frost_wisp").length, 1, "one frost_wisp beat (Content-3: the mixed cache guardian)");
   const [crossingBeat, cacheBeat] = enc.items;
 
-  // Same systems: both are combat-beat.v0 / glacial_sentinel / exactly one enemy (no waves).
+  // Same systems: every beat is combat-beat.v0 / exactly one enemy (no waves) / uncompleted + persisted.
   for (const beat of enc.items) {
     assert.equal(beat.type, ENCOUNTER_TYPE, "each beat is a combat-beat.v0");
-    assert.equal(beat.enemyType, "glacial_sentinel", "each names the Enemy-0 sentinel");
     assert.equal(beat.enemyCount, 1, "each projects exactly one enemy (the no-waves invariant, per beat)");
     assert.equal(beat.completed, false, "each beat starts uncompleted (it completes in play)");
     assert.equal(beat.persistCompletion, true, "each beat persists its completion");
@@ -50,7 +54,7 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   assert.ok(sep >= 6, `the two beats are staged at distinct points (${sep.toFixed(1)}m apart)`);
   const layout = visualBenchmarkLayout();
   assert.ok(dist2(cacheBeat.position, layout.cache) <= 6, "the cache-gate beat is staged at the cache");
-  ok(`content: two combat-beats (crossing + cache gate), distinct ids, ${sep.toFixed(1)}m apart, no waves`);
+  ok(`content: two sentinel beats (crossing + cache gate, ${sep.toFixed(1)}m apart) + one frost_wisp beat, distinct ids, no waves`);
 }
 
 // --- 2. per-beat labels + label normalization (presentation noun, not prose) --
@@ -102,7 +106,8 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   doc.encounters.items[1].completed = false; // the cache-gate beat is still live
   const res = validateWorldDocument(doc);
   const items = res.document.encounters.items;
-  assert.equal(items.length, 2, "both beats survive validation");
+  assert.equal(items.length, 3, "all three beats survive validation (the frost_wisp beat too)");
+  assert.ok(items.find((b) => b.id === "vb-cache-wisp" && b.enemyType === "frost_wisp"), "the frost_wisp beat round-trips through validation");
   const crossing = items.find((b) => b.id === "vb-crossing-sentinel");
   const cache = items.find((b) => b.id === "vb-cache-sentinel");
   assert.equal(crossing.completed, true, "the cleared crossing beat persists completed:true");
@@ -119,10 +124,10 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   ok("persistence: the two beats' completions round-trip independently (neither leaks onto the other)");
 }
 
-// --- 5. the two-beat composition is deterministic -----------------------------
+// --- 5. the (now three-beat) composition is deterministic ---------------------
 {
-  assert.deepEqual(buildVisualBenchmarkV1().encounters, buildVisualBenchmarkV1().encounters, "two builds → identical two-beat encounters block");
-  ok("determinism: the two-beat composition (ids/positions/labels) is identical across builds");
+  assert.deepEqual(buildVisualBenchmarkV1().encounters, buildVisualBenchmarkV1().encounters, "two builds → identical three-beat encounters block");
+  ok("determinism: the three-beat composition (ids/positions/labels) is identical across builds");
 }
 
 console.log(`\ncontent-combat-beats regression: ${passed} checks passed`);

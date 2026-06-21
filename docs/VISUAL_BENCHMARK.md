@@ -161,6 +161,23 @@ deterministic, and frozen permanently on defeat. It is **structurally free**: it
 so the benchmark's draws/triangles/objects are **unchanged** (draws 121, tris ~501,790, objs 19) and the
 Performance Contract needed **no re-lock**. The LOD finding (B — defer) is unaffected.
 
+## Content-3 — mixed enemy encounter composition (ADR-058)
+
+Content-3 made the benchmark's **cache gate** a **mixed final guardian**: the existing stationary `glacial_sentinel`
+(`vb-cache-sentinel`) is now joined by a hovering `frost_wisp` (`vb-cache-wisp`) — two **independent single-enemy beats**
+whose radius-6 zones **overlap** (centres ~3 m apart) so entering the gate engages both. It proves the combat / enemy /
+encounter stack produces a mixed engagement through **authored composition alone**: no new enemy systems, no schema change,
+no waves. The runtime (`EncounterRuntime` / `EnemyRuntime` / `CombatRuntime` / `EncounterPresentation`) is **byte-unchanged**
+— the encounter stack was already multi-beat. The wisp beat is **appended** at `items[2]`, so the crossing (`items[0]`) and
+cache sentinel (`items[1]`) round-trip **byte-identical**, and `enemyCount` stays clamped to 1 per beat (the no-waves gate).
+
+It is **structurally free**: the wisp enemy is not a `WorldObject` and the far cache enemies are frustum-culled at the spawn
+capture, so the benchmark's structural counts are **unchanged** (draws **121**, tris **~501,790**, objs **19**) and the
+Performance Contract needed **no re-lock**. The two-beat gates (`content-combat-beats`, `visual-benchmark`,
+`content-slice-expansion`, `enemy-patrol-proof`) were **deliberately rebaselined** 2→3 beats (operator-chosen, to enrich the
+shipping corridor) — the two sentinel beats stay byte-stable and the beat proofs now additionally assert the wisp stays **live**
+when the sentinels are defeated (a stronger independence check). The LOD finding (B — defer) is unaffected.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -176,3 +193,8 @@ Performance Contract needed **no re-lock**. The LOD finding (B — defer) is una
 - `test:enemy-patrol(-proof)` — the bounded sentinel patrol (Enemy-1): the crossing sentinel moves in-zone +
   terrain-safe, halt-telegraphs on approach, is struck on its live displaced mesh, freezes on defeat, and
   reload-persists while the cache sentinel stays static; benchmark counts unchanged, 0 errors.
+- `test:content-3(-proof)` — the mixed cache engagement (Content-3): the cache gate stages a sentinel + a
+  hovering wisp with overlapping zones, both combat targets; entering the gate telegraphs both; one weapon
+  defeats both (same `weaponId`, the wisp strike resolving to the wisp); each beat completes independently
+  (defeating one leaves the other live) and reload-persists while the crossing stays live; schema unchanged
+  (`enemyCount` clamps to 1, no new key); benchmark counts unchanged, 0 errors.

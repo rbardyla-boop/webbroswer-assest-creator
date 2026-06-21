@@ -147,36 +147,42 @@ const shape = (doc) => ({
   ok("authoring: one beacon-trail modifier over a route spline + mask");
 }
 
-// --- 7. two Encounter-0 combat beats (crossing + cache gate), independent, no waves --------------
+// --- 7. three Encounter-0 combat beats (crossing + cache sentinel + cache wisp), independent, no waves -
 {
   const enc = buildVisualBenchmarkV1().encounters;
-  // Content-1: a SECOND authored beat proves the authoring model is repeatable. "No waves" is the
-  // per-beat enemyCount===1 invariant — two distinct authored beats are not waves.
-  assert.equal(enc.items.length, 2, "two authored combat beats (Content-1: crossing + cache gate)");
+  // Content-1: a SECOND authored beat (cache gate). Content-3: a THIRD (the frost_wisp sharing the cache
+  // gate — a mixed final guardian). "No waves" is the per-beat enemyCount===1 invariant — three distinct
+  // authored single-enemy beats are not a wave.
+  assert.equal(enc.items.length, 3, "three authored combat beats (crossing + cache gate + the mixed cache wisp)");
+  assert.equal(enc.items.filter((b) => b.enemyType === "glacial_sentinel").length, 2, "two glacial_sentinel beats (the crossing + the cache gate)");
+  assert.equal(enc.items.filter((b) => b.enemyType === "frost_wisp").length, 1, "one frost_wisp beat (Content-3)");
   for (const beat of enc.items) {
     assert.equal(beat.type, ENCOUNTER_TYPE, "each beat is a combat-beat.v0");
-    assert.equal(beat.enemyType, "glacial_sentinel", "each names the Enemy-0 type");
-    assert.equal(beat.enemyCount, 1, "each projects exactly one enemy (no waves)");
+    assert.equal(beat.enemyCount, 1, "each projects exactly one enemy (no waves, per beat)");
     assert.ok(["x", "y", "z"].every((k) => Number.isFinite(beat.position[k])), "finite beat position");
+    assert.equal(beat.completed, false, "each beat starts uncompleted (it completes in play)");
   }
-  const [crossingBeat, cacheBeat] = enc.items;
-  // The crossing stays items[0] so encounters[0] is stable for the Encounter-1 gate.
+  const [crossingBeat, cacheBeat, cacheWisp] = enc.items;
+  // The crossing stays items[0] + the cache sentinel items[1] so encounters[0]/[1] are stable for the
+  // existing beat gates; the wisp is appended at items[2].
   assert.equal(crossingBeat.id, "vb-crossing-sentinel", "the crossing beat is first (encounters[0] stable)");
-  assert.equal(cacheBeat.id, "vb-cache-sentinel", "the cache-gate beat is second");
-  assert.notEqual(crossingBeat.id, cacheBeat.id, "the two beats have distinct ids");
+  assert.equal(cacheBeat.id, "vb-cache-sentinel", "the cache-gate sentinel is second (encounters[1] stable)");
+  assert.equal(cacheWisp.id, "vb-cache-wisp", "the cache wisp is third (appended)");
+  assert.equal(new Set(enc.items.map((b) => b.id)).size, 3, "the three beats have distinct ids");
   const layout = visualBenchmarkLayout();
   assert.ok(distToSegment(crossingBeat.position, layout.spawn, layout.cache) <= 12, "the crossing beat sits on the carry crossing");
   assert.ok(dist2(cacheBeat.position, layout.cache) <= 6, "the cache-gate beat sits at the cache gate");
-  // Different staging: the two beats are at distinct points along the corridor.
-  assert.ok(dist2(crossingBeat.position, cacheBeat.position) >= 6, `the two beats are staged apart (${dist2(crossingBeat.position, cacheBeat.position).toFixed(1)}m)`);
-  // Per-beat labels (Content-1): each names its own location so the banner reads correctly.
+  // Different staging: the crossing + cache sentinel are at distinct points along the corridor.
+  assert.ok(dist2(crossingBeat.position, cacheBeat.position) >= 6, `the crossing + cache beats are staged apart (${dist2(crossingBeat.position, cacheBeat.position).toFixed(1)}m)`);
+  // Content-3 mixed engagement: the wisp SHARES the cache gate — its zone OVERLAPS the cache sentinel's so
+  // entering the gate engages both, while the two beats stay independent single-enemy beats.
+  assert.equal(cacheWisp.enemyType, "frost_wisp", "the third beat is the frost_wisp");
+  assert.ok(dist2(cacheWisp.position, cacheBeat.position) < cacheWisp.radius + cacheBeat.radius, "the cache wisp's zone OVERLAPS the cache sentinel's (one mixed engagement)");
+  // Per-beat labels (Content-1): the crossing vs the cache; the wisp shares the cache location.
   assert.equal(crossingBeat.label, "the crossing", "the crossing beat is labelled");
   assert.equal(cacheBeat.label, "the pass", "the cache-gate beat is labelled");
-  assert.notEqual(crossingBeat.label, cacheBeat.label, "the two beats have distinct banner labels");
-  // Independent completion: the authored beats are both uncompleted (each completes in play).
-  assert.equal(crossingBeat.completed, false, "the crossing beat starts uncompleted");
-  assert.equal(cacheBeat.completed, false, "the cache-gate beat starts uncompleted");
-  ok("encounters: two combat-beats (crossing + cache gate), distinct ids/labels, independent, no waves");
+  assert.notEqual(crossingBeat.label, cacheBeat.label, "the crossing + cache beats have distinct banner labels");
+  ok("encounters: three combat-beats (crossing + cache sentinel + cache wisp), distinct ids, mixed cache engagement, no waves");
 }
 
 // --- 8. structural budget: the authored objects load within the contract -----

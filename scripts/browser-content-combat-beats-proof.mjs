@@ -116,22 +116,25 @@ const run = await withBrowserProof(
           };
         })()`
       );
-      assert.equal(staged.beatCount, 2, "two authored combat beats are present in the runtime");
-      assert.deepEqual(staged.ids, ["vb-crossing-sentinel", "vb-cache-sentinel"], "the crossing beat is first, the cache gate second");
+      // Content-3 appended a THIRD beat (the frost_wisp sharing the cache gate). This Content-1 proof stays
+      // about the two SENTINEL beats completing independently; the full mixed-clear is test:content-3-proof.
+      assert.equal(staged.beatCount, 3, "three authored combat beats are present (Content-3 added the mixed cache wisp)");
+      assert.deepEqual(staged.ids, ["vb-crossing-sentinel", "vb-cache-sentinel", "vb-cache-wisp"], "the crossing + cache sentinel stay items[0]/[1]; the wisp is appended at [2]");
       assert.ok(staged.enemyIds.every((id) => typeof id === "string" && id.length), "each live beat projected a combat target (ephemeral enemy id)");
-      assert.equal(new Set(staged.enemyIds).size, 2, "the two beats project DISTINCT enemies");
-      assert.deepEqual(staged.labels, ["the crossing", "the pass"], "each beat carries its own banner label");
-      assert.ok(staged.zones >= 2, `both encounter zone rings are in the scene (${staged.zones})`);
-      assert.equal(staged.presentCount, 2, "the presentation built a gate-light for EACH beat");
-      // Independent phase (geometry-grounded): the far cache gate is dormant while the near crossing is not.
-      assert.equal(staged.phases[1], "dormant", "the far cache-gate beat reads dormant at the overlook");
+      assert.equal(new Set(staged.enemyIds).size, 3, "the three beats project DISTINCT enemies");
+      assert.deepEqual(staged.labels, ["the crossing", "the pass", "the pass"], "each beat carries its banner label (the wisp shares the cache location)");
+      assert.ok(staged.zones >= 3, `all three encounter zone rings are in the scene (${staged.zones})`);
+      assert.equal(staged.presentCount, 3, "the presentation built a gate-light for EACH beat");
+      // Independent phase (geometry-grounded): the far cache beats are dormant while the near crossing is not.
+      assert.equal(staged.phases[1], "dormant", "the far cache-gate sentinel reads dormant at the overlook");
+      assert.equal(staged.phases[2], "dormant", "the far cache wisp reads dormant at the overlook");
       assert.notEqual(staged.phases[0], "dormant", "the near crossing beat reads live (independent phase derivation)");
-      assert.notEqual(staged.phases[0], staged.phases[1], "the two beats hold independent phases at the same instant");
+      assert.notEqual(staged.phases[0], staged.phases[1], "the crossing + cache beats hold independent phases at the same instant");
 
       // (2) defeat beat #1 (the crossing) → it completes while beat #2 stays LIVE (independent completion),
       //     and the banner now names the SECOND beat's location.
       const first = await evalValue(play.cdp, defeatBeat(0));
-      assert.deepEqual(first.before, [false, false], "both beats were uncompleted before the first strikes (non-vacuous)");
+      assert.deepEqual(first.before, [false, false, false], "all three beats were uncompleted before the first strikes (non-vacuous)");
       assert.ok(["hit-react", "defeated"].includes(first.midState), `the first strike registered as a hit (state ${first.midState})`);
       assert.equal(first.after[0].completed, true, "beat #1 (the crossing) completed");
       assert.equal(first.after[0].enemyState, "defeated", "beat #1's sentinel was defeated by Combat-0");
@@ -149,15 +152,16 @@ const run = await withBrowserProof(
 
       // (3) defeat beat #2 (the cache gate) → it completes too; each beat owns its clear feedback.
       const second = await evalValue(play.cdp, defeatBeat(1));
-      assert.equal(second.after[1].completed, true, "beat #2 (the cache gate) completed");
+      assert.equal(second.after[1].completed, true, "beat #2 (the cache sentinel) completed");
       assert.equal(second.after[1].enemyState, "defeated", "beat #2's sentinel was defeated by Combat-0");
       assert.equal(second.after[0].completed, true, "beat #1 stayed completed (latched)");
-      assert.deepEqual(
-        second.pres.map((p) => p.phase),
-        ["cleared", "cleared"],
-        "both beats now read cleared"
-      );
-      assert.deepEqual(second.pres.map((p) => p.clearPulses), [1, 1], "each beat fired its OWN one-shot clear (no shared pulse)");
+      // The two SENTINEL beats now read cleared; the MIXED cache WISP (beat 2) stays LIVE — defeating the
+      // sentinels never touched it (independence; the full mixed clear is test:content-3-proof).
+      assert.deepEqual(second.pres.slice(0, 2).map((p) => p.phase), ["cleared", "cleared"], "both SENTINEL beats now read cleared");
+      assert.equal(second.after[2].completed, false, "the mixed cache WISP beat is STILL LIVE (defeating the sentinels did not complete it)");
+      assert.notEqual(second.pres[2].phase, "cleared", "the cache wisp does NOT read cleared (independent, still live)");
+      assert.deepEqual(second.pres.slice(0, 2).map((p) => p.clearPulses), [1, 1], "each sentinel beat fired its OWN one-shot clear (no shared pulse)");
+      assert.equal(second.pres[2].clearPulses, 0, "the live cache wisp has NOT pulsed");
 
       // (4) the relic objective is still completable (the two beats did not break the carry loop)
       const relic = await evalValue(
@@ -206,9 +210,9 @@ const run = await withBrowserProof(
           };
         })()`
       );
-      assert.deepEqual(reloaded.completed, [true, true], "BOTH beat completions persisted across reload");
-      assert.deepEqual(reloaded.phases, ["cleared", "cleared"], "both reloaded beats read cleared (gate-lights green)");
-      assert.deepEqual(reloaded.pulses, [0, 0], "an already-cleared beat does NOT re-fire the clear pulse on load");
+      assert.deepEqual(reloaded.completed, [true, true, false], "the two SENTINEL completions persisted; the untouched cache wisp stayed live");
+      assert.deepEqual(reloaded.phases, ["cleared", "cleared", "dormant"], "the two cleared sentinels read cleared; the live cache wisp reads dormant at the overlook");
+      assert.deepEqual(reloaded.pulses, [0, 0, 0], "no beat re-fires the clear pulse on load");
       assert.equal(reloaded.objectiveCompleted, true, "the relic objective completion persisted across reload");
       assert.deepEqual(replay.consoleErrors, [], `reload: zero console errors\n${replay.consoleErrors.join("\n")}`);
       console.log("  reload: both beats + objective persisted; no re-pulse");

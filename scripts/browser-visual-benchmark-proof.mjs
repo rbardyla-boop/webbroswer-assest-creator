@@ -152,7 +152,7 @@ const run = await withBrowserProof(
       );
       assert.ok(comp.landmarkCount >= 10, `polished landmark set present in the loaded scene (${comp.landmarkCount})`);
       assert.equal(comp.gltfRefOnly, true, "the GLB cache prop is reference-only (asset:null + assetRef string)");
-      assert.equal(comp.encounters, 2, "both authored combat beats are present (Content-1: crossing + cache gate)");
+      assert.equal(comp.encounters, 3, "three authored combat beats present (crossing + cache sentinel + Content-3's mixed cache wisp)");
       // Environment Polish-1: the per-scene readability overrides PERSISTED into the saved/loaded world
       // (each value differs from the global glacial default → a real, scoped readability pass).
       assert.equal(comp.fogFar, 380, "per-scene fog readability override persisted (benchmark 380, default 320)");
