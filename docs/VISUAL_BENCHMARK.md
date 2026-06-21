@@ -137,6 +137,17 @@ not move the scene out of its structural band — the same conclusion the origin
 reducible for streamed procedural detail) remains an untested hypothesis; no production streamed-detail
 producer was created. The SwiftShader-is-CPU-not-GPU caveat above still applies to every number here.
 
+## Audio/Feedback-1 — sensory layer (ADR-055)
+
+Audio/Feedback-1 added a **slice sensory layer** (`SliceSensory`) over this benchmark: differentiated combat
+**HIT/DEFEAT** cues, a **shrine discovery** cue, a distinct **exotic-reward** pickup cue, a **cache-payoff**
+cue on objective completion, and a milestone **visual toast** mirror — all observing the existing seams and
+playing through the existing `ProceduralAudio` engine (a single shared instance with `RuntimeFeedback`; no
+third wind bed). It is **structurally free**: it adds **no scene geometry** (the toast is DOM), so the
+benchmark's draws/triangles/objects are **unchanged** (draws ~121, tris ~501,790, objs 18–19) and the
+Performance Contract needed **no re-lock**. The layer is dormant on any slice without authored encounters or
+sign interactions (frozen-cache / first-playable stay byte-stable). The LOD finding (B — defer) is unaffected.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -147,3 +158,5 @@ producer was created. The SwiftShader-is-CPU-not-GPU caveat above still applies 
   stats → Performance Contract → relic + encounter completable → readability overrides applied + persisted →
   particle feedback live → encounter-clear cue fired → reload-persists → 0 console errors.
 - `test:performance-contract(-proof)` — the `visual-benchmark` scene is a gated benchmark scene (6th scene).
+- `test:audio-feedback(-proof)` — the slice sensory layer (Audio/Feedback-1): differentiated combat /
+  discovery / reward / cache cues + a visual toast, one-shot + reload-safe, dormant off-benchmark, 0 errors.

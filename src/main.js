@@ -47,6 +47,9 @@ import { CombatRuntime } from "./world/combat/CombatRuntime.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
 import { RuntimeFeedback } from "./world/feedback/RuntimeFeedback.js";
+import { ProceduralAudio } from "./world/audio/ProceduralAudio.js";
+import { SliceSensory } from "./world/feedback/SliceSensory.js";
+import { CueOverlay } from "./world/feedback/CueOverlay.js";
 import { EncounterPresentation } from "./world/encounters/EncounterPresentation.js";
 import { createPagedGeometryStream } from "./world/geometry/PagedGeometryStream.js";
 import { FrozenCacheSlice, TUTORIAL_WEAPON_ID } from "./world/slice/FrozenCacheSlice.js";
@@ -160,8 +163,25 @@ const enemyRuntime = runtimeMode ? new EnemyRuntime({ scene, combatRuntime }) : 
 const encounterRuntime = runtimeMode ? new EncounterRuntime({ scene, enemyRuntime }) : null;
 // Environment Polish-1: additive audio feedback on encounter clear (the relic loop is already cued by
 // FrozenCacheSlice). Headless-graceful (cue() no-ops without a gesture); worlds with no encounters get no
-// cue → byte-stable. Never touches the frozen slice.
-const runtimeFeedback = runtimeMode ? new RuntimeFeedback() : null;
+// cue → byte-stable. Never touches the frozen slice. Audio/Feedback-1 hoists ONE shared ProceduralAudio
+// so the encounter-clear owner and the slice sensory owner share a single wind bed (no third engine).
+const sharedAudio = runtimeMode ? new ProceduralAudio() : null;
+const runtimeFeedback = runtimeMode ? new RuntimeFeedback({ audio: sharedAudio }) : null;
+// Audio/Feedback-1: slice sensory polish — OBSERVES encounters / carried weapons / sign proximity / the
+// relic objective and plays differentiated cues (hit, defeat, discovery, reward, cache payoff) + a
+// milestone toast. Dormant on slices without authored sensory content (frozen-cache / first-playable stay
+// byte-stable). Reuses sharedAudio; owns no scene objects; mutates no gameplay state.
+const sliceSensory = runtimeMode
+  ? new SliceSensory({
+      audio: sharedAudio,
+      player,
+      carry: weaponCarryRuntime,
+      view: new CueOverlay(),
+      // The runtime-placed system weapons share runtimeAssets with authored rewards but are NOT loot —
+      // exclude them so only the authored reward fires a reward cue (and so they never activate the layer).
+      systemWeaponIds: [RELIC_ID, TUTORIAL_WEAPON_ID],
+    })
+  : null;
 // Encounter-1: additive presentation over the combat beat — a sentinel idle→alert emissive telegraph, a
 // gate-light beacon at the crossing, and an encounter banner. Observes EncounterRuntime + the projected
 // Enemy-0 actor; mutates no encounter/enemy STATE. Worlds with no encounters build nothing → byte-stable.
@@ -477,6 +497,7 @@ if (import.meta.env.DEV) {
       encounterRuntime?.update(dt, player);
       runtimeFeedback?.update(encounterRuntime?.snapshot());
       encounterPresentation?.update(encounterRuntime, player, dt);
+      tickSliceSensory(); // audio/feedback-1: cue hit/defeat/clear in step with the encounter tick
       if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
       return true;
     },
@@ -484,6 +505,14 @@ if (import.meta.env.DEV) {
   // Dev/test-only: the additive encounter-feedback owner's cue counter (audio no-ops headless, so the
   // counter is how a proof confirms the WIRING fired on the completion edge). For Environment Polish-1.
   window.__RUNTIME_FEEDBACK__ = () => runtimeFeedback?.snapshot() ?? null;
+  // Dev/test-only: the slice sensory layer's cue counters + ordered log + the milestone toast label.
+  // Audio no-ops headless, so the counters/log are how a proof confirms each cue's wiring fired (and in
+  // what order). __SLICE_SENSORY_DO__.step drives one observation synchronously (rAF is throttled). Audio/Feedback-1.
+  window.__SLICE_SENSORY__ = () => sliceSensory?.snapshot() ?? null;
+  window.__SLICE_SENSORY_DO__ = { step: () => { tickSliceSensory(); return true; } };
+  // Dev/test-only: confirm the sensory layer shares ONE ProceduralAudio with RuntimeFeedback (no third
+  // wind bed). The ambient-bed claim rests on this single-engine invariant.
+  window.__AUDIO_SHARED__ = () => !!sliceSensory && !!runtimeFeedback && sliceSensory.audio === runtimeFeedback.audio;
   // Dev/test-only: the encounter PRESENTATION phase snapshot (phase/telegraph/clearPulses + banner) so the
   // proof can assert the readability arc dormant→alert→engaged→cleared. For Encounter-1.
   window.__ENCOUNTER_PRESENTATION__ = () => encounterPresentation?.snapshot() ?? null;
@@ -845,6 +874,20 @@ function loadEncounters(document) {
   encounterPresentation?.load({ encounterRuntime }); // encounter-1: build the gate-light beacons after the runtime projects the beats
 }
 
+// Audio/Feedback-1: (re)bind the slice sensory layer to the loaded world. Activates only for slices with
+// authored sensory content; resets its one-shot state so a reload seeds a silent baseline (no replay).
+// Called from BOTH runtime load paths AFTER loadEncounters so the encounter/sign/reward content is fresh.
+function loadSliceSensory(document) {
+  sliceSensory?.bind(document);
+}
+
+// Audio/Feedback-1: observe one frame of slice events (encounter hit/defeat/clear + shrine discovery +
+// reward pickup + the relic-objective completion payoff). Shared by the main loop and the synchronous
+// __ENCOUNTER_DO__/__SLICE_SENSORY_DO__ proof drivers (the headless rAF is throttled ~5fps).
+function tickSliceSensory() {
+  sliceSensory?.update(encounterRuntime?.snapshot(), objectiveRuntime?.debugSnapshot()?.completed === true);
+}
+
 async function applyLoadedWorld(document) {
   resetWorldReady();
   world = await worldLoader.load(document);
@@ -881,6 +924,7 @@ async function applyLoadedWorld(document) {
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
+  loadSliceSensory(world.document); // audio/feedback-1 — bind sensory cues to the fresh encounter/sign/reward content
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -1066,6 +1110,7 @@ async function boot() {
   loadCombat(); // combat-0 targets — re-register inert dummies for the new object graph
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
+  loadSliceSensory(world.document); // audio/feedback-1 — bind sensory cues to the fresh encounter/sign/reward content
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -1255,6 +1300,7 @@ function frame(now) {
   if (encounterRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
   objectiveRuntime?.update(dt, player); // relic objective: zone + phase (no scene mutation here)
   frozenCacheSlice?.update(dt);
+  tickSliceSensory(); // audio/feedback-1: cue hit/defeat/discovery/reward + the cache payoff (observe-only)
   wildlife?.update(dt, camera); // ambient animals: habitat-clamped FSM, flee the viewer
   ambient?.update(dt, camera); // firefly motes: bounded drift over the wet meadow, scatter from the viewer
 

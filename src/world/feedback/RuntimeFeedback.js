@@ -14,6 +14,9 @@ import { ProceduralAudio } from "../audio/ProceduralAudio.js";
 export class RuntimeFeedback {
   constructor({ audio } = {}) {
     this.audio = audio ?? new ProceduralAudio();
+    // Own (and dispose) the audio only if we created it. When a shared engine is injected (Audio/Feedback-1
+    // hoists one ProceduralAudio for both this owner and SliceSensory), the injector owns disposal.
+    this._ownsAudio = !audio;
     this._cued = new Set(); // encounter ids already cued (edge-trigger once each)
     this.cueAttempts = 0;
   }
@@ -36,7 +39,7 @@ export class RuntimeFeedback {
   }
 
   dispose() {
-    this.audio?.dispose?.();
+    if (this._ownsAudio) this.audio?.dispose?.();
     this._cued.clear();
   }
 }

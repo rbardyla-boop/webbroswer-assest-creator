@@ -126,6 +126,16 @@
         background: rgba(103, 207, 232, 0.16); border: 1px solid rgba(158, 238, 255, 0.45); border-radius: 4px;
       }
 
+      /* Audio/Feedback-1: milestone sensory toast — mirrors key audio cues for accessibility */
+      .cue-overlay {
+        position: fixed; right: 18px; bottom: 100px; z-index: 18;
+        padding: 8px 14px 8px 12px; color: #d8f8ff; background: rgba(9, 17, 20, 0.82);
+        border: 1px solid rgba(158, 238, 255, 0.3); border-left: 3px solid #9eeeff; border-radius: 9px;
+        opacity: 0; transform: translateX(10px); transition: opacity 0.3s ease, transform 0.3s ease;
+        pointer-events: none; font-size: 12px; letter-spacing: 0.03em; backdrop-filter: blur(8px);
+      }
+      .cue-overlay.visible { opacity: 1; transform: translateX(0); }
+
       /* Slice-0A: toggleable friction trace / session log (press L in play mode) */
       .slice-trace {
         position: fixed; left: 14px; top: 14px; z-index: 19; width: min(300px, 42vw);

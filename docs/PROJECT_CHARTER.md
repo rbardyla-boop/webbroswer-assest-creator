@@ -22,49 +22,52 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-20 (Content-2 accepted; tag `world-builder-content-2-slice-expansion`).**
-- **65 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
+**Health snapshot — as of 2026-06-21 (Audio/Feedback-1 accepted; tag `world-builder-audio-feedback-1`).**
+- **66 stages shipped** (+ a Gate Repair-0 repair tag). Milestone reached: **Glacial Valley First
   Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-2 — Authored Slice Expansion**
-  (ADR-054): turns the visual-benchmark corridor into a fuller authored slice using EXISTING systems only — NO new runtime
-  code, NO movement AI, NO renderer work. One discoverable off-route moment — a 4-piece **frozen shrine alcove** tucked ~9m
-  beside the relic ruin — bundles three beats: EXPLORATION (the shrine structure), READABLE (a data-only **sign** that names
-  the place + points on to the cache — wayfinding/objective clarity), ENVIRONMENT (a brooding **fog pocket** smoke emitter on
-  the idol), and REWARD (an optional **exotic generated weapon** in a new `runtimeAssets` block, claimed with F). The two
-  combat beats + the relic/cache objective are UNCHANGED. NO patrol/chase/attacks/waves/loot/factions/procedural-encounter
-  generation/shader-LOD/renderer work.
-- **Pure authored DATA + a helper extension.** `InteractionRuntime` / `ParticleRuntime` / `PlacedWeaponRuntime` already load
-  their blocks, so the shrine is sample data: 4 `vb-shrine-*` primitives, a `sign` interaction (sanitized at the boundary,
-  rendered via `.textContent`), a `smoke` emitter, and one `generated.weapon` runtimeAsset (a deterministic exotic recipe,
-  `generateWeaponRecipe(rollConfig(seed,'exotic'))` — the allowed world→arsenal-recipe import, same as RelicWeaponObjective/
-  FrozenCacheSlice). `groundedPrimitive` gained an additive `interaction` option (mirrors `particles`). The reward coexists
-  with the auto-spawned relic (distinct id; the objective only completes on the relic).
-- **BYTE-STABILITY.** `src/main.js` and EVERY runtime system are UNTOUCHED — `EnemyRuntime` / `CombatRuntime` /
-  `FrozenCacheSlice` / `SliceCompletion` / the encounters / `placement` / `assets` / `interaction` / `particles` all
-  zero-diff. No `WORLD_DOCUMENT_VERSION` bump. The two combat beats + the relic objective axis are byte-stable. The
-  frozen-cache + first-playable slices don't load the benchmark → byte-stable. The perf `objects` ceiling was re-locked
-  20→24 (a deliberate content-growth re-lock: measured 18 + ~33% headroom; the gate still fails above 24).
-- **Content-2 gates GREEN**: `test:content-slice-expansion` (6 Node: the shrine alcove + route band, the save-stable sign,
-  the fog emitter + ≥4 emitters, the exotic reward weapon validates + deterministic + distinct-from-relic, the two beats +
-  objective axis byte-stable, determinism + budget) + `test:content-slice-expansion-proof` (SwiftShader on `visual-benchmark-1`:
-  shrine visible + sign loaded → reach the shrine, the sign surfaces its wayfinding text → the reward is findable + CLAIMED
-  (`pickUp()` returns the specific id, carried as active) → BOTH combat beats still complete independently → the relic
-  objective still completes → benchmark within the Performance Contract → reload persists the objective + both beats + the
-  reward re-instantiates, 0 errors). Existing benchmark/encounter/byte-stability gates all still green (the shrine fits the
-  route band, +4 objects under the re-locked ceiling, the 4th emitter keeps ≥3). Fresh-context adversarial review (4
-  dimensions: byte-stability/isolation · data-validity/security/determinism · route/perf-relock-honesty · proof/gate-rigor +
-  per-finding verify): **0 critical / 0 high / 0 medium / 4 low** — all fixed (a stale `≤20` ceiling comment corrected to the
-  re-locked 24; the sign-surface proof made deterministic via a synchronous `interactionRuntime.update(0)` instead of a
-  throttled-rAF sleep). One refuted (a "vacuous perf gate" claim — the objects/runtimeAssets metrics are finite + non-zero).
-- **Prior stages:** Content-1 (ADR-053, `world-builder-content-1-combat-beats`) — second authored combat beat (repeatable
-  encounter composition + per-beat label), no AI/waves. Encounter-1 (ADR-052) — authored combat-beat polish (telegraph +
-  gate-light + phase/banner). Environment Polish-1 (ADR-051) — visual benchmark expansion. WebGPU Feasibility Gate-0
-  (ADR-050) — feasibility-only, go/no-go = B (WebGPU stays an experimental lab).
-- **Next per ADR-039 roadmap: (await operator pick)** — Content-2 proved static/reactive sentinels + authored discovery
-  still have room. The evidence-gated fork: more authored content/audio (if the slice feels playable but thin), Enemy-1
-  movement/patrol (if it now feels static — the bigger foundational seam: terrain grounding, water avoidance, combat range,
-  proximity, state transitions, path validity, reload, performance), or shader/LOD feasibility (only if visuals/perf become
-  the constraint). Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Audio/Feedback-1 — Slice Sensory Polish**
+  (ADR-055): makes the authored slice feel intentional by giving its key events differentiated audio + a visual mirror, by
+  OBSERVING the existing seams and reusing the existing `ProceduralAudio` engine — NO new audio engine, NO movement AI, NO
+  renderer work, NO scene objects. New runtime-only observer `SliceSensory` (over a pure `SliceSensoryLogic` edge-detector)
+  fires differentiated cues: combat **HIT** (per strike) + **DEFEAT** (the kill), **DISCOVERY** (entering the shrine alcove),
+  **REWARD** (claiming the authored exotic), and a **cache payoff** (objective completion) — each one-shot, in order; plus a
+  small `CueOverlay` milestone **toast** mirrors them for accessibility. The encounter-clear chord stays RuntimeFeedback's
+  (CLEAR is logged silently to avoid a double-fire). NO attacks/damage/inventory/new-combat/shader-LOD.
+- **Observe the seams, don't rewrite them.** `SliceSensory` reads `EncounterRuntime.snapshot()` (hit/defeat/clear),
+  `carry.slotOf(id)` (reward carried), sign proximity (shrine), and the relic objective (payoff) — mutating NO
+  combat/enemy/arsenal/objective/interaction state. The audio engine is HOISTED: one shared `ProceduralAudio` injected into
+  both `RuntimeFeedback` and `SliceSensory` (no third wind bed; RuntimeFeedback now owns disposal only when it created it).
+  New cue kinds are additive to `AudioCues` (the original four unchanged → FrozenCacheSlice/RuntimeFeedback byte-stable).
+- **DORMANCY = the byte-stability guarantee.** The layer activates ONLY for slices with AUTHORED content the runtime never
+  injects — **encounters or sign interactions** (NOT runtimeAssets, because the runtime places the relic + tutorial weapons
+  into `runtimeAssets` in every world). Reward cues additionally EXCLUDE those system weapons. So frozen-cache / first-playable
+  carry no encounters/signs → the layer is fully dormant → those shipped slices (and their audio) are byte-stable. One-shots
+  are baseline-seeded on bind → a reload never replays a completed cue. `src/main.js` gains only additive wiring; the
+  Performance Contract is unaffected (no geometry → no re-lock; the toast is DOM).
+- **Audio/Feedback-1 gates GREEN**: `test:audio-feedback` (10 Node: new cues valid + originals unchanged; the dormancy
+  invariant — runtime-placed weapons alone do NOT activate; the shrine sign + ONLY the authored exotic extracted, system
+  weapons excluded; seed-then-silence; HIT/DEFEAT/CLEAR order; defeat audible / clear silent; one-shot per id; payoff once;
+  dormant = silent; pure-module scans) + `test:audio-feedback-proof` (SwiftShader on `visual-benchmark-1`: active + ambient
+  + one shared engine → discovery once (visual toast mirrors) → reward once → combat hit→defeat→clear in order (+ RuntimeFeedback
+  fired the clear chord) → carrying the relic fires NO reward → cache payoff once → reload replays no one-shot; objective +
+  beat persist; 0 console errors). Full sweep — `test:frozen-cache-proof`, `test:encounter-polish-proof`,
+  `test:first-playable-proof`, `test:visual-benchmark(-proof)`, `test:content-combat-beats(-proof)`,
+  `test:content-slice-expansion(-proof)`, `test:performance-contract(-proof)`, enemy/combat/world, `build`, `qa` — all green;
+  shipped slices byte-stable. Fresh-context adversarial review (4 dims: byte-stability/no-double-fire · one-shot/reload ·
+  isolation/wiring · proof-rigor + per-finding verify): **2 high + 1 medium + 4 low**, all fixed — the high/medium were one
+  root cause (activation keyed on `runtimeAssets generated.weapon`, which the runtime pollutes with the relic/tutorial → the
+  layer would wake in frozen-cache/first-playable and double the COMPLETE chord); fixed by keying activation on encounters/signs
+  and excluding the system weapons from rewards. 2 refuted (both structurally unreachable). Tree re-audited clean.
+- **Prior stages:** Content-2 (ADR-054, `world-builder-content-2-slice-expansion`) — authored slice expansion (off-route
+  frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system. Content-1 (ADR-053,
+  `world-builder-content-1-combat-beats`) — second authored combat beat (repeatable encounter composition + per-beat label).
+  Encounter-1 (ADR-052) — authored combat-beat polish (telegraph + gate-light + phase/banner). Environment Polish-1 (ADR-051)
+  — visual benchmark expansion + the original `RuntimeFeedback` encounter-clear cue.
+- **Next per ADR-039 roadmap: (await operator pick)** — Audio/Feedback-1 closed the sensory-glue gap; the slice now reads as
+  intentional moment-to-moment. The evidence-gated fork: more authored content/audio (if the slice feels playable but thin),
+  **Enemy-1** movement/patrol (if it now feels static — the bigger foundational seam: terrain grounding, water avoidance,
+  combat range, proximity, state transitions, path validity, reload, performance), or shader/LOD feasibility (only if
+  visuals/perf become the constraint). Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -1896,7 +1899,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 13. Encounter-1 — authored combat-beat polish (telegraph + gate-light + phase/banner), no AI director  ← SHIPPED (ADR-052)
 14. Content-1 — second authored combat beat (repeatable encounter composition: crossing + cache gate), no AI/waves/loot  ← SHIPPED (ADR-053)
 15. Content-2 — authored slice expansion (off-route frozen shrine: exploration + sign + fog + optional exotic reward), no AI/loot-system  ← SHIPPED (ADR-054)
-16. (await operator pick) — Enemy-1 (movement/patrol, the bigger foundational seam) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+16. Audio/Feedback-1 — slice sensory polish (differentiated combat hit/defeat + discovery/reward/cache-payoff cues + a visual milestone toast, reusing the existing ProceduralAudio engine), no audio-engine/AI  ← SHIPPED (ADR-055)
+17. (await operator pick) — Enemy-1 (movement/patrol, the bigger foundational seam) / more authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3000,3 +3004,68 @@ No loot SYSTEM (the reward is one authored optional weapon, not drops/tables/rar
 director. No procedural encounter generation. No shader/LOD experiments or renderer work. No new runtime system — the
 shrine reuses Interaction / Particle / Arsenal loaders unchanged. No `src/main.js` change. No mutation of the two combat
 beats, the relic objective, or the frozen-cache / first-playable slices. No `WORLD_DOCUMENT_VERSION` bump.
+
+## ADR-055 — Audio/Feedback-1: Slice Sensory Polish (observe the seams, reuse the audio engine)
+
+**Status.** Accepted. Tag `world-builder-audio-feedback-1` (local only). Stage 66.
+
+**Context.** Content-2 proved the slice can grow with authored data. The remaining weakness was *feel*, not movement AI:
+the shrine, relic, two sentinels, cache, particles, and completion loop needed stronger moment-to-moment feedback so the
+slice reads as intentional rather than just structurally correct. The operator chose sensory polish before opening the much
+larger Enemy-1 movement/patrol seam.
+
+**Decisive finding — the audio/feedback subsystem already exists (Environment Polish-1 / ADR-051).** `ProceduralAudio` is a
+WebAudio engine (a persistent glacial wind bed on first gesture; short procedural cue melodies; headless-graceful — `cue()`
+no-ops without a gesture). `AudioCues` holds the cue enum + notes. `RuntimeFeedback` fires `COMPLETE` once on the encounter-
+cleared edge. `FrozenCacheSlice` (active in EVERY runtime world) owns its own engine + PICKUP/EQUIP/CACHE on the relic loop.
+So the benchmark already had a wind bed + relic cues + encounter clear; the gaps were combat **HIT/DEFEAT** (distinct from
+clear), **shrine discovery**, a **distinct exotic-reward** pickup, a **deposit→completion payoff**, and a **visual mirror**.
+Audio/Feedback-1 OBSERVES the seams and reuses the engine — it adds no audio engine, no gameplay system, no scene objects.
+
+**Build (3 new modules) + reuse (the engine).** `SliceSensoryLogic.js` (PURE, Node-tested) is the edge detector:
+`reduceSensory(prevState, observation)` emits HIT (rising edge into hit-react), DEFEAT (once), CLEAR (logged, audio-silent —
+RuntimeFeedback owns the chord), DISCOVERY (sign rising edge), REWARD (authored reward carried), COMPLETE (objective edge),
+with a baseline-seed on the first call so a reload never replays a one-shot. `SliceSensory.js` is the runtime owner: it reads
+`EncounterRuntime.snapshot()`, `carry.slotOf(id)`, sign proximity, and the objective latch — mutating NO
+combat/enemy/arsenal/objective/interaction state — and plays cues through a SHARED `ProceduralAudio` (hoisted in `main.js`
+and injected into both `RuntimeFeedback` and `SliceSensory`, so there is no third wind bed; `RuntimeFeedback` now disposes the
+engine only when it created it). `CueOverlay.js` is the milestone toast (DOM, accessibility mirror; per-hit stays mirrored by
+the existing enemy flash). New cue kinds are additive to `AudioCues` (the original four unchanged).
+
+**The load-bearing decision — DORMANCY as the byte-stability guarantee.** The layer activates ONLY for slices carrying
+AUTHORED content the runtime never injects — **encounters or sign interactions**. It deliberately does NOT key activation on
+`runtimeAssets generated.weapon`: the runtime places the relic (`relic-weapon-fp1`) and tutorial (`frozen-cache-field-weapon`)
+weapons into `document.runtimeAssets.items` in EVERY world (via `ObjectiveRuntime.load` / `FrozenCacheSlice.load` → `placeWeapon`
+→ `PlacedAssetStore`), *before* the sensory layer binds — so keying on runtimeAssets would wake the layer in frozen-cache /
+first-playable and double the COMPLETE chord. Reward cues additionally EXCLUDE those system weapons (passed as `systemWeaponIds`),
+so only the authored exotic is loot. Result: frozen-cache / first-playable carry no encounters/signs → the layer is fully
+dormant → those shipped slices and their audio are byte-stable. (This dormancy break was the review's HIGH finding — see below.)
+
+**Wiring (additive only).** `main.js` hoists `sharedAudio`, constructs `sliceSensory` (with `systemWeaponIds`), calls
+`loadSliceSensory` in both load paths after `loadEncounters`, and ticks `tickSliceSensory` in the frame loop + inside
+`__ENCOUNTER_DO__.step` (so the synchronous headless proof observes the hit-react edge a throttled rAF would miss). DEV hooks
+`__SLICE_SENSORY__` / `__SLICE_SENSORY_DO__` / `__AUDIO_SHARED__`. No `WORLD_DOCUMENT_VERSION` bump; no scene geometry → the
+Performance Contract is unaffected (no re-lock).
+
+**Gates.** `test:audio-feedback` (10 Node, including the dormancy invariant — runtime-placed weapons alone do NOT activate —
+and the system-weapon exclusion) + `test:audio-feedback-proof` (SwiftShader, ports 5254/9389: active + ambient + one shared
+engine → discovery once (toast mirrors) → reward once → combat hit→defeat→clear in order (+ RuntimeFeedback's clear chord) →
+carrying the relic fires NO reward → cache payoff once → reload replays no one-shot; 0 console errors). Full sweep —
+frozen-cache / encounter-polish / first-playable / visual-benchmark / content-combat-beats / content-slice-expansion /
+performance-contract proofs, enemy/combat/world, build, qa — all green; shipped slices byte-stable.
+
+**Review.** Fresh-context adversarial review (4 dims: byte-stability/no-double-fire · one-shot/reload · isolation/wiring ·
+proof-rigor + per-finding verify): **2 high + 1 medium + 4 low**, all fixed. The high/medium were ONE root cause — activation
+keyed on `runtimeAssets generated.weapon`, which the runtime pollutes with the relic/tutorial, so the layer would wake on the
+frozen-cache / first-playable slices (firing reward on the tutorial pickup and a SECOND COMPLETE chord over `SliceCompletion`'s).
+Fixed by keying activation on encounters/signs and excluding the system weapons from rewards — with a new regression check
+nailing the dormancy invariant and a runtime proof check that carrying the relic fires no reward. The four lows: a
+`RuntimeFeedback.dispose()` ownership guard (don't dispose injected audio); a vacuous `atSpawn==0` proof precondition (now a
+seeded observe-at-spawn); a tautological `ambient==active` assertion (now also asserts the single shared engine); a redundant
+`indexOf` ordering check in the unit test. 2 findings refuted (both structurally unreachable). Tree re-audited clean (the
+verifier-can-write gotcha — code-reviewer agents have Bash).
+
+**Non-goals (held).** No enemy movement / patrol / chase / attacks / damage. No inventory. No new combat logic. No new
+renderer work. No shader/LOD experiments. No full audio engine, mixer UI, asset-based sound library, voiceover, or music
+system — only small procedural cues through the EXISTING `ProceduralAudio`. No mutation of the combat beats, the relic
+objective, or the frozen-cache / first-playable slices. No `WORLD_DOCUMENT_VERSION` bump.
