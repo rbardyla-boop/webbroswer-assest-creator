@@ -1,3 +1,5 @@
+import { DEFAULT_SLICE_IDENTITY, sliceArrivalBanner } from "./SliceIdentity.js";
+
 export const SLICE_BEATS = Object.freeze({
   ARRIVAL: "arrival",
   JOURNEY: "journey",
@@ -16,7 +18,9 @@ export function deriveSliceBeat({ phase = "find", elapsed = 0, distanceToRelic =
   return SLICE_BEATS.JOURNEY;
 }
 
-export function sliceBanner(beat, objectiveText = "") {
-  if (beat === SLICE_BEATS.ARRIVAL) return "THE FROZEN CACHE · Recover the marked relic";
+export function sliceBanner(beat, objectiveText = "", identity = DEFAULT_SLICE_IDENTITY) {
+  // The ARRIVAL line names the slice (Content-5). The default identity reproduces the pre-Content-5 string
+  // "THE FROZEN CACHE · Recover the marked relic" byte-for-byte, so a 2-arg caller is unchanged.
+  if (beat === SLICE_BEATS.ARRIVAL) return sliceArrivalBanner(identity);
   return objectiveText;
 }

@@ -22,19 +22,26 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-22 (Content-4 accepted; tag `world-builder-content-4-threat-aware-polish`;
-on Combat-1 + Combat-1R: `world-builder-combat-1-threat-feasibility` + `world-builder-combat-1r-review-closure`).**
-- **72 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-22 (Content-5 accepted; tag `world-builder-content-5-slice-completion`;
+prior threat stack: Content-4 `world-builder-content-4-threat-aware-polish` on Combat-1 + Combat-1R).**
+- **73 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-4 — Threat-Aware Encounter Polish**
-  (ADR-061): make the Combat-1 threat READ well in the authored slice with NO new combat rules (the no-Combat-2 boundary). A tiny
-  presentation-only runtime layer + one authored sign: the mixed cache gate's overlapping danger rings DE-NOISE to a single
-  prominent ring (a new PURE `ThreatLogic.pickProminent` picks the nearest in-zone alive enemy; others drop to a faint opacity, the
-  fire flash still reads on whichever fired); the warning NAMES the moment via the threaded encounter label ("The pass — fall back"
-  / "The crossing — fall back"); and a data-only teaching sign on the route teaches the wards are non-lethal + how to recover.
-  `ThreatLogic.stepThreat` + its constants and the Content-1/Content-3 encounters are byte-stable; no `WORLD_DOCUMENT_VERSION` bump;
-  the +1 sign object needed no benchmark re-lock (loose count assertions + a global objects ceiling). Gates: `test:content-4-threat-
-  aware-polish` (5 Node) + `test:content-4-threat-aware-polish-proof` (SwiftShader, 5262/9397). Full sweep + build + qa green.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-5 — Playable Slice Completion Pass**
+  (ADR-062): make the benchmark run *feel* like one coherent slice with a deliberate beginning + ending, through authored pacing +
+  the EXISTING feedback stack — NO new combat rules (the no-Combat-2 boundary still holds; Content-5 is the evidence the slice can
+  feel complete WITHOUT real stakes). Two parts: (1) **scene-coherent completion identity** — the generic playable-slice wrapper
+  `FrozenCacheSlice` loads for ANY objective world, so the benchmark inherited a completion card titled "The Frozen Cache"; a new
+  OPTIONAL authored `document.slice` identity (`SliceIdentity.js`; default = the byte-exact frozen-cache copy) lets the benchmark name
+  its own arrival banner + completion card "The Relic Overlook". (2) **opening orientation** — one data-only sign at the overlook
+  framing the find→carry→deposit loop + the recovery rule. The `slice` block is OPTIONAL + absent-by-default (frozen-cache /
+  first-playable author none → byte-stable), persistence-safe, sanitized + rendered via `textContent` (untrusted-localStorage → card
+  XSS guard); no `WORLD_DOCUMENT_VERSION` bump; the +1 sign needed no benchmark re-lock. Gates: `test:content-5-slice-completion`
+  (5 Node) + `test:content-5-slice-completion-proof` (SwiftShader, 5264/9399, one end-to-end run). Full sweep + build + qa green;
+  fresh-context 5-dim review 0 confirmed.
+- **Prior latest — Content-4 — Threat-Aware Encounter Polish** (ADR-061): made the Combat-1 threat READ well with NO new combat
+  rules — the mixed cache gate's overlapping rings DE-NOISE to one prominent ring (PURE `ThreatLogic.pickProminent`), the warning
+  NAMES the moment via the threaded encounter label, and a data-only teaching sign teaches the non-lethal recovery. `ThreatLogic` +
+  the Content-1/Content-3 encounters byte-stable. Gates `test:content-4-threat-aware-polish(-proof)` (5262/9397) — green.
 - **Combat-1 (ADR-060) + Combat-1R remain the threat foundation** Content-4 polishes: Combat-1 = a FEASIBILITY GATE proving an enemy
   can threaten the player in a bounded, readable, reload-safe way WITHOUT a full health/combat system (a SEPARATE transient
   ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam — danger ring + terrain-clamped knockback + warning + cooldown; defeated stops;
@@ -75,11 +82,14 @@ on Combat-1 + Combat-1R: `world-builder-combat-1-threat-feasibility` + `world-bu
   pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Content-4 de-noise
   target). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
   (ADR-055) — slice sensory polish (the discovery layer the Content-4 teaching sign couples into). Hygiene-1 (chore `e4c6b9a`).
-- **Next per ADR-039 roadmap: (await operator pick)** — Content-4 made the non-lethal threat READ well (de-noised rings,
-  moment-named warnings, a teaching sign). The fork: does the non-lethal threat now read well enough → continue authored content +
-  audio; or does the slice want real stakes → plan **Combat-2: player health / damage / fail-state** (the bigger seam — health bar,
-  death, respawn, recovery, balance, UI; the only place the Combat-1R deferred stale-`inWindow` hardening matters) as a
-  separately-approved stage; shader/LOD only if visuals/perf become the constraint. Keep converting the engine into a product surface.
+- **Next per ADR-039 roadmap: (await operator pick)** — Content-5 made the slice *feel* complete (scene-coherent completion identity
+  + opening orientation), evidence that authored pacing + the existing feedback stack suffice — the slice does NOT yet expose a need
+  for Combat-2. The fork: continue authored content / pacing / a second authored slice; or, if the slice now wants real stakes, plan
+  **Combat-2: player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI; the only
+  place the Combat-1R deferred stale-`inWindow` hardening matters) as a separately-approved stage; shader/LOD only if visuals/perf
+  become the constraint. Two observed-and-deferred slice items (a later stage may pick up): the wrapper draws BOTH authored `vb-*`
+  landmarks AND its own `FrozenCacheLandmarks` on the benchmark, and every `role:"sign"` (incl. the orientation sign) fires the
+  sensory "Discovery" cue. Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -159,7 +169,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → Content-5 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1919,7 +1929,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 20. Enemy-3 — light proximity response (a stationary glacial_sentinel orients+leans toward an in-zone player; a frost_wisp biases its hover drift away; bounded, dormant outside encounters, defeated stops it; a third motion overlay reusing EncounterPresentation's brighten + the encounter zone), no attacks/damage/chase/navmesh/waves/AI  ← SHIPPED (ADR-059)
 21. Combat-1 — enemy threat feasibility (a SEPARATE transient ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam in src/world/combat/: an enemy telegraphs a danger ring, the player crossing the inner radius gets ONE bounded non-lethal event — terrain-clamped knockback + camera shake + audio cue + warning overlay — with a cooldown; defeated enemies stop, encounters stay completable, nothing persists; CombatRuntime byte-stable, dormant without encounters), no health/death/respawn/projectiles/chase/waves/balance/director  ← SHIPPED (ADR-060)
 22. Content-4 — threat-aware encounter polish (make the Combat-1 threat READ well in the authored slice with NO new combat rules: a tiny presentation-only runtime layer — overlapping danger rings DE-NOISE to one prominent ring via the pure ThreatLogic.pickProminent; the warning NAMES the moment via the threaded encounter label ("The pass — fall back"); + a data-only teaching sign on the route. ThreatLogic state machine + Content-1/Content-3 encounters byte-stable; no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance  ← SHIPPED (ADR-061)
-23. (await operator pick) — does the non-lethal threat now read well enough → continue authored content+audio / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+23. Content-5 — playable slice completion pass (make the benchmark run FEEL like one coherent slice with a deliberate beginning + ending, through authored pacing + the EXISTING feedback stack: a scene-coherent completion identity — an OPTIONAL authored document.slice {title,arrivalTagline,completeBody}, default = the byte-exact frozen-cache copy, so the benchmark names its own arrival banner + completion card "The Relic Overlook" instead of inheriting the wrapper's "The Frozen Cache" — plus one data-only opening orientation sign. The slice block is optional/absent-by-default (frozen-cache + first-playable byte-stable), persistence-safe + sanitized + textContent-rendered (untrusted-localStorage→card XSS guard); no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance/renderer  ← SHIPPED (ADR-062)
+24. (await operator pick) — Content-5 shows the slice can feel complete WITHOUT real stakes → continue authored content / pacing / a second authored slice / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3508,6 +3519,79 @@ tuning, chase, waves, or AI director. The threat behaviour (firing, cooldown, kn
 radius) is unchanged; only its presentation (ring prominence, warning copy) and the authored slice (a sign)
 change. CombatRuntime / EnemyTargetAdapter / EncounterPresentation / both player controllers / the
 Content-1/Content-3 encounters byte-untouched. No `WORLD_DOCUMENT_VERSION` bump.
+
+---
+
+## ADR-062 — Content-5: Playable Slice Completion Pass (scene-coherent completion identity + opening orientation)
+
+**Status.** Accepted. Tag `world-builder-content-5-slice-completion` (local only). Stage 73.
+
+**Context.** Content-4 made the threat read; the benchmark run was complete end to end, but it did not *feel*
+like one coherent slice with a deliberate beginning and ending. Two gaps: (1) the OPENING was the weakest beat —
+the only orientation at the overlook was the objective banner; (2) the COMPLETION identity was wrong. The
+generic playable-slice wrapper `FrozenCacheSlice` loads for ANY objective-bearing world (`main.js:901`, not
+gated to `?play`), so the benchmark inherited its completion card titled **"The Frozen Cache"** and an arrival
+banner "THE FROZEN CACHE · …" — a name that did not match the authored "Relic Overlook → cache" corridor. The
+post-completion state read as the wrong slice. Operator pick at the gate (AskUserQuestion): *Fix completion
+identity* — add the opening orientation AND make the card/banner identity scene-coherent, accepting that it
+touches the shared slice wrapper. The slice now reads as a complete run through authored pacing + the EXISTING
+feedback stack (card + banner + green beacon + trophy aura + "Cache sealed" chord/toast) — it does NOT expose a
+need for Combat-2 (the no-Combat-2 boundary holds).
+
+**Decision — an OPTIONAL authored `slice` identity, default = the byte-exact frozen-cache copy.** A new pure
+`src/world/slice/SliceIdentity.js` carries `DEFAULT_SLICE_IDENTITY = { title:"The Frozen Cache",
+arrivalTagline:"Recover the marked relic", completeBody:"The relic is secure. Its trophy remains in the
+valley." }` (byte-exact to the strings the `CompletionCard` markup + the `sliceBanner` ARRIVAL line carried
+before this stage; `title.toUpperCase()` reproduces "THE FROZEN CACHE"), plus `resolveSliceIdentity(doc)`
+(merge `doc.slice` over the default, per-field fallback) and `sanitizeSliceIdentity(block)` (whitelist the
+three string fields, drop unknown keys / non-strings, length-cap, return absent for empty). `CompletionCard`
+gains an optional `identity` + a `setIdentity()` that sets the dynamic `<h1>`/`<p>` via **`textContent`** (never
+interpolated innerHTML); `sliceBanner` gains an `identity` arg (the ARRIVAL line = `sliceArrivalBanner`);
+`FrozenCacheSlice.load()` resolves the identity from the loaded document, applies it to the card, and threads it
+into `bannerText()`. The benchmark (`visualBenchmarkV1.js`) authors `doc.slice = { title:"The Relic Overlook",
+arrivalTagline:"Bear the relic to the cache beyond the pass", completeBody:"The relic rests on the cache; the
+pass is yours, and the valley stands quiet." }` (which upgrades the OPENING — the arrival banner now names the
+slice + goal — AND the COMPLETION card), plus ONE data-only opening **orientation sign** (`vb-orientation-sign`,
+a `role:"sign"` `groundedPrimitive` framing the find→carry→deposit loop + the non-lethal recovery rule).
+
+**Byte-stable-by-default boundary (held + checked).** The frozen-cache play slice and the first-playable slice
+author no `slice` block → `resolveSliceIdentity` returns the DEFAULT → identical card copy + identical arrival
+banner (`test:frozen-cache-proof` / `test:first-playable-proof` green; `test:slice0a` — the play-mode card
+consumer — green; a Node test PINS `DEFAULT_SLICE_IDENTITY` + the ARRIVAL string to the exact prior copy). The
+`slice` block is OPTIONAL and NOT in `createWorldDocument` defaults, so a world without it validates
+byte-identically with zero new warnings and `WORLD_DOCUMENT_VERSION` stays 2. `CompletionCard`/`sliceBanner`
+have no other consumers (grep-confirmed). No combat/renderer/schema-version change.
+
+**Persistence + security.** `createWorldDocument`/`mergeWorldDocument` pass unknown top-level keys straight
+through to `JSON.stringify`, so `doc.slice` **survives `WorldSerializer.save()` → reload with no
+serializer-whitelist edit** — but it would persist UNSANITIZED. Because the identity flows to the completion
+card, `validateWorldDocument` calls `sanitizeSliceIdentity` (whitelist + length-cap; drop a malformed block
+with a warning) and the card renders it via `textContent`, closing the untrusted-localStorage → innerHTML path
+(per the project security rule). This is the load-bearing invariant for "the reload identity stays coherent."
+
+**Gates.** `test:content-5-slice-completion` (5 Node: the DEFAULT identity is byte-exact → frozen-cache /
+first-playable unchanged; `resolveSliceIdentity` merge + `sanitizeSliceIdentity` whitelist/bounds; the benchmark
+authors the overlook identity + the orientation sign; the `slice` block is additive, sanitized,
+persistence-safe via a save→load round-trip, and absent-by-default with zero warnings; `SliceIdentity` stays
+pure) + `test:content-5-slice-completion-proof` (SwiftShader, ports 5264/9399 — one end-to-end slice run: the
+live wrapper resolves "The Relic Overlook" not "The Frozen Cache"; the orientation sign loads + reads; the mixed
+gate de-noises to ONE prominent ring; a threat fires + names the moment + the shove leaves the player on finite
+ground; depositing the relic completes the run and the completion CARD shows "The Relic Overlook" + the authored
+ending + trophy + the "Cache sealed" cue; reload preserves completion + trophy + the overlook identity, the
+transient threat does not replay; 0 console errors). Full sweep — frozen-cache / first-playable / slice0a /
+audio-feedback / visual-benchmark / content-4 / content-3 / encounter-polish / combat-threat-feasibility /
+content-slice-expansion / combat / encounter-editor / content-combat-beats / enemy / enemy-proximity /
+enemy-patrol / enemy-archetypes / performance-contract proofs, all Node, build, qa 32/0/0 + 43/0/0 — green
+(performance-contract + content-combat-beats are sweep-fragile under back-to-back load; both pass in isolation).
+The +1 orientation-sign object needed NO benchmark re-lock (loose count assertions; the capture is draws 123 /
+objs 21 / tris ~501,634, within budget). Fresh-context 5-dimension adversarial review (byte-stability /
+additive-schema / security-XSS / authored-data / proof-rigor): 0 confirmed defects.
+
+**Non-goals (held).** No player health, death, respawn, attacks, projectiles, balance, chase, waves, or AI
+director; no renderer/shader/LOD; no `WORLD_DOCUMENT_VERSION` bump. The threat behaviour is unchanged; the slice
+wrapper's runtime behaviour is unchanged except the resolved identity (default = the prior copy). The double
+authored-vs-slice landmarks and the sensory "Discovery" cue the new sign fires (every `role:"sign"` does) are
+observed-and-deferred, not addressed here.
 
 ---
 

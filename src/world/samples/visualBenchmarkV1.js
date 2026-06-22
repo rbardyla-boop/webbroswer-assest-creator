@@ -130,6 +130,17 @@ export function buildVisualBenchmarkV1() {
   doc.water = benchmarkWater();
   doc.atmosphere = benchmarkAtmosphere();
 
+  // --- Content-5: this scene's completion identity (the generic slice wrapper reads it) -----------
+  // The runtime's playable-slice wrapper (FrozenCacheSlice) loads for any objective-bearing world; without
+  // this it would title this corridor's arrival banner + completion card "The Frozen Cache". Authoring the
+  // identity names the run's beginning (the arrival banner) AND its ending (the completion card). Optional,
+  // sanitized on load; worlds that omit it keep the byte-exact frozen-cache default.
+  doc.slice = {
+    title: "The Relic Overlook",
+    arrivalTagline: "Bear the relic to the cache beyond the pass",
+    completeBody: "The relic rests on the cache; the pass is yours, and the valley stands quiet.",
+  };
+
   const objects = [];
 
   // --- Overlook gateway at the spawn, opening toward the cache (frames the sightline) -------------
@@ -138,6 +149,18 @@ export function buildVisualBenchmarkV1() {
   objects.push(groundedPrimitive("vb-overlook-pillar-r", "Overlook Pillar R", "cube", offset(spawn, perp, -2.4), { x: 0.6, y: 3.6, z: 0.6 }, { rotationY: gateYaw }));
   // The lintel spans the pillars at the gateway top — set its absolute Y at construction (no post-mutation).
   objects.push(groundedPrimitive("vb-overlook-lintel", "Overlook Lintel", "cube", spawn, { x: 5.4, y: 0.6, z: 0.7 }, { rotationY: gateYaw, absoluteY: getHeight(spawn.x, spawn.z) + 3.4 }));
+
+  // --- Content-5: an opening orientation sign at the overlook (data-only interaction) -------------
+  // Read at the gateway before committing: it frames the WHOLE loop (find the relic below → carry it past
+  // the crossing → deposit at the cache) AND the non-lethal recovery rule, so the run reads as a deliberate
+  // beginning. Just ahead of the gateway, perp-offset off the carry centerline. Reuses the Content-2/4 sign.
+  const orientationSign = offset(spawn, perp, 3.2, { x: dir.x * 1.5, z: dir.z * 1.5 });
+  objects.push(
+    groundedPrimitive("vb-orientation-sign", "Overlook Marker", "cube", orientationSign, { x: 0.5, y: 1.8, z: 0.5 }, {
+      rotationY: gateYaw,
+      interaction: { role: "sign", text: "Overlook of the pass. A relic lies in the ruin below — bear it past the crossing to the cache beyond the pass. The valley's wards will shove you back but cannot fell you: fall back, gather yourself, then break through.", showRadius: 9 },
+    })
+  );
 
   // --- Ruin marking the relic (off the carry centerline, on the relic side) ----------------------
   for (let i = 0; i < 3; i++) {

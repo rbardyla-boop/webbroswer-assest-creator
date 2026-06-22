@@ -8,6 +8,7 @@ import { CompletionCard } from "../feedback/CompletionCard.js";
 import { InteractionPrompt } from "../feedback/InteractionPrompt.js";
 import { ObjectiveBeacon } from "../feedback/ObjectiveBeacon.js";
 import { deriveSliceBeat, sliceBanner } from "./SliceBeats.js";
+import { DEFAULT_SLICE_IDENTITY, resolveSliceIdentity } from "./SliceIdentity.js";
 import { buildSliceLandmarks, disposeSliceLandmarks } from "./SliceLandmarks.js";
 import { SlicePrompts } from "./SlicePrompts.js";
 import { SliceCompletion } from "./SliceCompletion.js";
@@ -40,6 +41,9 @@ export class FrozenCacheSlice {
       onExplore: () => this.trace?.record("explore", "kept exploring the finished valley", this.elapsed),
     });
     this.completion = new SliceCompletion(this.card, this.audio);
+    // Content-5: the resolved slice completion identity (name/arrival/ending). Default until load() reads it
+    // from the document; the default reproduces the original "The Frozen Cache" copy byte-for-byte.
+    this.identity = DEFAULT_SLICE_IDENTITY;
     this.elapsed = 0;
     this.beat = "arrival";
     this.landmarks = null;
@@ -67,6 +71,10 @@ export class FrozenCacheSlice {
     this.store = placedAssetStore;
     this.placedWeapons = placedWeaponRuntime;
     this.elapsed = 0;
+    // Content-5: resolve this scene's completion identity (the authored `document.slice`, or the byte-exact
+    // default) and apply it to the card. The arrival banner uses it via bannerText().
+    this.identity = resolveSliceIdentity(document);
+    this.card.setIdentity(this.identity);
     const state = this.objective.debugSnapshot();
     if (!state.present || !state.cache) return false;
     const relic = state.relicPos;
@@ -214,7 +222,7 @@ export class FrozenCacheSlice {
   }
 
   bannerText() {
-    return sliceBanner(this.beat, this.objective.bannerText());
+    return sliceBanner(this.beat, this.objective.bannerText(), this.identity);
   }
 
   debugSnapshot() {
@@ -228,6 +236,8 @@ export class FrozenCacheSlice {
         text: this.promptView.element.querySelector("span").textContent,
       } : null,
       beaconVisible: this.beacon.root.visible,
+      // Content-5: the resolved scene completion identity (drives the arrival banner + the completion card).
+      identity: { ...this.identity },
       landmarks: this.landmarks?.children.map((child) => child.name) ?? [],
       tutorialWeaponPresent: !!this.store?.list().some((item) => item.id === TUTORIAL_WEAPON_ID),
       completionCardVisible: this.card.visible,

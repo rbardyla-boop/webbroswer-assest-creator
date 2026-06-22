@@ -85,6 +85,8 @@
     "test:combat-threat-feasibility-proof": "node scripts/browser-combat-threat-feasibility-proof.mjs",
     "test:content-4-threat-aware-polish": "node scripts/content-4-threat-aware-polish-regression.mjs",
     "test:content-4-threat-aware-polish-proof": "node scripts/browser-content-4-threat-aware-polish-proof.mjs",
+    "test:content-5-slice-completion": "node scripts/content-5-slice-completion-regression.mjs",
+    "test:content-5-slice-completion-proof": "node scripts/browser-content-5-slice-completion-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",

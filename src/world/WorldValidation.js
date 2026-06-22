@@ -20,6 +20,7 @@ import { sanitizeObjectivesBlock } from "./objectives/ObjectiveTypes.js";
 import { sanitizeEnemiesBlock } from "./enemies/EnemyValidation.js";
 import { sanitizeEncountersBlock } from "./encounters/EncounterValidation.js";
 import { sanitizeAuthoringBlock } from "./authoring/AuthoringTypes.js";
+import { sanitizeSliceIdentity } from "./slice/SliceIdentity.js";
 import { sanitizeAssetBudget } from "../assets/AssetBudget.js";
 
 // Hard ceiling on placed objects from one (possibly untrusted) world document.
@@ -88,6 +89,15 @@ export function validateWorldDocument(input) {
   // Procedural authoring (Procedural Authoring-1): splines/masks/modifiers whitelisted +
   // capped. The modifier visuals re-derive each load, so only this intent block persists.
   doc.authoring = sanitizeAuthoringBlock(doc.authoring, warnings);
+  // Slice completion identity (Content-5) — OPTIONAL: a scene may name its own completion card / arrival
+  // banner. Absent by default (not in createWorldDocument), so worlds without it keep no `slice` key and
+  // validate byte-identically. When present it is whitelisted + length-capped here because it can arrive
+  // from untrusted localStorage and flows to the completion card (the card renders it via textContent).
+  if (doc.slice !== undefined) {
+    const slice = sanitizeSliceIdentity(doc.slice, warnings);
+    if (slice) doc.slice = slice;
+    else delete doc.slice;
+  }
 
   doc.terrain.size = positiveNumber(doc.terrain.size, 700);
   doc.terrain.segments = Math.max(8, Math.floor(positiveNumber(doc.terrain.segments, 240)));

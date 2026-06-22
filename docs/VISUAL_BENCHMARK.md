@@ -222,6 +222,24 @@ and the Performance-Contract `objects` ceiling is global; the capture shifts to 
 ~501,722, still within budget). Note: the teaching sign also fires the audio "Discovery" cue when found (it is
 a discoverable authored sign) — benign and unasserted against.
 
+## Content-5 — playable slice completion pass (ADR-062)
+
+Content-5 makes the benchmark run **feel** like one coherent slice with a deliberate beginning and ending,
+through authored pacing + the **existing** feedback stack — **no** new combat rules. Two parts. (1) **Scene-
+coherent completion identity:** the generic playable-slice wrapper (`FrozenCacheSlice`) loads for *any*
+objective-bearing world, so the benchmark used to inherit a completion card + arrival banner titled "The Frozen
+Cache". A new OPTIONAL authored `document.slice` identity (`{ title, arrivalTagline, completeBody }`; resolved
+on load, **default = the byte-exact frozen-cache copy**) lets this scene name its own arrival banner and
+completion card **"The Relic Overlook"** — so the opening banner names the slice + goal and the post-completion
+card reads this run's own ending. (2) **Opening orientation:** one data-only **`vb-orientation-sign`** at the
+overlook frames the whole find→carry→deposit loop + the non-lethal recovery rule before the player commits. The
+`slice` block is OPTIONAL and absent by default (the frozen-cache + first-playable slices author none → they
+stay byte-identical, "The Frozen Cache"), survives save→load (sanitized + length-capped on validation, rendered
+via `textContent` so untrusted persisted strings never reach `innerHTML`); no `WORLD_DOCUMENT_VERSION` bump. The
+one new sign needed **no benchmark re-lock** (draws 123 / objs 21 / tris ~501,634, within budget). The
+completion feedback it surfaces — green cache beacon, tier-coloured trophy aura, the "Cache sealed" chord/toast
+— already existed; Content-5 only makes the run read as a deliberate whole around it.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -259,3 +277,13 @@ a discoverable authored sign) — benign and unasserted against.
   moment in the warning ("The pass" / "The crossing" — fall back); the teaching sign surfaces its recovery
   text; the cache beats still complete despite the threat; reload drops the transient threat while the sign +
   completions persist; benchmark within budget (draws 122 / objs 20), 0 errors.
+- `test:content-5-slice-completion(-proof)` — the slice completion pass (Content-5): the DEFAULT slice identity
+  is byte-exact (frozen-cache / first-playable cards + arrival banners unchanged); `resolveSliceIdentity` merges
+  an authored `document.slice` over it; `sanitizeSliceIdentity` whitelists the three string fields + bounds
+  length; the benchmark authors the overlook identity + the `vb-orientation-sign`; the `slice` block is
+  additive, persistence-safe (save→load round-trip), and absent-by-default with zero warnings. The proof (one
+  end-to-end run): the live wrapper resolves "The Relic Overlook" (not "The Frozen Cache"); the orientation sign
+  reads; the mixed gate de-noises to one prominent ring; a threat fires + names the moment + leaves the player
+  on finite ground; depositing completes the run and the completion CARD shows "The Relic Overlook" + the
+  authored ending + trophy + the "Cache sealed" cue; reload preserves completion + trophy + the overlook
+  identity (not reverted), drops the transient threat; benchmark within budget (draws 123 / objs 21), 0 errors.
