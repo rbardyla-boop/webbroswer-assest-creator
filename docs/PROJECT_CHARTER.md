@@ -22,7 +22,8 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-21 (Combat-1 accepted; tag `world-builder-combat-1-threat-feasibility`).**
+**Health snapshot — as of 2026-06-22 (Combat-1 accepted + Combat-1R review closed; tags
+`world-builder-combat-1-threat-feasibility` + `world-builder-combat-1r-review-closure`).**
 - **71 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
 - **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Combat-1 — Enemy Threat Feasibility**
@@ -54,6 +55,14 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
   enemy-archetypes / enemy-proximity / encounter-editor / encounter-polish / content-3 / content-combat-beats / visual-benchmark /
   content-slice-expansion / audio-feedback / performance-contract / frozen-cache / first-playable proofs, all Node, build, qa — all
   green; CombatRuntime + the dormant slices are byte-stable.
+- **Combat-1R — review closure (no feature changes).** The fresh-context review deferred at ship time (session
+  limit) was re-run over the operator's five risk dimensions (dormancy/byte-stability, threat edge/cooldown,
+  knockback terrain safety, mixed-encounter overlap, persistence/no-save-state-damage): **0 critical / 0 high /
+  0 medium / 0 low CONFIRMED** → the shipped tag is confirmed valid; no repair. Two raw findings (both in the
+  knockback dimension) were adversarially **refuted** as non-defects — a benign multi-enemy frame-stale
+  `inWindow` read in the rare overlapping-inner-window case (flagged as a Combat-2 hardening, since it only
+  matters once real health exists) and an unreachable `safePlace`-null bypass. See ADR-060 for the closure
+  record + the deferred-hardening note. Tree clean; deterministic gates unchanged + green.
 - **Prior stages:** Enemy-3 (ADR-059, `world-builder-enemy-3-proximity`) — enemies feel AWARE: a stationary sentinel orients +
   leans toward an in-zone player, a wisp biases its hover drift away (a third motion overlay; the awareness Combat-1 escalates into
   bounded pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Combat-1
@@ -3405,6 +3414,25 @@ one bounded non-lethal event per crossing; the encounter stays completable; noth
 EnemyTargetAdapter / EncounterPresentation / both player controllers byte-untouched. No `WORLD_DOCUMENT_VERSION`
 bump. If a later stage wants real player health, it decides so separately; if threat ever feels messy, the
 slice stays non-lethal here.
+
+**Combat-1R — Review Closure (no feature changes; tag `world-builder-combat-1r-review-closure`, local).** The
+fresh-context adversarial review deferred at ship time (the 5-dimension workflow had hit the session limit)
+was re-run against the committed code (d77457a) over the operator's five risk dimensions: (1) dormancy /
+byte-stability, (2) threat edge / cooldown correctness, (3) knockback terrain safety, (4) mixed-encounter
+overlap behavior, (5) persistence boundary / no save-state damage. Result: **0 critical / 0 high / 0 medium /
+0 low CONFIRMED** — the shipped tag is confirmed valid; no repair. Two raw findings were raised in dimension 3
+and both adversarially **refuted** as non-defects, accepted with evidence: (a) *multi-enemy compound knockback
+reads a frame-stale player position* — `ThreatRuntime.update` snapshots `player.position` once before the
+per-enemy loop, so in the rare case of two OVERLAPPING INNER danger windows, a later enemy's `inWindow` is
+evaluated against the pre-knockback position; the verifier confirmed the later enemy's knockback direction +
+terrain validation are still computed live (no NaN, no soft-lock, no unsafe placement) and the worst case is
+one extra bounded, terrain-safe, non-lethal push — harmless while no health exists, so not a contract defect.
+(b) *`safePlace` null bypass* — unreachable: the sole construction site always passes `isWalkable`. **Noted
+hardening for Combat-2:** finding (a) becomes a "free extra hit from an enemy you were already pushed away
+from" only once real player health/damage is added — at that point ThreatRuntime should read `player.position`
+per-enemy inside the loop (live position) so an enemy whose window you've been ejected from does not also
+fire. Deliberately deferred here because changing that edge-case outcome would be new threat behavior, outside
+the Combat-1 / Combat-1R no-feature boundary. Tree clean; deterministic gates unchanged + green.
 
 ---
 
