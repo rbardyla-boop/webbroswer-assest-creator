@@ -6,12 +6,14 @@ import { buildVerticalSliceV1, VERTICAL_SLICE_ID } from "./verticalSliceV1.js";
 import { buildVisualBenchmarkV1, VISUAL_BENCHMARK_ID } from "./visualBenchmarkV1.js";
 import { buildEnemyArchetypeLab, ENEMY_ARCHETYPE_LAB_ID } from "./enemyArchetypeLab.js";
 import { buildIceChapelV1, ICE_CHAPEL_ID } from "./iceChapelV1.js";
+import { buildFrostCausewayV1, FROST_CAUSEWAY_ID } from "./frostCausewayV1.js";
 
 const SAMPLE_BUILDERS = {
   [VERTICAL_SLICE_ID]: buildVerticalSliceV1,
   [VISUAL_BENCHMARK_ID]: buildVisualBenchmarkV1,
   [ENEMY_ARCHETYPE_LAB_ID]: buildEnemyArchetypeLab,
   [ICE_CHAPEL_ID]: buildIceChapelV1,
+  [FROST_CAUSEWAY_ID]: buildFrostCausewayV1,
 };
 
 const SAMPLE_LABELS = {
@@ -19,6 +21,7 @@ const SAMPLE_LABELS = {
   [VISUAL_BENCHMARK_ID]: "Visual Benchmark 1",
   [ENEMY_ARCHETYPE_LAB_ID]: "Enemy Archetype Lab",
   [ICE_CHAPEL_ID]: "The Ice Chapel",
+  [FROST_CAUSEWAY_ID]: "The Frost Causeway",
 };
 
 export function getSampleWorld(id) {

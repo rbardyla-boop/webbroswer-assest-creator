@@ -22,30 +22,37 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-22 (Slice Authoring Kit-1 accepted; tag `world-builder-slice-authoring-kit-1`;
-prior: Slice-1 `world-builder-slice-1-second-authored-slice`).**
-- **75 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-22 (Slice-2 accepted; tag `world-builder-slice-2-kit-built`;
+prior: Slice Authoring Kit-1 `world-builder-slice-authoring-kit-1`).**
+- **76 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice Authoring Kit-1 — a byte-compatible authoring layer**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-2 — The Frost Causeway, the kit's first from-scratch slice**
+  (ADR-065): a THIRD playable authored slice (`frost-causeway-1`, `?world=frost-causeway-1`) — and the FIRST assembled FROM `SliceKit`
+  rather than hand-rolled — proving the authoring kit accelerates *production* without losing safety. A seeded alpine field
+  (`terrain.seed=251`, probe-chosen) relocates the run to the far south of the EAST wall (≈130 m from both prior slices): spawn on a
+  broken ridge, climb to the relic on the crown, bear it DOWN a 26 m descent across the causeway to a seal low on the frozen basin
+  floor. Its OWN "pale overcast whiteout" readability (weakest sun, brightest hemisphere, palest fog — a distinct third identity); a
+  self-contained primitive seal (NO GLB); THREE combat beats (a moving `glacial_sentinel` patrol + a mixed cache fight: a stationary
+  `glacial_sentinel` + a `frost_wisp`). KIT-BUILT (the production delta): the builder imports the kit factories and hand-rolls NO local
+  helper copies; every structural block is byte-equal to the kit output (incl. the whiteout values pinned to `mergeGlacialLighting(
+  WHITEOUT_LIGHTING)`); `validateSliceComposition` accepts it; the UNCHANGED shared `slice-proof` helper drove the new 3-beat/no-GLB
+  combination with ZERO per-slice branching. NEW file + a +3-line registry entry only → the two prior slice builders, the frozen
+  slices, the kit modules, and all global defaults stay byte-stable; no combat/renderer/schema; no `WORLD_DOCUMENT_VERSION` bump.
+  Operator picks (AskUserQuestion): seed 251 (ridge descent) + pale overcast whiteout. Gates `test:slice-2` (13 Node) +
+  `test:slice-2-proof` (SwiftShader, 5270/9405). Full sweep + build + qa green; fresh-context 5-dim review **0 confirmed** (1 LOW
+  refuted; the refuter's named optional lighting-value hardening applied anyway + verified to catch a previously-missed tamper).
+- **Prior latest — Slice Authoring Kit-1 — a byte-compatible authoring layer**
   (ADR-064): extract the repeatable slice pattern (proven twice) into a PURE, testable authoring layer so slice *production* is
-  reproducible — NOT a new runtime system. `SliceKit.js` (byte-compatible document-block factories: `sliceLayout({seed})`,
-  `groundedPrimitive`/`offset`, `encounterBeat`, `generatedWeaponReward`, `beaconTrail`, `mergeGlacialLighting`), `SliceSeedProbe.js`
-  (a deterministic seed report + `npm run slice:probe`), `SliceComposition.js` (`validateSliceComposition` → accepts both slices,
-  rejects malformed ones), and `scripts/lib/slice-proof.mjs` (one descriptor-driven proof helper that drives BOTH slices). NEW modules
-  + scripts + docs only → the two slice builders, the frozen slices, and all global defaults stay byte-stable; the factories are PROVEN
-  byte-equal to BOTH slices (migration-ready) without migrating them. No combat/renderer/schema; no `WORLD_DOCUMENT_VERSION` bump.
-  Operator picks (AskUserQuestion): full byte-compatible factory kit + leave the existing proofs untouched. Gates
-  `test:slice-authoring-kit` (6 Node) + `test:slice-authoring-kit-proof` (SwiftShader, 5268/9403, drives both slices). Full sweep
-  (11 proofs) + build + qa green; fresh-context 5-dim review 2 MEDIUM fixed + re-verified, 0 outstanding.
-- **Prior latest — Slice-1 — Second Authored Slice ("The Ice Chapel")**
-  (ADR-063): prove **repeatability** — a SECOND distinct playable slice (`ice-chapel-1`, `?world=ice-chapel-1`) from the SAME systems,
-  NOT a mutation of the benchmark. A seeded alpine field (`terrain.seed=137`) relocates the run to the OPPOSITE valley wall (spawn high
-  on a broken stair → descend → a chapel seal on the trough floor); its OWN colder/mistier per-scene readability + its OWN "The Ice
-  Chapel" slice identity; an off-route shrine reward; TWO combat beats (a moving `glacial_sentinel` patrol + a `frost_wisp` guardian —
-  a different count + staging than the benchmark's three). NO objectives block (the runtime auto-derives the relic→seal loop); the
-  loader reproduces the seed in play (mesh==sampling==placement). New file + a +1 registry entry only → the benchmark + frozen slices +
-  global defaults stay byte-stable; no new combat/renderer/schema (a normal v2 document). Gates `test:slice-1` (12 Node) +
-  `test:slice-1-proof` (SwiftShader, 5266/9401). Full sweep + build + qa green; fresh-context 5-dim review 0 confirmed.
+  reproducible — NOT a new runtime system. `SliceKit.js` (byte-compatible factories), `SliceSeedProbe.js` (a deterministic seed report
+  via `npm run slice:probe`), `SliceComposition.js` (`validateSliceComposition`), and `scripts/lib/slice-proof.mjs` (one descriptor-driven
+  proof helper that drives BOTH slices). NEW modules + scripts + docs only → the two slice builders, the frozen slices, and all global
+  defaults stay byte-stable; the factories are PROVEN byte-equal to BOTH slices (migration-ready) without migrating them. Gates
+  `test:slice-authoring-kit` (6 Node) + `test:slice-authoring-kit-proof` (SwiftShader, 5268/9403). Full sweep + build + qa green;
+  fresh-context 5-dim review 2 MEDIUM fixed + re-verified, 0 outstanding. **Slice-2 (ADR-065) is the kit's first from-scratch slice.**
+- **Earlier — Slice-1 — Second Authored Slice ("The Ice Chapel")**
+  (ADR-063): prove **repeatability** — a SECOND distinct playable slice (`ice-chapel-1`) from the SAME systems via a seeded field
+  (`terrain.seed=137`, opposite valley wall) with its OWN colder/mistier identity + TWO combat beats. New file + a +1 registry entry
+  only → byte-stable. Gates `test:slice-1` (12 Node) + `test:slice-1-proof` (5266/9401). Fresh-context 5-dim review 0 confirmed.
 - **Earlier — Content-5 — Playable Slice Completion Pass**
   (ADR-062): make the benchmark run *feel* like one coherent slice with a deliberate beginning + ending, through authored pacing +
   the EXISTING feedback stack — NO new combat rules (the no-Combat-2 boundary still holds; Content-5 is the evidence the slice can
@@ -102,13 +109,15 @@ prior: Slice-1 `world-builder-slice-1-second-authored-slice`).**
   pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Content-4 de-noise
   target). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
   (ADR-055) — slice sensory polish (the discovery layer the Content-4 teaching sign couples into). Hygiene-1 (chore `e4c6b9a`).
-- **Next per ADR-039 roadmap: (await operator pick)** — Slice Authoring Kit-1 turned the twice-proven slice pattern into a pure,
-  byte-compatible authoring layer (factories + seed probe + composition validators + shared proof helpers + a checklist), so slice
-  *production* is now reproducible (not bespoke hand-authoring). The natural next move is **Slice-2 built WITH the kit** — it proves
-  production acceleration (faster, safer, less hand-rolled) and is the validation the kit needs. The broader fork still holds: keep
-  extending authored content (Slice-2 / deeper environment / more variety); or, if the slices now want real stakes, plan **Combat-2:
-  player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI; the only place the
-  Combat-1R deferred stale-`inWindow` hardening matters) as a separately-approved stage; shader/LOD only if visuals/perf become the
+- **Next per ADR-039 roadmap: (await operator pick)** — Slice-2 (The Frost Causeway, ADR-065) is the kit's first from-scratch slice:
+  it proved **production acceleration** — the slice was assembled from `SliceKit` (no hand-rolled helpers), validated by
+  `SliceComposition`, seed-chosen by `SliceSeedProbe`, and driven by the UNCHANGED shared `slice-proof` helper with zero per-slice
+  branching; structure came from the kit, only content stayed bespoke. The authored-slice line is now established AND accelerated
+  (feels complete without stakes · repeatable across distinct scenes · reproducible AND faster via the kit). The fork: keep extending
+  authored content (more slices via the kit / deeper environment / more variety); or — only when authored slices repeatedly show
+  non-lethal threat is no longer enough — plan **Combat-2: player health / damage / fail-state** (the bigger seam — health bar, death,
+  respawn, recovery, balance, UI; the only place the Combat-1R deferred stale-`inWindow` hardening matters) as a separately-approved
+  stage; shader/LOD only if visuals/perf become the
   constraint. Observed-and-deferred slice items a later stage may pick up: the wrapper draws BOTH authored landmarks AND its own
   `FrozenCacheLandmarks`, and every `role:"sign"` fires the sensory "Discovery" cue. A future opt-in migration can adopt the kit in
   the two shipped slices (the factories are proven byte-equal). Keep converting the engine into a product surface.
@@ -191,7 +200,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → Content-5 → Slice-1 → Slice Authoring Kit-1 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → Content-5 → Slice-1 → Slice Authoring Kit-1 → Slice-2 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1954,7 +1963,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 23. Content-5 — playable slice completion pass (make the benchmark run FEEL like one coherent slice with a deliberate beginning + ending, through authored pacing + the EXISTING feedback stack: a scene-coherent completion identity — an OPTIONAL authored document.slice {title,arrivalTagline,completeBody}, default = the byte-exact frozen-cache copy, so the benchmark names its own arrival banner + completion card "The Relic Overlook" instead of inheriting the wrapper's "The Frozen Cache" — plus one data-only opening orientation sign. The slice block is optional/absent-by-default (frozen-cache + first-playable byte-stable), persistence-safe + sanitized + textContent-rendered (untrusted-localStorage→card XSS guard); no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance/renderer  ← SHIPPED (ADR-062)
 24. Slice-1 — second authored slice ("The Ice Chapel"): prove REPEATABILITY — a SECOND distinct playable slice (`ice-chapel-1`, `?world=ice-chapel-1`) from the SAME systems, NOT a mutation of the benchmark. A seeded alpine field (`terrain.seed=137`, seed-sensitive via `so=seed*0.013`) relocates `findGoodSpawn` to the OPPOSITE valley wall (spawn high on a broken stair → `deriveSites` puts the relic up-wall + the cache/chapel-seal on the trough floor → a climb-to-find/descend-to-seal carry ≈160m from the benchmark); its OWN colder/mistier per-scene readability (`chapelLighting`/`chapelWater`/`chapelAtmosphere`, per-document) + its OWN "The Ice Chapel" slice identity; an off-route shrine reward (PURE arsenal recipe modules); TWO combat beats (a moving `glacial_sentinel` patrol "the descent" + a `frost_wisp` guardian "the seal") — a different count + staging than the benchmark's three; NO objectives block (runtime auto-derives the relic→seal loop); a primitive seal (no GLB dependency). The loader reproduces the seed in play (`load`→`applyTerrainSettings(doc.terrain)`→`createTerrainProfile`; `new Terrain(doc.terrain)` → mesh==sampling==placement). NEW file + a +1 registry entry only → the benchmark + frozen slices + global defaults stay byte-stable; no new combat/renderer/schema (a normal v2 document). Gates `test:slice-1` (12 Node) + `test:slice-1-proof` (SwiftShader 5266/9401); full sweep + build + qa green; fresh-context 5-dim review 0 confirmed  ← SHIPPED (ADR-063)
 25. Slice Authoring Kit-1 — a byte-compatible authoring layer for slices: extract the twice-proven slice pattern into a PURE, testable authoring layer so slice PRODUCTION is reproducible (not bespoke hand-authoring) — NOT a new runtime system. `src/world/slice/SliceKit.js` (byte-compatible document-block factories: `sliceLayout({seed})`/`groundedPrimitive`/`offset`/`encounterBeat`/`generatedWeaponReward`/`beaconTrail`/`mergeGlacialLighting`, all PROVEN deepEqual to BOTH shipped slices' blocks), `SliceSeedProbe.js` (`probeSliceSeed`/`probeSliceSeeds` deterministic report + `npm run slice:probe` CLI), `SliceComposition.js` (`validateSliceComposition` → `{ok,issues}`: accepts both slices, rejects bad-sites/carry-blocker/missing-identity/missing-sign/bad-beats), `scripts/lib/slice-proof.mjs` (ONE descriptor-driven SwiftShader proof helper that drives BOTH slices; strike falls back to the encounter centre for a stationary sentinel absent from `__ENEMY_LIVE__`), `docs/SLICE_AUTHORING.md` checklist. Operator picks (AskUserQuestion): full byte-compatible factory kit + leave existing proofs untouched. NEW modules + scripts + docs + a +3-script package.json only → the two slice builders, the frozen slices, and all global defaults stay byte-stable (`resolveSliceIdentity({}).title` still "The Frozen Cache"); no combat/renderer/schema; no `WORLD_DOCUMENT_VERSION` bump; factories byte-equal → migration-ready, NOT migrated. Gates `test:slice-authoring-kit` (6 Node) + `test:slice-authoring-kit-proof` (SwiftShader 5268/9403); full sweep (11 proofs) + build + qa green; fresh-context 5-dim review 2 MEDIUM (1-beat recover NPE guard + benchmark byte-equality gap) FIXED + re-verified  ← SHIPPED (ADR-064)
-26. (await operator pick) — the authored-slice line is established (feels complete WITHOUT stakes · repeatable across distinct scenes · production now reproducible via the kit) → **Slice-2 built WITH the kit** (proves production acceleration — the kit's validation) / else keep extending authored content (deeper environment / more variety) / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+26. Slice-2 — The Frost Causeway, the kit's first from-scratch slice: a THIRD playable authored slice (`frost-causeway-1`, `?world=frost-causeway-1`) assembled FROM `SliceKit` rather than hand-rolled, proving the authoring kit ACCELERATES production without losing safety. A probe-chosen seeded field (`terrain.seed=251`) relocates the run to the far south of the EAST wall (≈130 m from both prior slices): spawn on a broken ridge → climb to the relic on the crown → bear it DOWN a 26 m descent across the causeway → a seal low on the frozen basin floor. Its OWN "pale overcast whiteout" readability (weakest sun / brightest hemisphere / palest fog — a distinct third identity, via `mergeGlacialLighting(WHITEOUT_LIGHTING)`); a self-contained primitive seal (NO GLB); THREE combat beats (a moving `glacial_sentinel` patrol "the causeway" + a mixed cache fight: a stationary `glacial_sentinel` "the cache mouth" + a `frost_wisp` "the seal"). KIT-BUILT (the production delta): the builder imports `sliceLayout`/`groundedPrimitive`/`offset`/`sliceIdentity`/`encounterBeat`/`generatedWeaponReward`/`beaconTrail`/`mergeGlacialLighting`/`routeRadius` and hand-rolls NO local copies; every structural block is byte-equal to the kit output; `validateSliceComposition(doc,{expectBeats:3})` accepts it (the gate proves it rejects no-sign/wrong-count/blocked-centerline); the UNCHANGED shared `slice-proof` helper drove the NEW 3-beat/no-GLB combination (chapel=2/no-GLB, benchmark=3/GLB) with ZERO per-slice branching (the stationary cache sentinel defeated via the helper's encounter-centre fallback). Operator picks (AskUserQuestion): seed 251 (ridge descent) + pale overcast whiteout. NEW file + a +3-line registry entry + two gate scripts only → the two prior slice builders, their proofs, the frozen slices, the kit modules, and all global defaults stay byte-stable (`resolveSliceIdentity({}).title` still "The Frozen Cache"); no combat/renderer/schema; no `WORLD_DOCUMENT_VERSION` bump. Gates `test:slice-2` (13 Node) + `test:slice-2-proof` (SwiftShader 5270/9405); full sweep + build + qa green; fresh-context 5-dim review 0 confirmed (1 LOW refuted; refuter's named lighting-value hardening applied + verified to catch a previously-missed tamper)  ← SHIPPED (ADR-065)
+27. (await operator pick) — the authored-slice line is established AND accelerated (feels complete WITHOUT stakes · repeatable across distinct scenes · reproducible AND faster via the kit, now proven on a from-scratch slice) → keep extending authored content (more kit-built slices / deeper environment / more variety) / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint). Combat-2 stays evidence-gated until authored slices repeatedly show non-lethal threat is no longer enough.
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3748,6 +3758,66 @@ for BOTH slices via a shared `assertBlocksReproduced`).
 The kit is authoring-time + test-time only. It does NOT migrate the existing slices (proven byte-compatible for
 a future opt-in migration). Next: Slice-2 built WITH the kit proves production acceleration; Combat-2 stays
 evidence-gated.
+
+---
+
+## ADR-065 — Slice-2: The Frost Causeway (the kit's first from-scratch slice — production acceleration proven)
+
+**Status:** Accepted (Stage 76, tag `world-builder-slice-2-kit-built`, local-only). Builds ON ADR-064 (the
+Slice Authoring Kit) + ADR-063 (Slice-1). The authored-slice line: one slice works (Relic Overlook) → a second
+works (Ice Chapel, ADR-063) → the pattern is extracted into a byte-compatible kit (ADR-064) → **the kit authors
+a third slice from scratch (this ADR)**, proving it accelerates production without losing safety.
+
+**What it is.** A THIRD playable authored slice — **The Frost Causeway** (`frost-causeway-1`,
+`?world=frost-causeway-1`) — and the FIRST assembled FROM `SliceKit` rather than hand-rolled. A seeded alpine
+field (`terrain.seed = 251`, probe-confirmed via `SliceSeedProbe`) relocates the run to the far south of the
+EAST wall (≈130 m from both prior slices): spawn on a broken ridge `(80,−70) h18`, climb to the relic on the
+crown `(94,−70) h28`, bear it DOWN a 26 m descent across the causeway to a seal low on the frozen basin floor
+`(54,−70) h1.4`. Its OWN "pale overcast whiteout" readability (`WHITEOUT_LIGHTING` via `mergeGlacialLighting`:
+weakest directional sun, brightest hemisphere, palest/nearest fog — a distinct third identity vs the Overlook's
+open warmth and the Chapel's enclosed mist); a self-contained primitive seal (NO GLB); three combat beats — a
+moving `glacial_sentinel` patrol "the causeway" + a mixed cache fight (a stationary `glacial_sentinel` "the cache
+mouth" + a `frost_wisp` "the seal", Content-3 authored adjacency, all single-enemy, no waves); an off-route
+reliquary reward (a PURE arsenal recipe). NO objectives block (the runtime auto-derives the relic→seal loop).
+
+**Kit-built — the production delta (the point).** `frostCausewayV1.js` imports the kit factories
+(`sliceLayout({seed:251})`, `groundedPrimitive`/`offset`, `sliceIdentity`, `encounterBeat`,
+`generatedWeaponReward`, `beaconTrail`, `mergeGlacialLighting`, `routeRadius`) and hand-rolls NO local copies of
+`unit`/`groundedPrimitive`/`offset`/`activateProfile` (Slice-1 hand-rolled all of these). Every STRUCTURAL block
+is byte-equal to the kit factory output (asserted in `test:slice-2`); only CONTENT remains bespoke — the seed,
+the identity strings, the whiteout color/number deltas, the per-landmark composition, the beat positions/labels,
+the reward seed. `SliceComposition.validateSliceComposition(doc,{expectBeats:3})` accepts the slice (and the gate
+proves it rejects no-sign / wrong-count / blocked-centerline mutations). The measured answers: structure from the
+kit, content bespoke; the validator caught the seeded mutations; **the shared `slice-proof` helper required ZERO
+per-slice branching** to drive a NEW combination it had not seen — 3 beats AND no GLB (chapel = 2/no-GLB,
+benchmark = 3/GLB) — defeating the stationary cache sentinel via the helper's existing encounter-centre fallback.
+
+**Byte-stable / reuse boundary (held).** NEW `frostCausewayV1.js` + a +3-line additive `index.js` registration +
+two new gate scripts + a +2-line `package.json` ONLY (`git diff --stat`: package.json +2, index.js +3). The two
+prior slice builders, their proofs, the frozen Frozen-Cache / first-playable slices, the kit modules
+(`SliceKit`/`SliceSeedProbe`/`SliceComposition`/`slice-proof.mjs`), and all global defaults are UNCHANGED
+(`resolveSliceIdentity({}).title` still "The Frozen Cache"; a vanilla world's lighting/water/atmosphere still the
+byte-exact glacial defaults). No combat/renderer/schema; no new enemy system (reuses the existing
+`SENTINEL_TYPE`/`WISP_TYPE`/`ENCOUNTER_TYPE`); no `WORLD_DOCUMENT_VERSION` bump.
+
+**Operator picks (gate).** Seed/site = **251** (ridge descent, most distinct); scene mood = **pale overcast
+whiteout** (AskUserQuestion).
+
+**Gates.** `test:slice-2` (13 Node: valid+registered v2 seed-251 alpine; KIT-AUTHORED [static import + no local
+copies] + every block byte-equal the kit factory incl. the whiteout values pinned to `mergeGlacialLighting(
+WHITEOUT_LIGHTING)`; seed-251 probe usable+distinct; composition accepts + rejects 3 mutations; distinct place;
+landmarks frame route + centerline clear; 3 beats valid+distinct; off-route reward; budget+determinism;
+whiteout readability ≠ default ≠ both prior slices; identity persistence-safe + default unchanged; particles) +
+`test:slice-2-proof` (SwiftShader 5270/9405; the UNCHANGED shared helper drives the 3-beat no-GLB slice to
+completion — identity, sign, 3 beats by one weapon, threat recoverable, deposit, reload-stable, 0 console
+errors). Full sweep (visual-benchmark/slice-1/slice-authoring-kit + frozen-cache/first-playable/slice0a proofs,
+all Node) + build + qa 32/0/0 green. Fresh-context 5-dim adversarial review: **0 confirmed**, 1 LOW refuted (a
+value-blind lighting assertion — not a slice defect; the refuter's named optional hardening was applied anyway,
+pinning the whiteout values to the kit output, verified to catch a tamper that was previously missed).
+
+**Non-goals (held).** No Combat-2/health/death/AI/quest-gen/worldgen/renderer/shader/LOD. Next: more authored
+slices / deeper environment, or — only when authored slices repeatedly show non-lethal threat is no longer enough
+— plan Combat-2 as a separately-approved stage. Combat-2 stays evidence-gated.
 
 ---
 

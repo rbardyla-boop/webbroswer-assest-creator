@@ -1,14 +1,15 @@
 # How to author a playable slice (Slice Authoring Kit-1)
 
 A "slice" is a compact, authored 5–10 minute playable run: spawn → find a relic → carry it past a readable
-combat beat or two → deposit at a cache → a scene-coherent completion. Two ship today — `visual-benchmark-1`
-("The Relic Overlook") and `ice-chapel-1` ("The Ice Chapel") — both built from the SAME systems. This kit
-(ADR-064) turns that repeatable pattern into pure, byte-compatible factories + a seed probe + composition
-validators + shared proof helpers so the next slice is assembled, not hand-rolled.
+combat beat or two → deposit at a cache → a scene-coherent completion. Three ship today — `visual-benchmark-1`
+("The Relic Overlook") and `ice-chapel-1` ("The Ice Chapel") were hand-rolled before this kit; **`frost-causeway-1`
+("The Frost Causeway", ADR-065) is the FIRST slice built WITH this kit** and is the canonical worked example to
+copy. This kit (ADR-064) turns the repeatable pattern into pure, byte-compatible factories + a seed probe +
+composition validators + shared proof helpers so the next slice is assembled, not hand-rolled.
 
-It is **non-invasive**: the two shipped slices are NOT migrated to the kit (they stay byte-stable). The kit's
+It is **non-invasive**: the two hand-rolled slices are NOT migrated to the kit (they stay byte-stable). The kit's
 factories are proven byte-equal to their output (`test:slice-authoring-kit`), so a future migration changes no
-output. Build the NEXT slice with the kit.
+output. Build the NEXT slice with the kit — see `src/world/samples/frostCausewayV1.js` for the reference build.
 
 ## The kit
 
@@ -47,9 +48,11 @@ output. Build the NEXT slice with the kit.
 10. **Spawn + camera.** `doc.player.spawn = { x: spawn.x, y: getHeight(spawn.x, spawn.z), z: spawn.z }; doc.player.cameraMode = "third"`.
 11. **Register** the builder in `src/world/samples/index.js` (a +1 entry; `?world=<id>` then loads it).
 12. **Validate** in a Node regression: `assertSliceComposition(buildMySlice(), { expectBeats: N })`. Mirror
-    `scripts/slice-1-regression.mjs` for determinism + the byte-stable-global checks.
+    `scripts/slice-2-regression.mjs` for determinism, the byte-stable-global checks, AND the kit-authored
+    byte-equality assertions (prove each block equals the kit factory output, so the slice is provably kit-built).
 13. **Prove it** with the shared helper: build a descriptor `{ buildModulePath, buildFnName, identityTitle, arrivalTagline, signId, beats:[{id,kind}], rewardId, glb? }` and drive `driveSlicePlay`/`driveSliceReplay`
-    (mirror `scripts/browser-slice-authoring-kit-proof.mjs`).
+    (mirror `scripts/browser-frost-causeway-proof.mjs` — a single-slice kit-built proof; the helper needs no
+    per-slice branching, so just supply the descriptor).
 14. **Stay byte-stable.** Add a NEW builder + a +1 registry entry only. Do not edit the shipped slices, the
     frozen Frozen-Cache / first-playable slices, or any global default. No new combat/renderer/schema; no
     `WORLD_DOCUMENT_VERSION` bump.

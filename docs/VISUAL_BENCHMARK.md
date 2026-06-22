@@ -275,6 +275,24 @@ proof helper that drives both slices to completion. It is **non-invasive** — n
 slices, the frozen slices, and every global default are untouched. See **`docs/SLICE_AUTHORING.md`** for the
 authoring checklist.
 
+## Slice-2 — The Frost Causeway, the kit's first from-scratch slice (ADR-065)
+
+**Slice-2** (`frost-causeway-1`, `?world=frost-causeway-1`) is the kit's validation: a THIRD playable authored
+slice **assembled FROM `SliceKit`** instead of hand-rolled, proving the kit *accelerates production* without
+losing safety. A probe-chosen seeded field (`terrain.seed=251`) relocates the run to the far south of the EAST
+wall (≈130 m from both prior slices): spawn on a broken ridge `(80,−70) h18`, climb to the relic on the crown
+`(94,−70) h28`, bear it DOWN a 26 m descent across the causeway to a seal low on the frozen basin floor
+`(54,−70) h1.4`. Its OWN **"pale overcast whiteout"** readability — weakest directional sun, brightest
+hemisphere, palest/nearest fog (a distinct third identity vs the Overlook's open warmth and the Chapel's
+enclosed mist); a self-contained primitive seal (NO GLB); THREE combat beats (a moving `glacial_sentinel` patrol
+"the causeway" + a mixed cache fight — a stationary `glacial_sentinel` "the cache mouth" + a `frost_wisp` "the
+seal", all single-enemy, no waves). **The production delta:** the builder imports the kit factories and
+hand-rolls no local helper copies; every structural block is byte-equal to the kit output (the whiteout values
+pinned to `mergeGlacialLighting(WHITEOUT_LIGHTING)`); `validateSliceComposition` accepts it; the **unchanged**
+shared `slice-proof` helper drove the NEW 3-beat/no-GLB combination with **zero per-slice branching** — structure
+from the kit, only content bespoke. Non-invasive: a new file + a +3-line registry entry only; the prior slices,
+the frozen slices, the kit modules, and all global defaults stay byte-stable.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -345,3 +363,16 @@ authoring checklist.
   helper drives BOTH slices to completion — the 2-beat no-GLB chapel AND the 3-beat + GLB benchmark each resolve
   their own identity, read their sign, defeat every beat with one weapon, recover from a threat, deposit to
   complete with their own completion card, and reload-persist; 0 console errors.
+- `test:slice-2(-proof)` — Slice-2 ("The Frost Causeway"; the kit's first from-scratch slice). Node (13 checks):
+  valid + registered v2 seed-251 alpine; **KIT-AUTHORED** — the builder imports the kit factories and hand-rolls
+  no local helper copies, and every structural block (slice / each beat / reward / authoring / lighting / a
+  landmark) is byte-equal to the kit's factory output (the whiteout look pinned to `mergeGlacialLighting(
+  WHITEOUT_LIGHTING)` — catches a tampered value); the seed-251 probe is usable + distinct (130 m); the
+  composition validator accepts the slice (3 beats) + rejects no-sign / wrong-count / blocked-centerline
+  mutations; a DISTINCT place from both prior slices; landmarks frame the route + the carry centerline is clear;
+  three valid distinct beats; an off-route reward; budget + determinism; the whiteout readability differs from
+  the default AND both prior slices while the global default stays unchanged; the identity is persistence-safe
+  and the default is still "The Frozen Cache". The proof (SwiftShader, 5270/9405): the **unchanged** shared
+  helper drives the NEW 3-beat no-GLB combination to completion (own identity, sign reads, three beats by one
+  weapon incl. the stationary cache sentinel, threat recoverable, deposit completes, reload-persists) with zero
+  per-slice branching; 0 console errors.
