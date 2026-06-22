@@ -22,11 +22,20 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-22 (Content-5 accepted; tag `world-builder-content-5-slice-completion`;
-prior threat stack: Content-4 `world-builder-content-4-threat-aware-polish` on Combat-1 + Combat-1R).**
-- **73 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-22 (Slice-1 accepted; tag `world-builder-slice-1-second-authored-slice`;
+prior: Content-5 `world-builder-content-5-slice-completion`).**
+- **74 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-5 — Playable Slice Completion Pass**
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Slice-1 — Second Authored Slice ("The Ice Chapel")**
+  (ADR-063): prove **repeatability** — a SECOND distinct playable slice (`ice-chapel-1`, `?world=ice-chapel-1`) from the SAME systems,
+  NOT a mutation of the benchmark. A seeded alpine field (`terrain.seed=137`) relocates the run to the OPPOSITE valley wall (spawn high
+  on a broken stair → descend → a chapel seal on the trough floor); its OWN colder/mistier per-scene readability + its OWN "The Ice
+  Chapel" slice identity; an off-route shrine reward; TWO combat beats (a moving `glacial_sentinel` patrol + a `frost_wisp` guardian —
+  a different count + staging than the benchmark's three). NO objectives block (the runtime auto-derives the relic→seal loop); the
+  loader reproduces the seed in play (mesh==sampling==placement). New file + a +1 registry entry only → the benchmark + frozen slices +
+  global defaults stay byte-stable; no new combat/renderer/schema (a normal v2 document). Gates `test:slice-1` (12 Node) +
+  `test:slice-1-proof` (SwiftShader, 5266/9401). Full sweep + build + qa green; fresh-context 5-dim review 0 confirmed.
+- **Prior latest — Content-5 — Playable Slice Completion Pass**
   (ADR-062): make the benchmark run *feel* like one coherent slice with a deliberate beginning + ending, through authored pacing +
   the EXISTING feedback stack — NO new combat rules (the no-Combat-2 boundary still holds; Content-5 is the evidence the slice can
   feel complete WITHOUT real stakes). Two parts: (1) **scene-coherent completion identity** — the generic playable-slice wrapper
@@ -38,7 +47,7 @@ prior threat stack: Content-4 `world-builder-content-4-threat-aware-polish` on C
   XSS guard); no `WORLD_DOCUMENT_VERSION` bump; the +1 sign needed no benchmark re-lock. Gates: `test:content-5-slice-completion`
   (5 Node) + `test:content-5-slice-completion-proof` (SwiftShader, 5264/9399, one end-to-end run). Full sweep + build + qa green;
   fresh-context 5-dim review 0 confirmed.
-- **Prior latest — Content-4 — Threat-Aware Encounter Polish** (ADR-061): made the Combat-1 threat READ well with NO new combat
+- **Earlier — Content-4 — Threat-Aware Encounter Polish** (ADR-061): made the Combat-1 threat READ well with NO new combat
   rules — the mixed cache gate's overlapping rings DE-NOISE to one prominent ring (PURE `ThreatLogic.pickProminent`), the warning
   NAMES the moment via the threaded encounter label, and a data-only teaching sign teaches the non-lethal recovery. `ThreatLogic` +
   the Content-1/Content-3 encounters byte-stable. Gates `test:content-4-threat-aware-polish(-proof)` (5262/9397) — green.
@@ -82,14 +91,15 @@ prior threat stack: Content-4 `world-builder-content-4-threat-aware-polish` on C
   pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Content-4 de-noise
   target). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
   (ADR-055) — slice sensory polish (the discovery layer the Content-4 teaching sign couples into). Hygiene-1 (chore `e4c6b9a`).
-- **Next per ADR-039 roadmap: (await operator pick)** — Content-5 made the slice *feel* complete (scene-coherent completion identity
-  + opening orientation), evidence that authored pacing + the existing feedback stack suffice — the slice does NOT yet expose a need
-  for Combat-2. The fork: continue authored content / pacing / a second authored slice; or, if the slice now wants real stakes, plan
-  **Combat-2: player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI; the only
-  place the Combat-1R deferred stale-`inWindow` hardening matters) as a separately-approved stage; shader/LOD only if visuals/perf
-  become the constraint. Two observed-and-deferred slice items (a later stage may pick up): the wrapper draws BOTH authored `vb-*`
-  landmarks AND its own `FrozenCacheLandmarks` on the benchmark, and every `role:"sign"` (incl. the orientation sign) fires the
-  sensory "Discovery" cue. Keep converting the engine into a product surface.
+- **Next per ADR-039 roadmap: (await operator pick)** — Slice-1 ("The Ice Chapel") shipped a SECOND distinct authored slice from the
+  same systems, proving the authored-content path is *repeatable* (not benchmark-bound). With Content-5's "feels complete WITHOUT
+  stakes" + Slice-1's "repeatable across distinct scenes", the authored-slice line is well-established. The fork: keep extending
+  authored content (a third slice / deeper environment / more variety); or, if the slices now want real stakes, plan **Combat-2:
+  player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI; the only place the
+  Combat-1R deferred stale-`inWindow` hardening matters) as a separately-approved stage; shader/LOD only if visuals/perf become the
+  constraint. Observed-and-deferred slice items a later stage may pick up: the wrapper draws BOTH authored landmarks AND its own
+  `FrozenCacheLandmarks`, and every `role:"sign"` fires the sensory "Discovery" cue (the chapel's signs inherit this). Keep converting
+  the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -169,7 +179,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → Content-5 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → Content-5 → Slice-1 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1930,7 +1940,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 21. Combat-1 — enemy threat feasibility (a SEPARATE transient ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam in src/world/combat/: an enemy telegraphs a danger ring, the player crossing the inner radius gets ONE bounded non-lethal event — terrain-clamped knockback + camera shake + audio cue + warning overlay — with a cooldown; defeated enemies stop, encounters stay completable, nothing persists; CombatRuntime byte-stable, dormant without encounters), no health/death/respawn/projectiles/chase/waves/balance/director  ← SHIPPED (ADR-060)
 22. Content-4 — threat-aware encounter polish (make the Combat-1 threat READ well in the authored slice with NO new combat rules: a tiny presentation-only runtime layer — overlapping danger rings DE-NOISE to one prominent ring via the pure ThreatLogic.pickProminent; the warning NAMES the moment via the threaded encounter label ("The pass — fall back"); + a data-only teaching sign on the route. ThreatLogic state machine + Content-1/Content-3 encounters byte-stable; no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance  ← SHIPPED (ADR-061)
 23. Content-5 — playable slice completion pass (make the benchmark run FEEL like one coherent slice with a deliberate beginning + ending, through authored pacing + the EXISTING feedback stack: a scene-coherent completion identity — an OPTIONAL authored document.slice {title,arrivalTagline,completeBody}, default = the byte-exact frozen-cache copy, so the benchmark names its own arrival banner + completion card "The Relic Overlook" instead of inheriting the wrapper's "The Frozen Cache" — plus one data-only opening orientation sign. The slice block is optional/absent-by-default (frozen-cache + first-playable byte-stable), persistence-safe + sanitized + textContent-rendered (untrusted-localStorage→card XSS guard); no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance/renderer  ← SHIPPED (ADR-062)
-24. (await operator pick) — Content-5 shows the slice can feel complete WITHOUT real stakes → continue authored content / pacing / a second authored slice / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+24. Slice-1 — second authored slice ("The Ice Chapel"): prove REPEATABILITY — a SECOND distinct playable slice (`ice-chapel-1`, `?world=ice-chapel-1`) from the SAME systems, NOT a mutation of the benchmark. A seeded alpine field (`terrain.seed=137`, seed-sensitive via `so=seed*0.013`) relocates `findGoodSpawn` to the OPPOSITE valley wall (spawn high on a broken stair → `deriveSites` puts the relic up-wall + the cache/chapel-seal on the trough floor → a climb-to-find/descend-to-seal carry ≈160m from the benchmark); its OWN colder/mistier per-scene readability (`chapelLighting`/`chapelWater`/`chapelAtmosphere`, per-document) + its OWN "The Ice Chapel" slice identity; an off-route shrine reward (PURE arsenal recipe modules); TWO combat beats (a moving `glacial_sentinel` patrol "the descent" + a `frost_wisp` guardian "the seal") — a different count + staging than the benchmark's three; NO objectives block (runtime auto-derives the relic→seal loop); a primitive seal (no GLB dependency). The loader reproduces the seed in play (`load`→`applyTerrainSettings(doc.terrain)`→`createTerrainProfile`; `new Terrain(doc.terrain)` → mesh==sampling==placement). NEW file + a +1 registry entry only → the benchmark + frozen slices + global defaults stay byte-stable; no new combat/renderer/schema (a normal v2 document). Gates `test:slice-1` (12 Node) + `test:slice-1-proof` (SwiftShader 5266/9401); full sweep + build + qa green; fresh-context 5-dim review 0 confirmed  ← SHIPPED (ADR-063)
+25. (await operator pick) — Content-5 ("feels complete WITHOUT stakes") + Slice-1 ("repeatable across distinct scenes") establish the authored-slice line → keep extending authored content (a third slice / deeper environment / more variety) / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3592,6 +3603,75 @@ director; no renderer/shader/LOD; no `WORLD_DOCUMENT_VERSION` bump. The threat b
 wrapper's runtime behaviour is unchanged except the resolved identity (default = the prior copy). The double
 authored-vs-slice landmarks and the sensory "Discovery" cue the new sign fires (every `role:"sign"` does) are
 observed-and-deferred, not addressed here.
+
+---
+
+## ADR-063 — Slice-1: Second Authored Slice ("The Ice Chapel" — repeatable authored content via a seeded field)
+
+**Status.** Accepted. Tag `world-builder-slice-1-second-authored-slice` (local only). Stage 74.
+
+**Context.** Content-5 proved the one benchmark slice can *feel* complete without Combat-2. The next product
+risk is **repeatability**: can the stack produce ANOTHER distinct playable slice from the SAME systems, not just
+keep polishing the one corridor? Slice-1 answers it with a second authored sample world, `ice-chapel-1`
+(loadable via `?world=ice-chapel-1`), reusing the shipped stack — slice identity, the auto-derived relic
+objective, Encounter Editor-0 beats, the `glacial_sentinel` / `frost_wisp` archetypes, the non-lethal threat
+seam, authored signs, particles, an optional recipe reward, the per-scene readability pattern, the Performance
+Contract — and is NOT a mutation of `visual-benchmark-1`. Two operator picks at the gate (AskUserQuestion):
+*opposite-wall descent* (a genuinely different place) and *its own colder/mistier readability*.
+
+**Decision — a seeded alpine field relocates the whole run, reusing the loop on fresh ground.** The alpine
+profile is seed-sensitive (`so = seed*0.013` offsets the warp/undulation/detail/grass/snowline). The chapel
+authors `terrain.seed = 137`, which moves `findGoodSpawn()` to the OPPOSITE (+X) valley wall (≈160 m from the
+benchmark's −X overlook) — spawn high on a broken-stair incline, with `deriveSites(spawn)` placing the relic up
+the wall and the cache (the "chapel seal") on the trough floor, so the carry is a real climb-to-find /
+descend-to-seal loop. `src/world/samples/iceChapelV1.js` composes it as intentional data: the broken stair + an
+opening orientation sign, a relic ruin/shard, an optional off-route shrine holding a generated-weapon reward
+(the PURE arsenal recipe modules, like the benchmark), a threat-teaching sign, descent posts framing the
+mid-descent threshold, and the chapel seal (ice pillars + a PRIMITIVE seal pedestal/stone — no GLB dependency,
+self-contained). Its OWN colder/mistier readability (`chapelLighting`/`chapelWater`/`chapelAtmosphere` — lower
+cooler sun, fog pulled in for enclosure, slower colder water, thicker basin mist) + its OWN slice identity
+("The Ice Chapel" / "Bear the relic down to the chapel seal" / the seal ending). TWO combat beats — a MOVING
+`glacial_sentinel` patrol on the descent ("the descent") + a `frost_wisp` guardian at the seal ("the seal") — a
+different count + staging than the benchmark's three. NO objectives block (the runtime auto-derives the
+relic→seal loop from the spawn). The loader reproduces the seed in play (`load()` →
+`applyTerrainSettings(doc.terrain)` → `createTerrainProfile({...,seed})`; `new Terrain(doc.terrain)` builds the
+mesh from the same active field) so mesh == sampling == placement.
+
+**Byte-stable boundary (held + checked).** The chapel is a NEW file + a +1 registry entry; it touches NO
+existing sample (`visualBenchmarkV1.js` byte-unchanged — `test:visual-benchmark`(+proof) green) and uses a LOCAL
+authoring helper rather than extracting the benchmark's. The readability overrides are per-document (fresh
+objects spread over the global factories, assigned to `doc.*`), so a vanilla `createWorldDocument()` and the
+frozen Frozen-Cache / first-playable slices stay byte-identical (`test:frozen-cache-proof` /
+`test:first-playable-proof` / `test:slice0a` green). No combat/renderer/schema surface: no
+health/death/attacks/balance/waves/director, no shader/LOD, no new worldgen/quest engine, no
+`WORLD_DOCUMENT_VERSION` bump (a normal v2 document).
+
+**Gates.** `test:slice-1` (12 Node: valid + registered + seed-137 alpine; deterministic; dry-walkable spawn +
+auto-derived axis + carry required + empty objectives; the chapel spawn AND seal are >50 m from the benchmark's
+— a distinct place, not a mutation; landmarks frame the descent + centerline unobstructed; the off-route recipe
+reward; the beacon-trail; TWO beats — a patrol sentinel + a wisp guardian, no waves; compact within budget; the
+module is pure; per-scene readability differs from default while the global default is unchanged; the slice
+identity survives a save→load round-trip; particle feedback) + `test:slice-1-proof` (SwiftShader, ports
+5266/9401 — one end-to-end run: the live wrapper resolves "The Ice Chapel"; the broken-stair orientation sign
+reads; the shrine reward instantiated; two beats staged — a patrol sentinel + a hovering seal wisp, both combat
+targets; a threat fires + names the moment ("The descent — fall back") + the shove is recoverable; ONE equipped
+weapon defeats BOTH beats independently; depositing the relic completes the run and the completion CARD shows
+"The Ice Chapel"; reload preserves completion + identity + trophy + both encounter clears + the reward, drops
+the transient threat; perf within the contract — draws 114 / objs 20 / tris ~490,160; 0 console errors). Full
+sweep — visual-benchmark / frozen-cache / first-playable / slice0a (byte-stability guards) + content-3 /
+content-4 / content-5 / combat / combat-threat-feasibility / enemy / enemy-patrol / enemy-archetypes /
+enemy-proximity / encounter-editor / encounter-polish / content-combat-beats / audio-feedback /
+performance-contract proofs, all Node, build, qa 32/0/0 + 43/0/0 — green (`frozen-cache-proof` flaked once under
+back-to-back load → green in isolation). Fresh-context 5-dimension adversarial review (byte-stability /
+reuse-not-fork / distinct-slice / determinism-walkability / proof-rigor): **0 confirmed defects**; 2 raw
+proof-rigor findings adversarially refuted (the redundant strike null-checks are already guarded by the prior
+hit-target equality assertions; the threat-fires-once is deterministic rising-edge logic, not timing-dependent).
+
+**Non-goals (held).** No player health, death, respawn, attacks, projectiles, balance, chase, waves, or AI
+director; no renderer/shader/LOD; no schema bump. Slice-1 is the evidence the stack produces *repeatable*
+authored content — Combat-2 remains evidence-gated, not warranted by this stage. The same two
+observed-and-deferred items the benchmark carries (the wrapper's double landmarks; every `role:"sign"` fires the
+sensory "Discovery" cue, incl. the chapel's signs) are inherited, not addressed here.
 
 ---
 

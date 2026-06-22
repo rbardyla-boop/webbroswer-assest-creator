@@ -240,6 +240,27 @@ one new sign needed **no benchmark re-lock** (draws 123 / objs 21 / tris ~501,63
 completion feedback it surfaces — green cache beacon, tier-coloured trophy aura, the "Cache sealed" chord/toast
 — already existed; Content-5 only makes the run read as a deliberate whole around it.
 
+## Slice-1 — The Ice Chapel, a second authored slice (ADR-063)
+
+Slice-1 proves the stack produces a **second** distinct playable slice from the **same** systems, not just more
+polish on the one corridor. It is a NEW sample world — **`ice-chapel-1`** (`?world=ice-chapel-1`) — not a
+mutation of `visual-benchmark-1`. The key move is a **seeded alpine field**: the glacial profile is
+seed-sensitive (`so = seed*0.013` offsets the warp/undulation/detail/grass/snowline), so authoring
+`terrain.seed = 137` relocates `findGoodSpawn()` to the OPPOSITE (+X) valley wall (≈160 m from the benchmark's
+−X overlook) — the player spawns high on a **broken stair** and bears the relic **down** the descent to a
+**chapel seal** on the trough floor (`deriveSites` puts the relic up the wall and the cache on the floor, so the
+carry is a real climb-to-find / descend-to-seal loop). It reuses the shipped stack — the auto-derived relic
+objective (no `objectives` block), Encounter Editor-0 beats, the `glacial_sentinel` / `frost_wisp` archetypes,
+the non-lethal threat seam, authored signs, particles, the `SliceIdentity` wrapper, an optional recipe reward,
+the Performance Contract — with its OWN colder/mistier per-scene readability and its OWN identity **"The Ice
+Chapel"**. Its encounters are a **different** staging than the benchmark's three: **two** beats — a MOVING
+sentinel patrol on the descent ("the descent") + a wisp guardian at the seal ("the seal"). The seal prop is a
+PRIMITIVE (no GLB dependency, self-contained). The runtime loader reproduces the seed in play
+(`load` → `applyTerrainSettings(doc.terrain)` → `createTerrainProfile`; `new Terrain(doc.terrain)` builds the
+mesh from the same field) so mesh == sampling == placement. A NEW file + a +1 registry entry only — the
+benchmark, the frozen slices, and the global terrain/lighting/water/atmosphere defaults all stay byte-stable; no
+new combat/renderer/schema (a normal v2 document).
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -287,3 +308,17 @@ completion feedback it surfaces — green cache beacon, tier-coloured trophy aur
   on finite ground; depositing completes the run and the completion CARD shows "The Relic Overlook" + the
   authored ending + trophy + the "Cache sealed" cue; reload preserves completion + trophy + the overlook
   identity (not reverted), drops the transient threat; benchmark within budget (draws 123 / objs 21), 0 errors.
+- `test:slice-1(-proof)` — the second authored slice (Slice-1, "The Ice Chapel"; a SEPARATE sample
+  `ice-chapel-1`, not the benchmark). Node (12 checks): valid + registered + seed-137 alpine; deterministic;
+  dry-walkable broken-stair spawn + auto-derived relic→seal axis + carry required + empty `objectives`; the
+  chapel spawn AND seal are >50 m from the benchmark's (a distinct place, not a mutation); landmarks frame the
+  descent + the carry centerline unobstructed; the off-route recipe reward; the beacon-trail; TWO beats (a
+  moving sentinel patrol + a wisp guardian, no waves); compact within budget; the module is pure; the per-scene
+  colder/mistier readability differs from default while the global default is unchanged; the "The Ice Chapel"
+  identity survives a save→load round-trip; particle feedback. The proof (SwiftShader, 5266/9401, one
+  end-to-end run): the live wrapper resolves "The Ice Chapel"; the broken-stair orientation sign reads; the
+  shrine reward instantiated; two beats staged (a patrol sentinel + a hovering seal wisp, both combat targets);
+  a threat fires + names the moment ("The descent — fall back") + the shove is recoverable; ONE equipped weapon
+  defeats BOTH beats independently; depositing the relic completes the run and the completion CARD shows "The
+  Ice Chapel"; reload preserves completion + identity + trophy + both encounter clears + the reward, drops the
+  transient threat; perf within the contract (draws 114 / objs 20 / tris ~490,160); 0 console errors.
