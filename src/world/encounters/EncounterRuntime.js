@@ -87,6 +87,9 @@ export class EncounterRuntime {
           defeated: false,
           patrol,
           zone: { x, z, radius: desc.radius },
+          // Content-4: thread the authored beat label so the threat warning can name the moment ("the pass" /
+          // "the crossing"). Presentation-only data on the projection; the enemy FSM ignores it.
+          label: desc.label ?? null,
         },
         groundHeight
       );

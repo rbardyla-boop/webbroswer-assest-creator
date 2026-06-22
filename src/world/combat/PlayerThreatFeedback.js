@@ -14,8 +14,16 @@ import { AUDIO_CUES } from "../audio/AudioCues.js";
 
 const SHAKE_AMP = 0.14; // metres — peak camera-shake offset (bounded; decays to 0 over THREAT_SHAKE)
 const SHAKE_FREQ = 38; // rad/s — deterministic jitter frequency (sin-based, no RNG)
-const WARNING_LABEL = "Warding pulse — fall back";
+const WARNING_LABEL = "Warding pulse — fall back"; // fallback when the threat carries no encounter label
 const WARNING_MS = 1500; // how long the warning overlay stays before fading
+
+// Content-4: name the moment in the warning by capitalizing the encounter label ("the pass" → "The pass —
+// fall back"). Pure string shaping; the label is an internal authored constant (textContent-safe downstream).
+function warningFor(label) {
+  if (typeof label !== "string" || label.trim() === "") return WARNING_LABEL;
+  const t = label.trim();
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)} — fall back`;
+}
 
 export class PlayerThreatFeedback {
   constructor({ camera = null, audio = null, safePlace = null, getGroundHeight = null, parent = null } = {}) {
@@ -29,6 +37,7 @@ export class PlayerThreatFeedback {
     this._events = 0;
     this._lastFrom = null;
     this._lastKnockback = null; // { from:[x,z], to:[x,z], dist, applied }
+    this._lastWarning = null; // Content-4: the moment-named warning copy last shown
 
     // Own a dedicated warning element (NOT the milestone CueOverlay — per-hit warnings must not flood it).
     this._warnEl = null;
@@ -43,13 +52,15 @@ export class PlayerThreatFeedback {
     }
   }
 
-  trigger({ fromX, fromZ, player } = {}) {
+  trigger({ fromX, fromZ, player, label = null } = {}) {
     this._events++;
     this._lastFrom = [fromX, fromZ];
     this._applyKnockback(fromX, fromZ, player);
     this._shake = THREAT_SHAKE; // (re)start the shake from full
     this.audio?.cue?.(AUDIO_CUES.THREAT);
-    this._showWarning(WARNING_LABEL);
+    const warning = warningFor(label); // Content-4: name the moment ("The pass — fall back")
+    this._lastWarning = warning;
+    this._showWarning(warning);
   }
 
   _applyKnockback(fromX, fromZ, player) {
@@ -116,6 +127,7 @@ export class PlayerThreatFeedback {
       shaking: this._shake > 0,
       lastFrom: this._lastFrom,
       lastKnockback: this._lastKnockback,
+      lastWarning: this._lastWarning, // Content-4: the moment-named copy last shown
       warningVisible: !!this._warnEl?.classList.contains("visible"),
     };
   }
@@ -126,6 +138,7 @@ export class PlayerThreatFeedback {
     this._events = 0;
     this._lastFrom = null;
     this._lastKnockback = null;
+    this._lastWarning = null;
     if (this._warnTimer != null) clearTimeout(this._warnTimer);
     this._warnTimer = null;
     this._warnEl?.classList.remove("visible");

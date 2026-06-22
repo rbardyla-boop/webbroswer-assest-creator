@@ -60,3 +60,28 @@ export function stepThreat(state, { inWindow = false, defeated = false, dt = 0 }
     fired,
   };
 }
+
+/**
+ * Presentation selection (NOT the threat state machine — it does not gate firing). Among the threatening
+ * enemies the player is near, pick the ONE whose danger ring should read as PROMINENT: the nearest alive
+ * enemy whose OUTER encounter zone the player is currently in. Returns its id, or null when none qualify
+ * (no enemy in zone / all defeated / no finite distance). Deterministic — a tie breaks toward the smaller id
+ * so a fixed scene is stable. Lets overlapping danger rings de-noise to a single clear ring at a mixed gate.
+ * @param {Array<{id:any, distance:number, inOuterZone:boolean, defeated:boolean}>} entries
+ */
+export function pickProminent(entries) {
+  if (!Array.isArray(entries)) return null;
+  let bestId = null;
+  let bestDist = Infinity;
+  for (const e of entries) {
+    if (!e || e.defeated || !e.inOuterZone) continue;
+    const d = e.distance;
+    if (!Number.isFinite(d)) continue;
+    const better = bestId === null || d < bestDist || (d === bestDist && String(e.id) < String(bestId));
+    if (better) {
+      bestDist = d;
+      bestId = e.id;
+    }
+  }
+  return bestId;
+}

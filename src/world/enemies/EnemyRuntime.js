@@ -435,6 +435,8 @@ export class EnemyRuntime {
         position: [g.position.x, g.position.y, g.position.z],
         zone: { x: a.zone.x, z: a.zone.z, radius: a.zone.radius },
         defeated: isDefeated(a.state),
+        // Content-4: the authored beat label (encounter-projected), so the threat warning can name the moment.
+        label: a.descriptor?.label ?? null,
       });
     }
     return out;

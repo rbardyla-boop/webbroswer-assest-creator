@@ -178,6 +178,18 @@ export function buildVisualBenchmarkV1() {
   objects.push(groundedPrimitive("vb-route-cairn-a", "Route Cairn A", "cube", offset(along(0.33), perp, 6.0), { x: 0.8, y: 1.4, z: 0.8 }, { rotationY: 0.5 }));
   objects.push(groundedPrimitive("vb-route-cairn-b", "Route Cairn B", "cube", offset(along(0.66), perp, -6.0), { x: 0.8, y: 1.7, z: 0.8 }, { rotationY: -0.6 }));
 
+  // --- Content-4: a threat-teaching wayfinding sign on the approach (data-only interaction) --------
+  // Placed before the first combat beat (the crossing) so the player learns the wards' rule up front: the
+  // warding pulse is NON-LETHAL (it shoves you back, it cannot fell you), how to recover, and how to press on.
+  // Reuses the Content-2 sign interaction (InteractionRuntime surfaces it in play; the editor never triggers it).
+  const threatSign = offset(along(0.42), perp, 4);
+  objects.push(
+    groundedPrimitive("vb-threat-sign", "Ward Warning Sign", "cube", threatSign, { x: 0.5, y: 1.8, z: 0.5 }, {
+      rotationY: gateYaw,
+      interaction: { role: "sign", text: "The valley's wards bristle as you near them — a warding pulse will shove you back, but it cannot fell you. Fall back to gather yourself, then break through: the cache waits beyond the pass.", showRadius: 8 },
+    })
+  );
+
   // --- Crossing gateway: short ice posts flank the glacial crossing where the combat beat sits -----
   // Frames the encounter as a threshold. Perp ±3.4 keeps the carry centerline midpoint unobstructed.
   objects.push(groundedPrimitive("vb-crossing-post-l", "Crossing Post L", "cylinder", offset(crossing, perp, 3.4), { x: 0.5, y: 2.8, z: 0.5 }, { colliderType: "cylinder", particles: { kind: "dust", rate: 10, max: 70, color: "#cfe0e8", size: 0.6, speed: 0.5, gravity: -0.15 } }));

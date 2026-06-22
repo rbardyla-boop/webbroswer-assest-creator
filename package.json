@@ -83,6 +83,8 @@
     "test:enemy-proximity-proof": "node scripts/browser-enemy-proximity-proof.mjs",
     "test:combat-threat-feasibility": "node scripts/combat-threat-feasibility-regression.mjs",
     "test:combat-threat-feasibility-proof": "node scripts/browser-combat-threat-feasibility-proof.mjs",
+    "test:content-4-threat-aware-polish": "node scripts/content-4-threat-aware-polish-regression.mjs",
+    "test:content-4-threat-aware-polish-proof": "node scripts/browser-content-4-threat-aware-polish-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",

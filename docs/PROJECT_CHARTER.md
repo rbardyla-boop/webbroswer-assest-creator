@@ -22,16 +22,23 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-22 (Combat-1 accepted + Combat-1R review closed; tags
-`world-builder-combat-1-threat-feasibility` + `world-builder-combat-1r-review-closure`).**
-- **71 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-22 (Content-4 accepted; tag `world-builder-content-4-threat-aware-polish`;
+on Combat-1 + Combat-1R: `world-builder-combat-1-threat-feasibility` + `world-builder-combat-1r-review-closure`).**
+- **72 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Combat-1 — Enemy Threat Feasibility**
-  (ADR-060): a FEASIBILITY GATE answering one question — can an enemy threaten the player in a bounded, readable, reload-safe way
-  WITHOUT a full health/combat system. Answer = YES, via a SEPARATE, transient seam. An enemy telegraphs a danger window (a danger
-  ring on the ground); the player CROSSING into the inner radius gets ONE non-lethal feedback event (a terrain-clamped knockback +
-  camera shake + audio cue + warning overlay) on a cooldown; a defeated enemy never threatens; the encounter stays completable;
-  nothing persists. No health bar, death, respawn, projectiles, melee animation, chase, waves, balance, or AI director.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Content-4 — Threat-Aware Encounter Polish**
+  (ADR-061): make the Combat-1 threat READ well in the authored slice with NO new combat rules (the no-Combat-2 boundary). A tiny
+  presentation-only runtime layer + one authored sign: the mixed cache gate's overlapping danger rings DE-NOISE to a single
+  prominent ring (a new PURE `ThreatLogic.pickProminent` picks the nearest in-zone alive enemy; others drop to a faint opacity, the
+  fire flash still reads on whichever fired); the warning NAMES the moment via the threaded encounter label ("The pass — fall back"
+  / "The crossing — fall back"); and a data-only teaching sign on the route teaches the wards are non-lethal + how to recover.
+  `ThreatLogic.stepThreat` + its constants and the Content-1/Content-3 encounters are byte-stable; no `WORLD_DOCUMENT_VERSION` bump;
+  the +1 sign object needed no benchmark re-lock (loose count assertions + a global objects ceiling). Gates: `test:content-4-threat-
+  aware-polish` (5 Node) + `test:content-4-threat-aware-polish-proof` (SwiftShader, 5262/9397). Full sweep + build + qa green.
+- **Combat-1 (ADR-060) + Combat-1R remain the threat foundation** Content-4 polishes: Combat-1 = a FEASIBILITY GATE proving an enemy
+  can threaten the player in a bounded, readable, reload-safe way WITHOUT a full health/combat system (a SEPARATE transient
+  ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam — danger ring + terrain-clamped knockback + warning + cooldown; defeated stops;
+  nothing persists). Combat-1R re-ran the deferred 5-dim review CLEAN (0 confirmed defects). No health/death/attacks/balance anywhere.
 - **A separate `Threat*` seam, NOT CombatRuntime.** Combat-0's CombatRuntime owns player→enemy weapon strikes; enemy threat is the
   REVERSE direction and lives in a NEW `src/world/combat/` trio so "combat" never becomes a bidirectional god-system: `ThreatLogic`
   (PURE entry-trigger state machine, mirrors `EnemyProximityLogic`), `ThreatRuntime` (observes a new read-only
@@ -63,14 +70,15 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
   `inWindow` read in the rare overlapping-inner-window case (flagged as a Combat-2 hardening, since it only
   matters once real health exists) and an unreachable `safePlace`-null bypass. See ADR-060 for the closure
   record + the deferred-hardening note. Tree clean; deterministic gates unchanged + green.
-- **Prior stages:** Enemy-3 (ADR-059, `world-builder-enemy-3-proximity`) — enemies feel AWARE: a stationary sentinel orients +
-  leans toward an in-zone player, a wisp biases its hover drift away (a third motion overlay; the awareness Combat-1 escalates into
-  bounded pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Combat-1
-  proof gotcha). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
-  (ADR-055) — slice sensory polish. Hygiene-1 (chore `e4c6b9a`) — tracked three codex working-tree artifacts.
-- **Next per ADR-039 roadmap: (await operator pick)** — Combat-1 proved an enemy CAN threaten the player cleanly (bounded,
-  reload-safe, non-lethal). The fork: if that's enough danger → continue authored content + audio; if it wants real stakes → plan
-  **Combat-2: player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI) as a
+- **Prior stages:** Combat-1 (ADR-060) + Combat-1R — the non-lethal threat seam Content-4 polishes (summarized above). Enemy-3
+  (ADR-059, `world-builder-enemy-3-proximity`) — enemies feel AWARE (orient/lean/bias; the awareness Combat-1 escalated into
+  pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Content-4 de-noise
+  target). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
+  (ADR-055) — slice sensory polish (the discovery layer the Content-4 teaching sign couples into). Hygiene-1 (chore `e4c6b9a`).
+- **Next per ADR-039 roadmap: (await operator pick)** — Content-4 made the non-lethal threat READ well (de-noised rings,
+  moment-named warnings, a teaching sign). The fork: does the non-lethal threat now read well enough → continue authored content +
+  audio; or does the slice want real stakes → plan **Combat-2: player health / damage / fail-state** (the bigger seam — health bar,
+  death, respawn, recovery, balance, UI; the only place the Combat-1R deferred stale-`inWindow` hardening matters) as a
   separately-approved stage; shader/LOD only if visuals/perf become the constraint. Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
@@ -151,7 +159,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → Combat-1R → Content-4 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1910,7 +1918,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 19. Content-3 — mixed enemy encounter composition (a glacial_sentinel + a frost_wisp staged together as one mixed engagement at the benchmark cache gate, via authored adjacency over the already-multi-beat stack; two independent single-enemy beats, overlapping zones, no schema change, no waves; deliberate benchmark gate rebaseline)  ← SHIPPED (ADR-058)
 20. Enemy-3 — light proximity response (a stationary glacial_sentinel orients+leans toward an in-zone player; a frost_wisp biases its hover drift away; bounded, dormant outside encounters, defeated stops it; a third motion overlay reusing EncounterPresentation's brighten + the encounter zone), no attacks/damage/chase/navmesh/waves/AI  ← SHIPPED (ADR-059)
 21. Combat-1 — enemy threat feasibility (a SEPARATE transient ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam in src/world/combat/: an enemy telegraphs a danger ring, the player crossing the inner radius gets ONE bounded non-lethal event — terrain-clamped knockback + camera shake + audio cue + warning overlay — with a cooldown; defeated enemies stop, encounters stay completable, nothing persists; CombatRuntime byte-stable, dormant without encounters), no health/death/respawn/projectiles/chase/waves/balance/director  ← SHIPPED (ADR-060)
-22. (await operator pick) — if Combat-1's bounded non-lethal threat is danger enough → continue authored content+audio / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+22. Content-4 — threat-aware encounter polish (make the Combat-1 threat READ well in the authored slice with NO new combat rules: a tiny presentation-only runtime layer — overlapping danger rings DE-NOISE to one prominent ring via the pure ThreatLogic.pickProminent; the warning NAMES the moment via the threaded encounter label ("The pass — fall back"); + a data-only teaching sign on the route. ThreatLogic state machine + Content-1/Content-3 encounters byte-stable; no WORLD_DOCUMENT_VERSION bump), no health/death/attacks/balance  ← SHIPPED (ADR-061)
+23. (await operator pick) — does the non-lethal threat now read well enough → continue authored content+audio / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage (the only place the Combat-1R stale-inWindow hardening matters) / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3433,6 +3442,72 @@ from" only once real player health/damage is added — at that point ThreatRunti
 per-enemy inside the loop (live position) so an enemy whose window you've been ejected from does not also
 fire. Deliberately deferred here because changing that edge-case outcome would be new threat behavior, outside
 the Combat-1 / Combat-1R no-feature boundary. Tree clean; deterministic gates unchanged + green.
+
+---
+
+## ADR-061 — Content-4: Threat-Aware Encounter Polish (presentation + authored readability, not new combat)
+
+**Status.** Accepted. Tag `world-builder-content-4-threat-aware-polish` (local only). Stage 72.
+
+**Context.** Combat-1 shipped a bounded, non-lethal enemy threat and Combat-1R closed its review clean, but the
+threat did not READ well in the authored slice: at the mixed cache gate two identical danger rings (the
+sentinel's + the overlapping wisp's) collapsed into one busy blob, and the warning was a single generic string
+that could not tell the player which moment they were in or how to recover. Content-4 makes the slice legible
+(this enemy is dangerous / where the danger zone is / when they triggered it / how to recover / how to
+continue) using the EXISTING threat seam, WITHOUT new combat rules — the no-Combat-2 boundary (no health,
+death, respawn, attacks, projectiles, damage persistence, balance, chase, waves, or director).
+
+**Decision — authored-data + a tiny presentation-only runtime layer (operator pick).** The existing
+`EncounterPresentation` banner already names each moment ("the crossing" / "the pass"), so the runtime layer
+only de-noises the rings and teaches recovery — leaving Content-3's authored composition byte-stable instead
+of re-spacing it. Three parts: (1) **Ring de-noise** — a NEW pure `ThreatLogic.pickProminent(entries)` returns
+the nearest in-outer-zone, alive enemy; `ThreatRuntime` renders only that enemy's danger ring prominent
+(`RING_BASE_OPACITY` 0.22) and drops every other overlapping ring to a faint `RING_DIM_OPACITY` 0.07, so the
+mixed gate reads as ONE clear ring; the fire flash still applies to whichever enemy fired (a hit reads on the
+right ring). It is a presentation selection — it does NOT gate firing. (2) **Label-aware warning** — the
+authored beat `label` is threaded additively (`EncounterRuntime.spawnEphemeral` → the ephemeral actor's stored
+descriptor → `EnemyRuntime.threatView()` → `ThreatRuntime` → `PlayerThreatFeedback`), so the warning names the
+moment ("The pass — fall back" / "The crossing — fall back"; the generic "Warding pulse — fall back" remains
+the no-label fallback). (3) **A data-only teaching sign** (`vb-threat-sign`) on the route before the crossing,
+reusing the Content-2 sign interaction (the `InteractionRuntime` surfaces it; no new runtime code), teaching
+that the wards shove you back but cannot fell you, how to recover, and to break through to the cache.
+
+**Byte-stable / no-new-behaviour boundary (held + checked).** `ThreatLogic.stepThreat` and all its constants
+(cooldown 2.5, knockback 0.6, danger factor, shake) are unchanged — Content-4 adds no threat behaviour and no
+balance tuning. CombatRuntime, EnemyTargetAdapter, EncounterPresentation, both player controllers, and the
+enemy FSM + `snapshot()` are byte-unchanged; the `threatView()` label + the `spawnEphemeral` label are additive
+read-only threads. The Content-1 / Content-3 encounter descriptors (positions, radii, patrol) are unchanged —
+the ring overlap is solved in presentation. The Combat-1R deferred stale-`inWindow` hardening is not touched
+(the de-noise reads the same once-per-frame position the firing does, so it stays consistent; that hardening
+remains a Combat-2 item). No `WORLD_DOCUMENT_VERSION` bump. The +1 teaching-sign object needed NO benchmark
+re-lock: the object-count assertions are loose (`objects.length <= 60`), the Performance-Contract `objects`
+ceiling is global (green ≤ 600; the benchmark is ~20), and no gate asserts an exact object count — the capture
+shifted to draws 122 / objs 20 / tris 501,722 and stays within budget.
+
+**Gotcha (accepted).** `SliceSensoryLogic` collects every `role:"sign"` interaction, so the teaching sign also
+fires an audio "Discovery" cue when the player enters its range. This does not break the audio-feedback gate
+(its discovery assertions run before combat; the combat section checks only ordered hit/defeat/clear) and is
+reasonable — the sign IS a discoverable authored beat. A future stage wanting the sign silent to the sensory
+layer would add a sign opt-out flag in `SliceSensoryLogic` (out of Content-4 scope).
+
+**Gates.** `test:content-4-threat-aware-polish` (5 Node: the teaching sign is authored + data-only + readable;
+`pickProminent` selects the nearest in-zone alive enemy and excludes defeated/out-of-zone/non-finite with a
+deterministic tie-break; the encounter labels are intact; the benchmark validates + round-trips with the sign;
+`ThreatLogic` stays pure + the cooldown/knockback constants + the rising-edge fire are byte-stable) +
+`test:content-4-threat-aware-polish-proof` (SwiftShader, ports 5262/9397: at the mixed gate both cache rings
+are visible but EXACTLY ONE is prominent — the overlap de-noises; crossing each enemy's window fires once and
+the warning NAMES the moment; the teaching sign is loaded + surfaces its recovery text; the cache beats still
+complete despite the threat; reload drops the transient threat while the sign + completions persist; benchmark
+within budget; 0 console errors). Full sweep — combat-threat-feasibility / combat / enemy / enemy-patrol /
+enemy-archetypes / enemy-proximity / encounter-editor / encounter-polish / content-3 / content-combat-beats /
+visual-benchmark / content-slice-expansion / audio-feedback / performance-contract / frozen-cache /
+first-playable proofs, all Node, build, qa 32/0/0 + 43/0/0 — green; ThreatLogic + the encounters byte-stable.
+
+**Non-goals (held).** No player health, death, respawn, attacks, projectiles, damage persistence, balance
+tuning, chase, waves, or AI director. The threat behaviour (firing, cooldown, knockback magnitude, danger
+radius) is unchanged; only its presentation (ring prominence, warning copy) and the authored slice (a sign)
+change. CombatRuntime / EnemyTargetAdapter / EncounterPresentation / both player controllers / the
+Content-1/Content-3 encounters byte-untouched. No `WORLD_DOCUMENT_VERSION` bump.
 
 ---
 

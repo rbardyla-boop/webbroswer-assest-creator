@@ -206,6 +206,22 @@ the beat still completes, and worlds without encounters (frozen-cache / first-pl
 threat is dormant + byte-stable. `CombatRuntime` / `EnemyTargetAdapter` / `EncounterPresentation` / both
 player controllers are **byte-unchanged**.
 
+## Content-4 — threat-aware encounter polish (ADR-061)
+
+Content-4 makes the Combat-1 threat **read** well, with **no** new combat rules. Three touches, presentation +
+authored only: (1) the mixed cache gate's two overlapping danger rings **de-noise** to a single prominent ring
+— a new pure `ThreatLogic.pickProminent` picks the nearest in-zone alive enemy, and every other overlapping
+ring drops to a faint resting opacity (the fire flash still reads on whichever enemy fired); (2) the threat
+**warning names the moment** by threading the authored beat label through the seam — "The pass — fall back" at
+the cache, "The crossing — fall back" at the crossing; (3) a **data-only teaching sign** on the route before
+the crossing teaches that the wards shove you back but cannot fell you, and how to recover. The threat
+**behaviour is unchanged** — `ThreatLogic.stepThreat` and its cooldown/knockback/danger constants and the
+Content-1/Content-3 encounters are **byte-stable** (the ring overlap is solved in presentation, not by
+re-spacing). The one new sign object needed **no benchmark re-lock** (the object-count assertions are loose
+and the Performance-Contract `objects` ceiling is global; the capture shifts to draws 122 / objs 20 / tris
+~501,722, still within budget). Note: the teaching sign also fires the audio "Discovery" cue when found (it is
+a discoverable authored sign) — benign and unasserted against.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -236,3 +252,10 @@ player controllers are **byte-unchanged**.
   inside does not re-fire (cooldown, no spam) and it re-arms after exit + cooldown; a defeated enemy never
   threatens + its ring hides while the beat still completes; reload drops the transient threat (events 0)
   while the completion persists; benchmark counts unchanged, 0 errors.
+- `test:content-4-threat-aware-polish(-proof)` — threat-aware polish (Content-4): the pure `pickProminent`
+  selects the nearest in-zone alive enemy + excludes defeated/out-of-zone; the teaching sign is authored +
+  data-only; the encounter labels are intact; `ThreatLogic` stays byte-stable. The proof: at the mixed gate
+  both cache rings are visible but exactly ONE is prominent (de-noise); crossing each enemy's window names the
+  moment in the warning ("The pass" / "The crossing" — fall back); the teaching sign surfaces its recovery
+  text; the cache beats still complete despite the threat; reload drops the transient threat while the sign +
+  completions persist; benchmark within budget (draws 122 / objs 20), 0 errors.
