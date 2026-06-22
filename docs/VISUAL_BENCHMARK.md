@@ -261,6 +261,20 @@ mesh from the same field) so mesh == sampling == placement. A NEW file + a +1 re
 benchmark, the frozen slices, and the global terrain/lighting/water/atmosphere defaults all stay byte-stable; no
 new combat/renderer/schema (a normal v2 document).
 
+## Slice Authoring Kit-1 — the pattern, extracted (ADR-064)
+
+With two slices proving the pattern, **Slice Authoring Kit-1** extracts it into a pure, byte-compatible
+authoring layer so the next slice is assembled, not hand-rolled (NOT a new runtime system). `SliceKit.js`
+provides the document-block factories (`sliceLayout({seed})`, `groundedPrimitive`/`offset`, `encounterBeat`,
+`generatedWeaponReward`, `beaconTrail`, `mergeGlacialLighting`) — each **proven byte-equal to BOTH shipped
+slices'** blocks, so a future migration is safe. `SliceSeedProbe.js` (+ `npm run slice:probe`) reports which
+candidate terrain seeds yield a walkable, real-carry, distinct place. `SliceComposition.js`'s
+`validateSliceComposition` accepts both shipped slices and rejects malformed ones (bad sites, a carry blocker, a
+missing identity/sign/objective) with precise reasons. `scripts/lib/slice-proof.mjs` is ONE descriptor-driven
+proof helper that drives both slices to completion. It is **non-invasive** — new modules only; the shipped
+slices, the frozen slices, and every global default are untouched. See **`docs/SLICE_AUTHORING.md`** for the
+authoring checklist.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -322,3 +336,12 @@ new combat/renderer/schema (a normal v2 document).
   defeats BOTH beats independently; depositing the relic completes the run and the completion CARD shows "The
   Ice Chapel"; reload preserves completion + identity + trophy + both encounter clears + the reward, drops the
   transient threat; perf within the contract (draws 114 / objs 20 / tris ~490,160); 0 console errors.
+- `test:slice-authoring-kit(-proof)` — the authoring kit (Slice Authoring Kit-1; pure modules, not a slice).
+  Node (6 checks): the factories reproduce BOTH shipped slices' layout + every block byte-for-byte (migration-
+  safe); the seed probe is deterministic + reports walkability/carry/distinctness + rejects a non-distinct seed;
+  `validateSliceComposition` accepts both shipped slices + rejects five malformed fixtures (bad sites, carry
+  blocker, missing identity, missing sign, bad beats) each with a precise reason; the kit modules are pure; the
+  frozen-slice default identity is unchanged. The proof (SwiftShader, 5268/9403): ONE shared descriptor-driven
+  helper drives BOTH slices to completion — the 2-beat no-GLB chapel AND the 3-beat + GLB benchmark each resolve
+  their own identity, read their sign, defeat every beat with one weapon, recover from a threat, deposit to
+  complete with their own completion card, and reload-persist; 0 console errors.
