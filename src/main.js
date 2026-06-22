@@ -42,8 +42,10 @@ import { WEAPON_PRESETS } from "./arsenal/WeaponPresets.js";
 import { rollConfig } from "./arsenal/WeaponConfig.js";
 import { generateWeaponRecipe } from "./arsenal/WeaponGrammar.js";
 import { ObjectiveRuntime } from "./world/objectives/ObjectiveRuntime.js";
-import { RELIC_ID } from "./world/objectives/RelicWeaponObjective.js";
+import { RELIC_ID, isWalkable } from "./world/objectives/RelicWeaponObjective.js";
 import { CombatRuntime } from "./world/combat/CombatRuntime.js";
+import { ThreatRuntime } from "./world/combat/ThreatRuntime.js";
+import { PlayerThreatFeedback } from "./world/combat/PlayerThreatFeedback.js";
 import { EnemyRuntime } from "./world/enemies/EnemyRuntime.js";
 import { EncounterRuntime } from "./world/encounters/EncounterRuntime.js";
 import { RuntimeFeedback } from "./world/feedback/RuntimeFeedback.js";
@@ -186,6 +188,16 @@ const sliceSensory = runtimeMode
 // gate-light beacon at the crossing, and an encounter banner. Observes EncounterRuntime + the projected
 // Enemy-0 actor; mutates no encounter/enemy STATE. Worlds with no encounters build nothing → byte-stable.
 const encounterPresentation = runtimeMode ? new EncounterPresentation({ scene, player }) : null;
+// Combat-1 enemy threat feasibility — a SEPARATE, transient seam (combat owns player→enemy strikes; this is
+// the reverse). PlayerThreatFeedback delivers ONE bounded non-lethal event (terrain-clamped knockback +
+// camera shake + audio cue + warning overlay); ThreatRuntime observes enemyRuntime.threatView() + the player
+// and fires on a fresh danger-window crossing. Runtime-only; never persisted; dormant where no enemy carries
+// an encounter zone (frozen-cache / first-playable stay byte-stable). safePlace reuses the canonical walkable
+// predicate so the knockback can never push the player through a cliff or into water.
+const playerThreatFeedback = runtimeMode
+  ? new PlayerThreatFeedback({ camera, audio: sharedAudio, safePlace: isWalkable, getGroundHeight: getHeight })
+  : null;
+const threatRuntime = runtimeMode ? new ThreatRuntime({ scene, enemyRuntime, feedback: playerThreatFeedback }) : null;
 const frozenCacheSlice = runtimeMode
   ? new FrozenCacheSlice({
       scene,
@@ -506,6 +518,21 @@ if (import.meta.env.DEV) {
       return true;
     },
   };
+  // Combat-1 dev/test-only: the transient threat ledger (events + per-enemy window/cooldown + the feedback
+  // summary incl. the last knockback). The proof reads it to prove ONE event per crossing, the cooldown
+  // no-spam, the bounded knockback, dormant outside, defeat-disables, and that a reload drops it all.
+  window.__THREAT__ = () => threatRuntime?.snapshot() ?? null;
+  // Dev/test-only: tick ONLY the threat runtime (reads the current player → fires + knockback). The headless
+  // rAF is throttled (~5fps), so the proof drives this synchronously after teleporting the player.
+  window.__THREAT_DO__ = {
+    step: (dt = 1 / 60) => {
+      threatRuntime?.update(dt, player);
+      return true;
+    },
+  };
+  // Dev/test-only: the live player position (the threat knockback mutates it). Lets the proof read where the
+  // player ended up after a threat event without reaching into module-local state.
+  window.__PLAYER_POS__ = () => [player.position.x, player.position.y, player.position.z];
   // Dev/test-only: force the scene world-matrix update the render loop normally does each frame. A proof
   // that drives combat + enemy steps SYNCHRONOUSLY (no render between them) must call this so a moved
   // patroller's child collision meshes have a current matrixWorld before a hit-test (combat's per-target
@@ -914,6 +941,14 @@ function loadSliceSensory(document) {
   sliceSensory?.bind(document);
 }
 
+// Combat-1: reset the transient enemy-threat seam for the loaded world (clears cooldowns, rings, the event
+// ledger, and the feedback state). ThreatRuntime reads enemyRuntime.threatView() live each frame, so there
+// is nothing to project here — load() just guarantees a reload starts threat-clean (never persisted). Called
+// from BOTH runtime load paths after loadEncounters so the enemy zones exist before the first tick.
+function loadThreats() {
+  threatRuntime?.load();
+}
+
 // Audio/Feedback-1: observe one frame of slice events (encounter hit/defeat/clear + shrine discovery +
 // reward pickup + the relic-objective completion payoff). Shared by the main loop and the synchronous
 // __ENCOUNTER_DO__/__SLICE_SENSORY_DO__ proof drivers (the headless rAF is throttled ~5fps).
@@ -958,6 +993,7 @@ async function applyLoadedWorld(document) {
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
   loadSliceSensory(world.document); // audio/feedback-1 — bind sensory cues to the fresh encounter/sign/reward content
+  loadThreats(); // combat-1 — reset the transient enemy-threat seam (after loadEncounters → enemy zones exist)
   setCameraMode(world.document.player.cameraMode);
   cameraController.update(0.016);
   grass.prewarm(camera, 80);
@@ -1144,6 +1180,7 @@ async function boot() {
   loadEnemies(world.document); // enemy-0 actors — re-register as combat targets (after loadCombat clears the set)
   loadEncounters(world.document); // encounter-editor-0 — project beats' ephemeral enemies (after loadEnemies clears its set)
   loadSliceSensory(world.document); // audio/feedback-1 — bind sensory cues to the fresh encounter/sign/reward content
+  loadThreats(); // combat-1 — reset the transient enemy-threat seam (after loadEncounters → enemy zones exist)
   setCameraMode(world.document.player.cameraMode);
 
   if (runtimeMode) {
@@ -1326,6 +1363,7 @@ function frame(now) {
   enemyRuntime?.update(dt, player); // enemy-0: advance hit-react/defeated state + body visual (after combat dispatches the hit)
   // Persist a freshly-defeated enemy's terminal state (mirrors objective completion → save-on-edge).
   if (enemyRuntime?.takePersistRequest() && world?.document) worldSerializer.save(world.document);
+  threatRuntime?.update(dt, player); // combat-1: enemy threat pressure (after the enemy moved → reads fresh transforms; transient, never persisted)
   encounterRuntime?.update(dt, player); // encounter-editor-0: poll each beat's enemy for defeat (after the enemy FSM ran)
   runtimeFeedback?.update(encounterRuntime?.snapshot()); // environment-polish-1: cue audio on encounter clear
   encounterPresentation?.update(encounterRuntime, player, dt); // encounter-1: telegraph + gate-light + banner (after EnemyFeedback, so the idle telegraph is the last writer)

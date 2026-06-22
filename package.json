@@ -81,6 +81,8 @@
     "test:enemy-archetypes-proof": "node scripts/browser-enemy-archetypes-proof.mjs",
     "test:enemy-proximity": "node scripts/enemy-proximity-regression.mjs",
     "test:enemy-proximity-proof": "node scripts/browser-enemy-proximity-proof.mjs",
+    "test:combat-threat-feasibility": "node scripts/combat-threat-feasibility-regression.mjs",
+    "test:combat-threat-feasibility-proof": "node scripts/browser-combat-threat-feasibility-proof.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",
     "test:geometry-stream": "node scripts/paged-geometry-stream-regression.mjs",

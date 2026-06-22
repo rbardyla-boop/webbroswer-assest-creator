@@ -190,6 +190,22 @@ transform so `snapshot()` stays deterministic. It is **structurally free** (no s
 counts are **unchanged** (draws 121, tris ~501,790, objs 19) and the Performance Contract needed **no re-lock**.
 Worlds without encounters (frozen-cache / first-playable) have no zone → the response is dormant + byte-stable.
 
+## Combat-1 — enemy threat feasibility (ADR-060)
+
+Combat-1 gives the cache gate **bounded danger**: an enemy telegraphs a **danger ring** at an inner radius of
+its encounter zone, and the player **crossing into** that ring takes ONE non-lethal feedback event — a small
+**terrain-clamped knockback** away from the enemy + a camera shake + an audio cue + a warning overlay — on a
+cooldown that blocks spam. It is a **feasibility gate**, not a combat system: no health, death, projectiles,
+chase, or waves. The seam is **separate** from `CombatRuntime` (which owns player→enemy strikes): a new
+transient `ThreatRuntime` / `ThreatLogic` / `PlayerThreatFeedback` trio that **observes** enemies through a
+read-only `EnemyRuntime.threatView()` + the player, mutates no enemy/combat/encounter state, and **never
+persists** (reload drops every cooldown + event). The danger ring is created **hidden** (and is not a
+WorldObject), so at the far-player benchmark capture the counts are **unchanged** (draws 121, tris ~501,790,
+objs 19) — the Performance Contract needed **no re-lock**. A defeated enemy never threatens (its ring hides),
+the beat still completes, and worlds without encounters (frozen-cache / first-playable) have no zoned enemy →
+threat is dormant + byte-stable. `CombatRuntime` / `EnemyTargetAdapter` / `EncounterPresentation` / both
+player controllers are **byte-unchanged**.
+
 ## Gates
 
 - `test:visual-benchmark` — Node (11 checks): the authored scene is valid, deterministic, registered, composed
@@ -214,3 +230,9 @@ Worlds without encounters (frozen-cache / first-playable) have no zone → the r
   are dormant; inside, the sentinel orients (yaw converges to the bearing) + leans and the wisp's drift biases
   away (bounded, away-from-player, body stays in-zone); both stay combat targets + are defeated by one weapon;
   defeat stops the response + freezes the pose; reload-persists; benchmark counts unchanged, 0 errors.
+- `test:combat-threat-feasibility(-proof)` — the enemy threat seam (Combat-1): outside the cache zone the
+  sentinel is dormant (0 events, ring hidden); crossing the inner danger window (on the side away from the
+  overlapping wisp) fires exactly one event + a bounded 0.60 m knockback away onto walkable ground; standing
+  inside does not re-fire (cooldown, no spam) and it re-arms after exit + cooldown; a defeated enemy never
+  threatens + its ring hides while the beat still completes; reload drops the transient threat (events 0)
+  while the completion persists; benchmark counts unchanged, 0 errors.

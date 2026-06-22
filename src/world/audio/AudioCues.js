@@ -9,6 +9,9 @@ export const AUDIO_CUES = Object.freeze({
   DEFEAT: "defeat",
   DISCOVERY: "discovery",
   REWARD: "reward",
+  // Combat-1 — the player-side warning for an enemy threat pulse (additive; the cues above are unchanged so
+  // every existing cue owner stays byte-stable).
+  THREAT: "threat",
 });
 
 export const CUE_NOTES = Object.freeze({
@@ -22,4 +25,6 @@ export const CUE_NOTES = Object.freeze({
   [AUDIO_CUES.DEFEAT]: [196, 130.81, 98],
   [AUDIO_CUES.DISCOVERY]: [523.25, 659.25, 783.99],
   [AUDIO_CUES.REWARD]: [659.25, 880],
+  // Timbre-distinct from the cues above: a low two-note warning thrum (danger, not impact or triumph).
+  [AUDIO_CUES.THREAT]: [146.83, 110],
 });

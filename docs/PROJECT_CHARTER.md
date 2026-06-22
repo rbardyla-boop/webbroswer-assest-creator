@@ -22,44 +22,47 @@ WorldDocument v2, Prefab system, and the World Builder are not rewritten.
 > so "Tested" means a named regression/proof exists and passed. **Refresh this after every accepted
 > stage** using the prompt at the end of this section.
 
-**Health snapshot — as of 2026-06-21 (Enemy-3 accepted; tag `world-builder-enemy-3-proximity`).**
-- **70 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
+**Health snapshot — as of 2026-06-21 (Combat-1 accepted; tag `world-builder-combat-1-threat-feasibility`).**
+- **71 stages shipped** (+ a Gate Repair-0 repair tag + the Hygiene-1 working-tree-triage chore). Milestone reached: **Glacial
   Valley First Playable** (`world-builder-first-playable-v0`, FP-4) — find → equip → carry → deposit a generated relic, reload-safe.
-- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Enemy-3 — Light Proximity Response**
-  (ADR-059): enemies feel AWARE of the player — a stationary `glacial_sentinel` ORIENTS (clamped turn) + LEANS toward an in-zone
-  player; a `frost_wisp` BIASES its hover drift slightly away — WITHOUT attacks, player damage, chase, pathfinding, navmesh, waves,
-  factions, loot, or director. It is a THIRD motion overlay, like Enemy-1 patrol + Enemy-2 hover. The operator deferred enemy
-  attacks (a much larger seam) + shader/LOD (no evidence pressure) in favour of this bounded awareness layer.
-- **Most of the seam already existed.** "Brighten" is ALREADY owned by `EncounterPresentation`'s telegraph (Enemy-3 does NOT
-  duplicate it). The PATROLLING sentinel already faces via Enemy-1's `alert` — `_patrol` stays byte-stable; the gap was the
-  STATIONARY sentinel. Proximity is encounter-gated: `EncounterRuntime` already threads `zone` into every projected enemy, so
-  assigning `actor.zone` for ALL archetypes (was hover/patrol only) gates the response on zone presence — a no-encounter enemy
-  (frozen-cache / first-playable) has no zone → never responds.
-- **`EnemyProximityLogic` (pure) + a thin `EnemyRuntime` overlay; everything else byte-stable.** The new pure module carries the
-  bounded math (`bearingTo`, `stepYaw` clamped-turn, `hoverBias` ≤ maxBias away-from-player, `leanAmount`, `proximityActive` the
-  single dormancy gate). `EnemyTypes` archetypes gain a frozen `proximity` field (sentinel turnRate/maxLean; wisp maxBias) — the
-  feedback constants untouched. `EnemyRuntime`'s stationary `_animate` orients/leans (ORIENTATION ONLY — the body never moves, no
-  chase); `_hover` adds the bounded bias before its zone clamp; a `proximityView()` DEV reader records the exact per-frame bias.
-  The response writes only the TRANSFORM — `snapshot()` stays deterministic. `CombatRuntime` / `EnemyTargetAdapter` /
-  `EncounterPresentation` / `_patrol` byte-UNCHANGED; no `WORLD_DOCUMENT_VERSION` bump.
-- **Enemy-3 gates GREEN**: `test:enemy-proximity` (5 Node: stepYaw shortest-path/clamp/idempotent incl. the ±π seam; hoverBias
-  bounded + away-from-player; leanAmount range; the dormancy gate; the archetype caps + the unchanged sentinel feedback) +
-  `test:enemy-proximity-proof` (SwiftShader on the benchmark mixed cache engagement, ports 5258/9393: OUTSIDE → both dormant;
-  INSIDE (player to the SIDE) → the sentinel yaw CONVERGES to the bearing + leans, the wisp's recorded bias is non-zero ≤ maxBias
-  away-from-player while the body stays in-zone; both remain combat targets + one weapon defeats both; defeat STOPS the response +
-  freezes the pose; reload persists; benchmark draws 121 / tris 501,790 / objs 19 UNCHANGED — no re-lock; 0 console errors). Full
-  sweep — enemy / enemy-archetypes / enemy-patrol / combat / encounter-editor / content-3 / content-combat-beats / encounter-polish
-  / visual-benchmark / content-slice-expansion / audio-feedback / performance-contract / frozen-cache / first-playable proofs, all
-  Node, build, qa — all green; the patrol facing + combat + the no-zone Enemy-0 path are byte-stable.
-- **Prior stages:** Content-3 (ADR-058, `world-builder-content-3-mixed-encounter`) — a glacial_sentinel + frost_wisp staged
-  together as one mixed engagement at the benchmark cache gate via authored adjacency over the already-multi-beat stack (the
-  composition Enemy-3 brings to life); runtime byte-stable, no waves. Enemy-2 (ADR-057) — second archetype `frost_wisp` via an
-  archetype registry + bounded hover. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1 (ADR-055) — slice sensory
-  polish. Content-2 (ADR-054) — frozen shrine + reward. Hygiene-1 (chore `e4c6b9a`) — tracked three codex working-tree artifacts.
-- **Next per ADR-039 roadmap: (await operator pick)** — Enemy-3 made the mixed fight feel aware without combat escalation. The
-  evidence-gated fork the operator named: if the mixed fight still feels HARMLESS → plan **Combat-1: enemy attack/damage
-  feasibility** (the bigger seam — player health, damage rules, fail states, recovery, balance, UI); if it feels ALIVE enough →
-  continue authored content; shader/LOD only if visuals/perf become the constraint. Keep converting the engine into a product surface.
+- **Build green; qa skills 32/0/0; qa layout 43/0/0.** Latest stage: **Combat-1 — Enemy Threat Feasibility**
+  (ADR-060): a FEASIBILITY GATE answering one question — can an enemy threaten the player in a bounded, readable, reload-safe way
+  WITHOUT a full health/combat system. Answer = YES, via a SEPARATE, transient seam. An enemy telegraphs a danger window (a danger
+  ring on the ground); the player CROSSING into the inner radius gets ONE non-lethal feedback event (a terrain-clamped knockback +
+  camera shake + audio cue + warning overlay) on a cooldown; a defeated enemy never threatens; the encounter stays completable;
+  nothing persists. No health bar, death, respawn, projectiles, melee animation, chase, waves, balance, or AI director.
+- **A separate `Threat*` seam, NOT CombatRuntime.** Combat-0's CombatRuntime owns player→enemy weapon strikes; enemy threat is the
+  REVERSE direction and lives in a NEW `src/world/combat/` trio so "combat" never becomes a bidirectional god-system: `ThreatLogic`
+  (PURE entry-trigger state machine, mirrors `EnemyProximityLogic`), `ThreatRuntime` (observes a new read-only
+  `EnemyRuntime.threatView()` + the player; owns a HIDDEN danger-ring telegraph + a transient event ledger; `takePersistRequest()`
+  always false), and `PlayerThreatFeedback`. Two operator picks at the gate (AskUserQuestion): entry-triggered + danger ring (over a
+  periodic pulse) and sensory + bounded knockback (over sensory-only).
+- **Bounded, fail-safe, dormant, transient.** `stepThreat` is a rising-edge + cooldown gate (standing inside never re-fires;
+  defeated never fires; rapid re-entry is cooldown-blocked; re-arms after exit + cooldown). The knockback is capped (`0.6` m) and
+  validated by the canonical `RelicWeaponObjective.isWalkable` — unsafe → SKIP (the event still fires, never a soft-lock). Threat is
+  dormant wherever no enemy carries an encounter zone → frozen-cache / first-playable byte-stable. The danger ring is created HIDDEN
+  and is not a WorldObject → the benchmark counts are unchanged (draws 121 / tris 501,790 / objs 19) → no Performance Contract
+  re-lock. `CombatRuntime` / `EnemyTargetAdapter` / `EncounterPresentation` / both player controllers byte-UNCHANGED; the only edit
+  to existing behavior is the additive read-only `threatView()` + the additive `THREAT` audio cue; no `WORLD_DOCUMENT_VERSION` bump.
+- **Combat-1 gates GREEN**: `test:combat-threat-feasibility` (5 Node: dangerRadius bounded; the rising-edge state machine — fires
+  once on enter, no spam standing inside, defeated never fires, cooldown blocks rapid re-entry, re-arms after exit + cooldown;
+  finite + bounded; the `ThreatLogic.js` pure-module scan) + `test:combat-threat-feasibility-proof` (SwiftShader on the benchmark
+  mixed cache engagement, ports 5260/9395: OUTSIDE → 0 events + ring hidden + benchmark within budget; ENTER (side away from the
+  overlapping wisp) → exactly ONE event + a bounded 0.60 m knockback away onto walkable ground; COOLDOWN → one per crossing + no
+  spam + re-arms; DEFEAT (Content-3 recipe) → the defeated enemy never threatens again + its ring hides + the beat completes;
+  RELOAD → events reset to 0 while the completion persists; 0 console errors). Full sweep — combat / enemy / enemy-patrol /
+  enemy-archetypes / enemy-proximity / encounter-editor / encounter-polish / content-3 / content-combat-beats / visual-benchmark /
+  content-slice-expansion / audio-feedback / performance-contract / frozen-cache / first-playable proofs, all Node, build, qa — all
+  green; CombatRuntime + the dormant slices are byte-stable.
+- **Prior stages:** Enemy-3 (ADR-059, `world-builder-enemy-3-proximity`) — enemies feel AWARE: a stationary sentinel orients +
+  leans toward an in-zone player, a wisp biases its hover drift away (a third motion overlay; the awareness Combat-1 escalates into
+  bounded pressure). Content-3 (ADR-058) — the mixed sentinel + wisp cache engagement (whose overlapping zones are the Combat-1
+  proof gotcha). Enemy-2 (ADR-057) — second archetype `frost_wisp`. Enemy-1 (ADR-056) — bounded sentinel patrol. Audio/Feedback-1
+  (ADR-055) — slice sensory polish. Hygiene-1 (chore `e4c6b9a`) — tracked three codex working-tree artifacts.
+- **Next per ADR-039 roadmap: (await operator pick)** — Combat-1 proved an enemy CAN threaten the player cleanly (bounded,
+  reload-safe, non-lethal). The fork: if that's enough danger → continue authored content + audio; if it wants real stakes → plan
+  **Combat-2: player health / damage / fail-state** (the bigger seam — health bar, death, respawn, recovery, balance, UI) as a
+  separately-approved stage; shader/LOD only if visuals/perf become the constraint. Keep converting the engine into a product surface.
 - **Resolved by Gate Repair-0 (`world-builder-gate-repair-visibility-v0`):**
   - ✅ **`test:visibility` (Stage 17A)** — was a STALE test expectation (`expected 2 animated rigs, got 3`), NOT a
     runtime regression. Proven by a throwaway agent dump: the kernel registers 3 agents = the 2 authored rigs +
@@ -139,7 +142,7 @@ builds ON `…first-playable-v0` + `…slice0-frozen-cache`, does not reopen the
 Slice-0A (human UX hardening) → Editor UX-1 → Performance Contract-1 → Procedural Authoring-1 →
 Asset Pipeline-1 → Combat-0 → Enemy-0 → Encounter Editor-0 → Geometry Stream Gate-0 →
 Visual Benchmark-1 → WebGPU Feasibility Gate-0 → Environment Polish-1 → Encounter-1 → Content-1 → Content-2 →
-Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → **(await operator pick)**.
+Audio/Feedback-1 → Enemy-1 → Enemy-2 → Content-3 → Enemy-3 → Combat-1 → **(await operator pick)**.
 
 **How to refresh this ledger (reusable prompt — paste verbatim after any accepted stage):**
 
@@ -1897,7 +1900,8 @@ future feasibility gate (see roadmap), not a permanent ideological exclusion.
 18. Enemy-2 — second enemy archetype (frost_wisp: a floating glacial spirit beside glacial_sentinel; archetype registry in EnemyTypes, bounded hover overlay, lighter health, distinct silhouette/feedback; same StrikeEvent path, dedicated enemy-archetype-lab scene, benchmark byte-stable), no attacks/chase/projectiles/waves/AI  ← SHIPPED (ADR-057)
 19. Content-3 — mixed enemy encounter composition (a glacial_sentinel + a frost_wisp staged together as one mixed engagement at the benchmark cache gate, via authored adjacency over the already-multi-beat stack; two independent single-enemy beats, overlapping zones, no schema change, no waves; deliberate benchmark gate rebaseline)  ← SHIPPED (ADR-058)
 20. Enemy-3 — light proximity response (a stationary glacial_sentinel orients+leans toward an in-zone player; a frost_wisp biases its hover drift away; bounded, dormant outside encounters, defeated stops it; a third motion overlay reusing EncounterPresentation's brighten + the encounter zone), no attacks/damage/chase/navmesh/waves/AI  ← SHIPPED (ADR-059)
-21. (await operator pick) — if the mixed fight still feels HARMLESS → Combat-1: enemy attack/damage feasibility (player health, damage rules, fail states, recovery, balance, UI) / else continue authored content+audio / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
+21. Combat-1 — enemy threat feasibility (a SEPARATE transient ThreatRuntime/ThreatLogic/PlayerThreatFeedback seam in src/world/combat/: an enemy telegraphs a danger ring, the player crossing the inner radius gets ONE bounded non-lethal event — terrain-clamped knockback + camera shake + audio cue + warning overlay — with a cooldown; defeated enemies stop, encounters stay completable, nothing persists; CombatRuntime byte-stable, dormant without encounters), no health/death/respawn/projectiles/chase/waves/balance/director  ← SHIPPED (ADR-060)
+22. (await operator pick) — if Combat-1's bounded non-lethal threat is danger enough → continue authored content+audio / else plan Combat-2: player health / damage / fail-state (health bar, death, respawn, recovery, balance, UI) as a separately-approved stage / Nanite-like Shader Feasibility (only if visuals/perf become the constraint)
 ```
 
 **Decisive milestone.** Not "more systems" — one compact environment that looks intentional, edits smoothly,
@@ -3327,6 +3331,80 @@ Node, build, qa — green; the patrol facing + combat + the no-zone Enemy-0 path
 **Non-goals (held).** No attacks, player damage, projectiles, chase, pathfinding, navmesh, waves, factions, loot, AI director, new
 combat rules, or animation system. The response is orientation/lean/bias only — the body never moves toward the player.
 CombatRuntime / EnemyTargetAdapter / EncounterPresentation / `_patrol` byte-untouched. No `WORLD_DOCUMENT_VERSION` bump.
+
+---
+
+## ADR-060 — Combat-1: Enemy Threat Feasibility (a separate transient seam, not a combat system)
+
+**Status.** Accepted. Tag `world-builder-combat-1-threat-feasibility` (local only). Stage 71.
+
+**Context.** Enemy-1/2/3 made the mixed cache engagement move and feel aware, but the enemies are still
+HARMLESS — they cannot threaten the player at all. The operator named the fork: "if the mixed fight still
+feels harmless → Combat-1 enemy attack/damage feasibility." Combat-1 answers ONE narrow question — can an
+enemy create bounded, readable, reload-safe danger WITHOUT a full health/combat system — and stops there. It
+is a FEASIBILITY GATE, not combat v1. Explicit non-goals: no health bar, death, respawn, projectiles, ranged
+combat, melee animation, chase, waves, factions, loot, difficulty, or AI director.
+
+**Decision — a SEPARATE, transient `Threat*` seam in `src/world/combat/`; CombatRuntime byte-stable.** Combat-0's
+CombatRuntime owns player→enemy weapon strikes; enemy threat is the REVERSE direction and lives in a NEW trio
+so "combat" never becomes a bidirectional god-system: `ThreatLogic.js` (PURE entry-trigger state machine,
+mirrors `EnemyProximityLogic`), `ThreatRuntime.js` (observes a new read-only `EnemyRuntime.threatView()` +
+the player; owns a hidden danger-ring telegraph + a transient event ledger; `takePersistRequest()` always
+false), and `PlayerThreatFeedback.js` (the player-side non-lethal feedback). Two operator picks at the gate
+(AskUserQuestion): **entry-triggered + danger ring** (over a telegraphed periodic pulse) — a visible danger
+ring telegraphs the hazard while the player is in the OUTER encounter zone, crossing the INNER danger radius
+fires ONE event, a cooldown blocks re-fire spam; and **sensory + bounded knockback** (over sensory-only) —
+camera shake + audio cue + warning overlay PLUS a small terrain-clamped knockback away from the enemy.
+
+`ThreatLogic` constants: `THREAT_DANGER_FACTOR=0.5` (danger radius = a fraction of the encounter zone → always
+strictly inside it, no archetype/schema change), `THREAT_COOLDOWN=2.5`s, `THREAT_KNOCKBACK=0.6`m, `THREAT_SHAKE
+=0.4`s. `stepThreat` is a rising-edge gate (`fired = live && inWindow && !inWindowPrev && cooldownLeft<=0`):
+standing inside never re-fires, a defeated enemy never fires (and never latches in-window), rapid exit/re-entry
+is cooldown-blocked, and a fresh crossing re-arms only after the cooldown elapses. The knockback is fail-safe:
+it validates the destination with the canonical `RelicWeaponObjective.isWalkable` (grounded / dry / below
+snowline / slope-capped) and SKIPS the push if unsafe (the event still fires) — a threat can never push the
+player through a cliff or into water (no soft-lock); it grounds via `getHeight + 0.1` (the `__COMBAT_DO__.
+teleportTo` pattern). The camera shake is an additive offset applied after the camera controller positioned the
+camera each frame. The only edit to an existing module's behavior is the additive read-only `threatView()` on
+EnemyRuntime; CombatRuntime, EnemyTargetAdapter, EncounterPresentation, PlayerController, and
+PlayerCameraController are byte-UNCHANGED; the `THREAT` audio cue is additive (the original cues' owners stay
+byte-stable); no `WORLD_DOCUMENT_VERSION` bump, no schema change (threat state is transient-only).
+
+**Bounded + dormant + transient invariants (held + checked).** Danger radius ≤ zone radius; knockback ≤
+`THREAT_KNOCKBACK` and terrain-safe; cooldown blocks spam; shake ≤ a small cap. Threat is dormant wherever no
+enemy carries an encounter zone — a doc-authored / no-encounter world (frozen-cache, first-playable) has no
+zoned enemy → no threat → byte-stable. A defeated enemy never threatens and its ring hides. The ledger is
+never written to the document (`takePersistRequest` always false) → a reload drops every cooldown + event. The
+danger ring is created HIDDEN and is not a WorldObject → at the far-player benchmark capture every ring is
+hidden, so the benchmark counts are unchanged → no Performance Contract re-lock.
+
+**Gates.** `test:combat-threat-feasibility` (5 Node: `threatDangerRadius` bounded [0, zoneRadius] + finite;
+`inDangerWindow` inclusive disk; `stepThreat` rising-edge — fires once on enter, standing inside 20 s fires
+exactly once, defeated never fires, cooldown blocks rapid re-entry, re-arms after exit + cooldown, fires are
+cooldown-bounded over a 60 s oscillation; finite + bounded over arbitrary input; constants bounded + the
+`ThreatLogic.js` pure-module scan — no THREE/RNG/clock/DOM) + `test:combat-threat-feasibility-proof`
+(SwiftShader on the benchmark mixed cache engagement, ports 5260/9395: OUTSIDE → 0 events + ring hidden +
+benchmark within budget; ENTER the danger window on the side AWAY from the overlapping wisp → exactly ONE
+event + a bounded 0.60 m knockback away from the enemy onto walkable ground; COOLDOWN → one event per
+crossing, no spam while standing inside, re-arms after exit + cooldown; DEFEAT (Content-3 recipe) → the
+defeated enemy never threatens again + its ring hides + the beat still completes; RELOAD → events reset to 0
+(transient dropped) while the completion persists; 0 console errors). Full sweep — combat / enemy / enemy-patrol
+/ enemy-archetypes / enemy-proximity / encounter-editor / encounter-polish / content-3 / content-combat-beats /
+visual-benchmark / content-slice-expansion / audio-feedback / performance-contract / frozen-cache /
+first-playable proofs, all Node, build, qa 32/0/0 + 43/0/0 — green; the benchmark counts (draws 121 / tris
+501,790 / objs 19) are unchanged.
+
+**Gotcha.** Content-3 placed the cache wisp's radius-6 zone OVERLAPPING the cache sentinel's, so a crossing at
+the gate is inside BOTH danger windows → one threat update fires TWO events and applies two compounding
+knockbacks. The proof isolates a single enemy by standing the player inside the sentinel's window but on the
+side AWAY from the wisp, and a per-enemy `fires` counter in the snapshot makes the assertions precise.
+
+**Non-goals (held).** No player health, death, respawn, inventory damage, balancing, projectiles, ranged
+combat, melee animation, chase AI, waves, factions, loot, difficulty scaling, or AI director. The threat is
+one bounded non-lethal event per crossing; the encounter stays completable; nothing persists. CombatRuntime /
+EnemyTargetAdapter / EncounterPresentation / both player controllers byte-untouched. No `WORLD_DOCUMENT_VERSION`
+bump. If a later stage wants real player health, it decides so separately; if threat ever feels messy, the
+slice stays non-lethal here.
 
 ---
 

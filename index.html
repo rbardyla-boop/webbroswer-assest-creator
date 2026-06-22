@@ -136,6 +136,17 @@
       }
       .cue-overlay.visible { opacity: 1; transform: translateX(0); }
 
+      /* Combat-1: transient enemy-threat warning — centred + urgent, distinct from the milestone toast */
+      .threat-warning {
+        position: fixed; left: 50%; top: 22%; z-index: 20; transform: translate(-50%, -8px);
+        padding: 9px 18px; color: #ffe2da; background: rgba(40, 12, 9, 0.84);
+        border: 1px solid rgba(255, 107, 90, 0.5); border-radius: 9px;
+        opacity: 0; transition: opacity 0.18s ease, transform 0.18s ease;
+        pointer-events: none; font-size: 13px; font-weight: 600; letter-spacing: 0.05em;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); backdrop-filter: blur(6px);
+      }
+      .threat-warning.visible { opacity: 1; transform: translate(-50%, 0); }
+
       /* Slice-0A: toggleable friction trace / session log (press L in play mode) */
       .slice-trace {
         position: fixed; left: 14px; top: 14px; z-index: 19; width: min(300px, 42vw);

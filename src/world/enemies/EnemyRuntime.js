@@ -420,6 +420,26 @@ export class EnemyRuntime {
     return out;
   }
 
+  // Combat-1 DEV/consumer reader: the live world position + encounter zone + defeated flag of every
+  // zone-bearing (encounter-projected) actor, for the SEPARATE ThreatRuntime to observe. Read-only, no
+  // THREE, no mutation — mirrors proximityView. A doc-authored / no-zone enemy is omitted (it can never
+  // threaten), so a world without encounters yields an empty view → threat is dormant + byte-stable.
+  threatView() {
+    const out = [];
+    for (const a of this.enemies.values()) {
+      if (!a.zone) continue;
+      const g = a.group;
+      out.push({
+        id: a.id,
+        type: a.type,
+        position: [g.position.x, g.position.y, g.position.z],
+        zone: { x: a.zone.x, z: a.zone.z, radius: a.zone.radius },
+        defeated: isDefeated(a.state),
+      });
+    }
+    return out;
+  }
+
   _applyDefeatPose(actor) {
     // A defeated wisp falls OUT of the air to just above the ground (the archetype's dim emissive does the
     // rest of the "extinguished" read); a grounded sentinel slumps DOWN into the ground (byte-identical).
