@@ -1,172 +1,215 @@
-# Grass World — Three.js Prototype
+# webbroswer-assest-creator
 
-A reusable, high-performance **instanced grass system** for the browser, with a
-controllable **capsule character**, **first/third-person cameras**, and an
-in-browser **World Builder** for placing reusable assets into the playable scene.
+![three.js r0.169](https://img.shields.io/badge/three.js-r0.169-000000?logo=three.js&logoColor=white)
+![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![test gates](https://img.shields.io/badge/test%20gates-102-brightgreen)
+![status](https://img.shields.io/badge/status-v0.1%20playable-blue)
+![license](https://img.shields.io/badge/license-source--available-lightgrey)
 
-Built on Vite + Three.js, structured as a serious prototype foundation —
-modular, configurable, and optimized for a real-time game rather than a one-off
-visual experiment.
+A browser-native world builder and procedural asset studio, built on [three.js](https://threejs.org/) r0.169. Sculpt a glacial valley, scatter living wildlife and flocks across it, generate sci-fi relic weapons from a seeded grammar, place them in the world, then walk up and carry one to its cache. All in the browser. No engine install, no native toolchain.
 
-![third-person](docs/preview.png)
+> Status: **v0.1.0** — a tagged, playable first build. Find a generated relic weapon, equip it, carry it across a living alpine valley, and deposit it on its pedestal. The loop completes and persists across reloads.
 
-## Run
+![Glacial valley preview](docs/preview.png)
+
+---
+
+## Why this exists
+
+Most "make a game world in your browser" tools are either toy scene-graph editors or thin wrappers around a native engine. This is neither. It is a from-scratch, deterministic, content-authoring engine where:
+
+- **Everything is data.** Worlds, prefabs, generators, weapons, interactions, objectives — all serialize to a versioned `WorldDocument`. Reload is truth.
+- **Generation is seeded and reproducible.** No `Math.random()` in content paths. The same seed yields the same valley, the same flock, the same weapon, every time.
+- **The runtime is honest.** What you author is what you reload. Persistence whitelists are explicit; nothing is silently dropped or invented.
+- **The editor stays focused.** This is a deliberate, focused authoring tool — not an attempt to cram a native engine into a tab.
+
+---
+
+## Quick start
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-# production
-npm run build && npm run preview
+npm run dev        # Vite dev server, world builder at /
+npm run build      # production build
+npm run preview    # serve the production build
 ```
+
+Open the dev server URL, press **▶ Play** to enter play mode, and follow the on-screen banner: find the relic, press **F** to equip it, carry it to the glowing cache zone, and press **G** to deposit it.
+
+---
+
+## The four studios
+
+This project ships **four Vite entry points** (see [`vite.config.js`](vite.config.js)) — four distinct surfaces over one engine:
+
+| Entry | File | What it is |
+|---|---|---|
+| World Builder | [`index.html`](index.html) | The main editor + playable runtime: terrain, water, wildlife, placement, objectives. |
+| Arsenal Lab | [`arsenal.html`](arsenal.html) | A procedural sci-fi weapon studio. Roll a seed, get a weapon: grammar → geometry → material. |
+| Catalog | [`catalog.html`](catalog.html) | The playable-slice front door — browse and jump straight into authored slices. |
+| WebGPU Lab | [`webgpu-lab.html`](webgpu-lab.html) | An isolated WebGPU feasibility lab — a research gate, not a production renderer. |
+
+---
 
 ## Controls
 
-| Action | Key |
-| --- | --- |
-| Move | `W` `A` `S` `D` / arrows |
-| Sprint | `Shift` |
-| Jump | `Space` |
-| Look | click to capture mouse, `Esc` to release |
-| Toggle first / third person | `V` |
-| Toggle debug panel | `H` |
-| Open World Builder | toolbar button (top-right) |
+### Play mode
 
-The debug panel shows FPS, visible vs. active patches, approximate visible blade
-count, tree patch/tree counts, LOD distribution, draw calls, player position,
-and the camera mode.
+| Key | Action |
+|---|---|
+| **W A S D** | Move |
+| **Space** | Jump |
+| **Shift** | Sprint |
+| **Mouse** | Look |
+| **V** | Toggle camera view |
+| **F** | Equip / drop the carried weapon |
+| **R** | Cycle equip slot (right hand / back / hip) |
+| **H** | Carry helper |
+| **G** | Deposit the relic in the cache zone |
+| **1 / 2 / 3** | Select equip slot |
+| **L** | Toggle slice trace overlay |
 
-## Architecture
+### Debug overlays (dev build)
 
+| Key | Action |
+|---|---|
+| **`** (backquote) | Toggle debug overlay |
+| **B** | Toggle performance budget HUD |
+
+---
+
+## How it fits together
+
+```text
+WorldDocument (versioned, serializable)
+│
+├── terrain        TerrainProfile — one active profile is the single source of truth
+│                  for mesh height, height queries, and placement grounding
+├── water          lives inside the terrain contract (waterLevelAt / wetnessAt / hasWater)
+├── wildlife       grounded animals + aloft flocks, streamed by region, seeded
+├── ambient        motes and atmosphere over wet meadow and waterside
+├── objects        placed world objects, prefabs, generated clusters
+├── runtimeAssets  generated weapons — stored as recipes, rebuilt on load (never baked)
+├── interactions   data-only triggers, doors, signs, pickups, spawns
+└── objectives     the relic → equip → carry → deposit loop
 ```
+
+Two principles hold the whole thing together:
+
+1. **Single source of truth for terrain.** The mesh you see, the height query placement uses, and the ground wildlife and the player stand on all come from one active `TerrainProfile`. They cannot disagree.
+2. **Recipes, not bakes.** Generated weapons persist as the seed + grammar that produced them, not as frozen geometry. Load rebuilds them. Change the generator, reload, and old content regenerates faithfully.
+
+---
+
+## Procedural systems
+
+- **Glacial valley terrain** — an alpine glacial valley with color bands, snow/rock/dirt blending, and glacial lighting. The active profile owns height everywhere.
+- **Glacial water** — rivers, lakes, and tarns derived from a single water sheet that discards dry depth. Wetness drives vegetation and ambient placement.
+- **Wildlife** — grounded hares and ibex that wall-follow terrain and never wander into water, cliff, or snow; aloft snow-finch flocks with bounded cohesion and tangent scatter.
+- **Ambient motes** — firefly specks over wet meadow and waterside, the first consumer of the wetness field.
+- **Region streaming** — a shared, Node-testable `RegionStreamer` drives wildlife, flocks, and motes as the player moves.
+- **Generators** — city, camp, ruin, forest, and connective road/plaza generators emit normal `WorldObject`s and prefab-backed clusters — no hidden scene graph.
+- **Arsenal weapons** — a seeded grammar → geometry → material pipeline producing sci-fi weapons with energy shader cores and equip markers.
+
+This is prototype-grade real-time graphics by a single developer — lush and deliberate, but not a shipping production engine. Its strength is reproducibility and structure, not raw fidelity.
+
+---
+
+## Combat seam
+
+There is no combat or live firing in this build. The relic loop is non-lethal: find, equip, carry, deposit. There is no health, death, projectile, chase, or wave — the threat-aware systems present are feasibility and presentation only, not a live combat mode.
+
+---
+
+## Testing & verification
+
+This is a heavily test-gated codebase. There are **102 `test:*` scripts** in [`package.json`](package.json), each pinning a specific subsystem or stage so it cannot silently regress. Nearly every feature ships with **both** a deterministic, GL-free Node regression (`scripts/*-regression.mjs`) **and** a headless browser proof (`scripts/browser-*-proof.mjs`) that boots three.js under SwiftShader (software WebGL).
+
+```bash
+npm run qa            # the aggregate quality gate (skills + layout + build + browser smoke)
+npm run test:browser  # headless browser smoke (WebGL via SwiftShader)
+npm run perf:report   # performance report (DEV __PERF__ hook)
+```
+
+A few representative gates:
+
+```bash
+npm run test:terrain-profile      # single-source terrain invariant
+npm run test:water                # water-in-terrain contract
+npm run test:wildlife             # grounded animal habitat gate
+npm run test:flock                # aloft flock cohesion
+npm run test:instancing           # runtime instancing identity
+npm run test:first-playable-proof # the integrated first-playable loop
+```
+
+The first-playable proof is the headline gate: it drives the entire loop — load a living world, place and equip a weapon, walk (through the real movement pipeline, no teleport) to the cache, deposit, complete, reload, and assert persistence — in a single headless session with zero console errors.
+
+> Headless WebGL runs on SwiftShader (software), so frame-time is not a GPU FPS measurement. Performance gates assert structure (draw calls, batching, triangle counts), not wall-clock frame rate.
+
+---
+
+## Project layout
+
+```text
 src/
-  main.js                     # wires everything into one update/render loop
-  core/
-    renderer.js               # WebGLRenderer setup (tone mapping, shadows, DPR cap)
-    scene.js                  # scene + sky color + distance fog
-    camera.js                 # shared perspective camera
-    lights.js                 # sun (shadow) + hemisphere fill
-    input.js                  # keyboard / mouse-look / pointer-lock (consume-on-read edges)
-  terrain/
-    terrainSampling.js        # getHeight / getNormal / getSlope / canPlaceGrass / findGoodSpawn
-    Terrain.js                # displaced, vertex-colored ground mesh
-  grass/
-    GrassConfig.js            # every tunable knob (density, LOD, wind, size, debug…)
-    GrassGeometry.js          # base blade meshes per LOD (tapered strips)
-    GrassMaterial.js          # custom ShaderMaterial — GPU wind + per-instance variation
-    GrassPlacement.js         # deterministic per-patch instance data via placement rules
-    GrassPatch.js             # one chunk: instanced attributes + per-LOD geometries
-    GrassSystem.js            # streaming, frustum cull, LOD assignment, stats
-  trees/
-    TreeConfig.js             # forest density, LOD, streaming, exclusion, variation
-    TreeGeometry.js           # shared low-poly trunk/canopy geometries per LOD
-    TreeMaterial.js           # shared tree materials with instance colors
-    TreePlacement.js          # deterministic terrain-aware tree instance data
-    TreePatch.js              # one chunk: instanced trunks + canopies per LOD
-    TreeSystem.js             # streaming, cull, budgeted rebuilds, debug stats
-  player/
-    Player.js                 # capsule avatar + state
-    PlayerController.js        # input → grounded movement
-    PlayerCameraController.js  # first/third-person framing + toggle
-  debug/
-    DebugPanel.js             # on-screen HUD
-  editor/
-    WorldEditor.js            # live world-building shell over the playable scene
-    AssetLibrary.js           # local list of placeable primitive/imported/generated assets
-    ColliderInspector.js      # selected-object collider type + debug wireframe toggle
-    SceneSerializer.js        # localStorage save/load for placed object transforms
-    ReliefAssetTool.js        # 2D drawing / photo → placeable relief asset
-  physics/
-    ColliderProxy.js          # simple authored collider metadata and footprints
-    ColliderSystem.js         # runtime support heights, side blocking, grass exclusion
-    capsuleCollision.js       # capsule-vs-proxy horizontal resolution helpers
-  world/
-    PlacedObject.js           # primitive mesh factories + placed object wrapper
-    WorldObjectManager.js     # add/remove/duplicate/save/load placed objects
-  utils/
-    math.js                   # clamp, lerp, damp, angle helpers
-    random.js                 # seeded PRNG + value-noise fbm
+├── world/              the engine: documents, terrain, water, wildlife, ambient,
+│                       placement, objectives, streaming, interactions, slices
+├── generators/         city / camp / ruin / forest / connector generators
+├── arsenal/            the procedural weapon studio (seeded grammar → mesh → material)
+├── catalog/            the playable-slice catalog surface
+├── grass/ trees/ bushes/   instanced, streamed vegetation systems
+├── terrain/            terrain mesh + sampling (height / slope / placement)
+├── player/ physics/    capsule character, cameras, collider proxies
+├── editor/             the in-browser world-building shell
+├── export/             worldpack export (Node-safe, runtime-consumable)
+├── animation/          rigged-GLB playback via AnimationMixer (runtime-only)
+├── voxels/             editor/debug voxel lab (runtime-inert)
+├── visibility/         frustum-tier visibility kernel (gates updates, never hides)
+├── feasibility/        the WebGPU feasibility lab
+└── main.js             editor + runtime wiring
+
+docs/                   the charter, build gates, and per-stage design records
+scripts/                test, proof, and QA harness scripts
 ```
 
-### Grass system
+---
 
-- **Instanced.** Each patch is one `InstancedBufferGeometry` draw call. Per-blade
-  attributes (`aOffset`, `aRot`, `aScale`, `aTilt`, `aBend`, `aTint`, `aPhase`)
-  give natural variation in height, width, rotation, tint, bend, and wind phase.
-- **Patch/chunk based.** The world is a grid of square patches. Visibility,
-  distance culling, and LOD all happen at patch granularity.
-- **Streaming.** Patches build lazily around the camera within a per-frame
-  budget and dispose past a hysteresis distance, so memory stays bounded and the
-  field feels endless.
-- **GPU wind.** A custom vertex shader sways blades against a travelling gust
-  field — no per-frame CPU work touches the blades.
-- **LOD.** Distance bands select both blade detail (height segments) and density
-  (instance count), thinning far grass while keeping the near field lush.
-- **Placement rules.** Blades are placed through `terrainSampling` — never on
-  steep slopes, clustered by a meadow mask, always grounded on the terrain.
+## The in-browser editor
 
-### Tree system
+Open the World Builder, place primitives (cube, sphere, cylinder, plane, ramp), import a GLB/GLTF for the session, or turn a drawing/photo into a placeable relief asset. Click to place, click to select, then move / rotate / scale / duplicate / delete — with **undo/redo** and **localStorage** save/load. Placed objects carry simple collider proxies (`box`, `cylinder`, `ramp`, `plane`, `trigger`, `none`); the runtime collides against those proxies rather than the visual mesh, and solid colliders suppress grass in their footprint.
 
-- **Instanced patches.** Forest chunks are patch-based like grass. Each visible
-  patch renders shared trunk and canopy geometries through `InstancedMesh`;
-  trees are not individual scene meshes.
-- **Terrain/exclusion aware.** Placement samples the same terrain height/slope
-  functions and respects World Builder exclusion footprints, so roads, planes,
-  ramps, and placed meshes can keep trees out.
-- **LOD and streaming.** Tree patches build lazily around the camera, cull by
-  distance/frustum, swap near/mid/far procedural LODs at patch level, and dispose
-  outside the keep distance.
-- **Editor-safe rebuilds.** Moving exclusion objects queues affected tree patch
-  rebuilds instead of rebuilding the whole forest synchronously.
-- **World Builder controls.** The editor exposes enable, density, visible
-  distance, seed, and exclusion-respect settings for the tree system.
+---
 
-### Player & camera
+## Documentation
 
-- Simple capsule kept grounded every frame via `getHeight`.
-- Movement is built from the active camera yaw, so `W` always goes where the
-  camera faces. Third-person turns the body toward movement; first-person aligns
-  it to the look direction (and hides the body).
-- Third-person is a smoothed follow rig that stays above the terrain;
-  first-person sits at eye height. `V` toggles between them.
+The full design history lives in [`docs/`](docs/). Highlights:
 
-### World Builder
+- [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md) — the canonical engineering ledger, with **64 ADR sections** recording every significant architectural decision.
+- [`docs/FIRST_PLAYABLE_BUILD.md`](docs/FIRST_PLAYABLE_BUILD.md) — the first-playable build gate: the go/no-go target for the v0.1 milestone.
+- [`docs/FIRST_OBJECTIVE.md`](docs/FIRST_OBJECTIVE.md) — the relic → equip → carry → deposit objective.
+- [`docs/ARSENAL_LAB.md`](docs/ARSENAL_LAB.md) — the procedural weapon studio.
+- [`docs/ARSENAL_WORLD.md`](docs/ARSENAL_WORLD.md) — how generated weapons enter the world as recipes.
+- [`docs/VISUAL0_TERRAIN.md`](docs/VISUAL0_TERRAIN.md) — the glacial valley terrain profile.
+- [`docs/VISUAL1_WATER.md`](docs/VISUAL1_WATER.md) — the glacial water contract.
+- [`docs/SLICE_AUTHORING.md`](docs/SLICE_AUTHORING.md) — the slice authoring kit.
+- [`docs/PERFORMANCE_REPORT.md`](docs/PERFORMANCE_REPORT.md) — the performance validation report.
+- [`docs/VISUAL_BENCHMARK.md`](docs/VISUAL_BENCHMARK.md) — the visual regression benchmark.
+- [`docs/WEBGPU_FEASIBILITY.md`](docs/WEBGPU_FEASIBILITY.md) — the WebGPU feasibility study.
 
-Open the World Builder from the top-right toolbar. Choose a primitive asset
-(cube, sphere, cylinder, plane, ramp), import a GLB/GLTF for the current session,
-or create a relief asset from a drawing/photo. Click the terrain to place the
-selected asset. Click placed objects to select them, then move, rotate, scale,
-duplicate, delete, save, and load from localStorage.
+---
 
-Placed objects have separate collider proxies (`box`, `cylinder`, `ramp`,
-`plane`, `trigger`, `none`). Runtime collision uses those simple proxies rather
-than the visual mesh: boxes/cylinders block the player, planes and boxes provide
-walkable support, and ramps provide sloped support. Solid/walkable colliders also
-suppress grass in their footprints when patches rebuild. The collider inspector
-can toggle wireframe debug boxes.
+## Tech stack
 
-Relief creation is now a tool inside the builder: luminance becomes height and
-color is sampled per vertex, but the result is added to the asset library for
-placement in the actual grass world instead of living only in a separate preview.
+- **[three.js](https://threejs.org/) r0.169** — rendering.
+- **[Vite](https://vitejs.dev/) 5** — dev server and build, with four entry points.
+- **Node ≥ 18** — for the test and QA harness.
+- A single runtime dependency (`three`). The engine is deliberately lean.
 
-## Configuration
+---
 
-Everything is driven from [`src/grass/GrassConfig.js`](src/grass/GrassConfig.js).
-Pass overrides to `createGrassConfig({ ... })` in `main.js`:
+## Status & license
 
-```js
-createGrassConfig({
-  density: 7,                 // blades per square unit (pre-thinning)
-  patchSize: 24,              // chunk size
-  visibleDistance: 165,       // streaming / cull radius
-  lodDistances: [55, 110],    // LOD band edges
-  grassSize: { width: 0.12, height: 1.05 },
-  wind: { strength: 0.32, frequency: 1.7, scale: 0.06, gustiness: 0.55 },
-  debug: true,
-});
-```
+This is **v0.1.0**, a tagged first playable. The build history spans 76 stages, tracked across 76 git tags and the ADR ledger in [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
 
-## Notes
-
-- The single large JS chunk is just Three.js; code-split if you ship this.
-- Verified with a headless smoke test (renders, streams grass, moves, toggles
-  camera, opens the editor — no shader or runtime errors).
+No license file is present, so the project is **source-available** and all rights are reserved by the author. If you want to use, fork, or build on it, ask first.
