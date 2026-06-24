@@ -93,6 +93,8 @@
     "test:slice-authoring-kit-proof": "node scripts/browser-slice-authoring-kit-proof.mjs",
     "test:slice-2": "node scripts/slice-2-regression.mjs",
     "test:slice-2-proof": "node scripts/browser-frost-causeway-proof.mjs",
+    "test:slice-select": "node scripts/slice-select-regression.mjs",
+    "test:slice-select-proof": "node scripts/browser-slice-select-proof.mjs",
     "slice:probe": "node scripts/slice-seed-probe.mjs",
     "test:encounter-editor": "node scripts/encounter-editor-regression.mjs",
     "test:encounter-editor-proof": "node scripts/browser-encounter-editor-proof.mjs",

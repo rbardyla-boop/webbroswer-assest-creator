@@ -9,3 +9,6 @@ tmp/
 
 # Three.js skill QA artifacts
 qa/artifacts/
+
+# Vendored third-party skills repo (has its own .git, 128MB) — not part of this project's history
+threejs-awesome-graphics-agent-skills/

@@ -26,7 +26,7 @@ const STUCK_SECONDS = 18; // dwell in a navigation beat before a gentle "follow 
 const NAV_BEATS = new Set(["journey", "return"]);
 
 export class FrozenCacheSlice {
-  constructor({ scene, player, objectiveRuntime, weaponCarryRuntime, weaponEquipRuntime, onRestart, instrument = false } = {}) {
+  constructor({ scene, player, objectiveRuntime, weaponCarryRuntime, weaponEquipRuntime, onRestart, onCatalog, instrument = false } = {}) {
     this.scene = scene;
     this.player = player;
     this.objective = objectiveRuntime;
@@ -39,6 +39,9 @@ export class FrozenCacheSlice {
     this.card = new CompletionCard({
       onRestart,
       onExplore: () => this.trace?.record("explore", "kept exploring the finished valley", this.elapsed),
+      // Slice Select-1: optional "return to the catalog" action (only when launched from the catalog). Absent
+      // otherwise → the completion-card DOM is byte-identical for every existing slice/proof.
+      onCatalog,
     });
     this.completion = new SliceCompletion(this.card, this.audio);
     // Content-5: the resolved slice completion identity (name/arrival/ending). Default until load() reads it

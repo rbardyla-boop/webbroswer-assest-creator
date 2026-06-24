@@ -12,7 +12,9 @@ import { createVisibilityConfig } from "../visibility/VisibilityConfig.js";
 
 export const WORLD_DOCUMENT_VERSION = 2;
 export const WORLD_DOCUMENT_FORMAT = "world-builder-v2";
-export const WORLD_STORAGE_KEY = "grass-world-builder-save";
+// Re-exported from a THREE-free leaf so lightweight entries can read it without importing this engine-heavy
+// module (the catalog page imports the leaf directly). Value unchanged + single-source.
+export { WORLD_STORAGE_KEY } from "./storageKeys.js";
 
 export function createWorldDocument(overrides = {}) {
   const now = new Date().toISOString();

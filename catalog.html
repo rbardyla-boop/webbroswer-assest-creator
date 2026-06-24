@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glacial Valley — Slices</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f0d;
+        --panel-bg: rgba(16, 22, 20, 0.82);
+        --panel-border: rgba(120, 200, 140, 0.18);
+        --accent: #7fdca0;
+        --text: #d7e6dc;
+        --text-dim: #8fa899;
+        --font: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(120% 80% at 50% -10%, rgba(127, 220, 160, 0.10), transparent 60%),
+          radial-gradient(80% 60% at 90% 110%, rgba(90, 166, 255, 0.08), transparent 55%),
+          var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        -webkit-font-smoothing: antialiased;
+        padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 5vw, 3rem) 4rem;
+      }
+      .wrap { max-width: 940px; margin: 0 auto; }
+
+      header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: clamp(1.5rem, 4vw, 3rem); }
+      .eyebrow { font-size: 0.7rem; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.55rem; }
+      h1 { font-size: clamp(1.8rem, 1rem + 3.4vw, 3.2rem); line-height: 1.02; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+      .lede { color: var(--text-dim); font-size: 0.86rem; margin: 0.7rem 0 0; max-width: 46ch; line-height: 1.5; }
+      .builder-link {
+        flex: none; text-decoration: none; color: var(--text-dim); font-size: 0.74rem; letter-spacing: 0.06em;
+        border: 1px solid var(--panel-border); border-radius: 8px; padding: 0.5rem 0.8rem; white-space: nowrap;
+        transition: color 160ms, border-color 160ms, background 160ms;
+      }
+      .builder-link:hover { color: var(--text); border-color: rgba(127, 220, 160, 0.5); background: rgba(127, 220, 160, 0.06); }
+
+      .cards { display: grid; gap: clamp(0.9rem, 2vw, 1.3rem); }
+
+      .slice-card {
+        position: relative; display: grid; grid-template-columns: 6px 1fr auto; align-items: center;
+        gap: clamp(0.9rem, 2.4vw, 1.6rem); text-decoration: none; color: inherit; overflow: hidden;
+        background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 14px;
+        padding: clamp(1rem, 2.4vw, 1.5rem) clamp(1.1rem, 2.6vw, 1.7rem);
+        backdrop-filter: blur(8px);
+        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms, box-shadow 200ms;
+      }
+      .slice-card::before {
+        content: ""; grid-column: 1; align-self: stretch; border-radius: 6px;
+        background: var(--card-accent, var(--accent)); opacity: 0.85;
+      }
+      .slice-card:hover, .slice-card:focus-visible {
+        transform: translateY(-3px); outline: none;
+        border-color: color-mix(in oklab, var(--card-accent, var(--accent)) 55%, transparent);
+        box-shadow: 0 14px 40px -22px var(--card-accent, var(--accent)), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+      }
+      .card-body { grid-column: 2; min-width: 0; }
+      .card-title { font-size: clamp(1.15rem, 0.9rem + 1vw, 1.5rem); font-weight: 600; margin: 0 0 0.5rem; letter-spacing: -0.005em; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
+      .chip {
+        font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.22rem 0.5rem; border-radius: 999px;
+        border: 1px solid color-mix(in oklab, var(--card-accent, var(--accent)) 40%, transparent);
+        color: color-mix(in oklab, var(--card-accent, var(--accent)) 78%, var(--text));
+        background: color-mix(in oklab, var(--card-accent, var(--accent)) 10%, transparent);
+      }
+      .chip.difficulty { border-style: dashed; }
+      .card-desc { color: var(--text); font-size: 0.82rem; line-height: 1.55; margin: 0 0 0.55rem; opacity: 0.9; }
+      .card-objective { color: var(--text-dim); font-size: 0.74rem; line-height: 1.5; margin: 0; display: flex; gap: 0.45rem; }
+      .card-objective::before { content: "▸"; color: var(--card-accent, var(--accent)); }
+      .card-cta {
+        grid-column: 3; align-self: center; display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+        font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; padding: 0.6rem 1rem; border-radius: 10px;
+        color: #08120c; background: var(--card-accent, var(--accent));
+        transition: filter 160ms, transform 160ms;
+      }
+      .slice-card:hover .card-cta { filter: brightness(1.08); }
+      .empty { color: var(--text-dim); font-size: 0.85rem; padding: 2rem 0; }
+      @media (max-width: 560px) {
+        .slice-card { grid-template-columns: 6px 1fr; }
+        .card-cta { grid-column: 2; justify-self: start; margin-top: 0.7rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <p class="eyebrow">Glacial Valley</p>
+          <h1>Choose a Slice</h1>
+          <p class="lede">Each slice is a short, self-contained run: find the relic, carry it to the seal, and complete the valley.</p>
+        </div>
+        <a class="builder-link" href="/">▣ World Builder</a>
+      </header>
+      <main id="catalog" class="cards" aria-label="Playable slices"></main>
+    </div>
+    <script type="module" src="/src/catalog/catalogMain.js"></script>
+  </body>
+</html>

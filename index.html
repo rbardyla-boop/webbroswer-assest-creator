@@ -170,6 +170,7 @@
       }
       .btn:hover { border-color: var(--accent); color: var(--accent); }
       .btn:active { transform: translateY(1px); }
+      a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       /* Slice-0A: Play is the primary entry — a fresh player should never need to type ?play=1. */
       .btn.btn-primary { color: #06222b; background: #67e8ff; border-color: #9eeeff; font-weight: 600; }
       .btn.btn-primary:hover { background: #8af0ff; color: #06222b; border-color: #c9f6ff; }
@@ -187,6 +188,7 @@
     <div id="objective-banner"></div>
 
     <div id="toolbar">
+      <a id="open-catalog" class="btn" href="/catalog.html">▶ Play Slices</a>
       <button id="enter-play" class="btn btn-primary">▶ Play</button>
       <button id="open-editor" class="btn">▣ World Builder</button>
     </div>

@@ -1,7 +1,7 @@
 import { DEFAULT_SLICE_IDENTITY } from "../slice/SliceIdentity.js";
 
 export class CompletionCard {
-  constructor({ onExplore, onRestart, identity = DEFAULT_SLICE_IDENTITY } = {}) {
+  constructor({ onExplore, onRestart, onCatalog, identity = DEFAULT_SLICE_IDENTITY } = {}) {
     this.element = document.createElement("section");
     this.element.className = "completion-card";
     // Slice-0A friction fix: a fresh tester finished, wanted to REPLAY, and picked "Keep Exploring"
@@ -28,6 +28,16 @@ export class CompletionCard {
       onExplore?.();
     });
     this.element.querySelector('[data-action="restart"]').addEventListener("click", () => onRestart?.());
+    // Slice Select-1: when launched from the catalog, add a "return to the catalog" action. Appended ONLY when
+    // onCatalog is supplied, so the card DOM is byte-identical for every slice launched any other way.
+    if (onCatalog) {
+      const catalogBtn = document.createElement("button");
+      catalogBtn.dataset.action = "catalog";
+      catalogBtn.className = "secondary";
+      catalogBtn.textContent = "⌂ Slice Catalog";
+      this.element.querySelector(".completion-actions").appendChild(catalogBtn);
+      catalogBtn.addEventListener("click", () => onCatalog());
+    }
     document.body.appendChild(this.element);
   }
 

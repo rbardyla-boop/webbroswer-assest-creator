@@ -3821,6 +3821,59 @@ slices / deeper environment, or — only when authored slices repeatedly show no
 
 ---
 
+## ADR-066 — Slice Select-1: a player-facing Playable Slice Catalog over the sample registry
+
+**Status:** Accepted (Stage 77, tag `world-builder-slice-select-1`, local-only). The project pivots from content
+production to **presentation + access**: three authored slices ship and are proven, but a player could only reach
+them by hand-typing `?world=...` URLs. Slice Select-1 gives the product a real player loop — launch → choose a
+slice → play → complete → return → choose another.
+
+**What it is.** A separate, self-contained catalog page (`catalog.html` + `src/catalog/catalogMain.js`, a new
+Vite entry beside `arsenal`/`webgpu`), reached via a "▶ Play Slices" link in the editor toolbar (operator pick:
+a separate page, NOT the index default — the editor stays the default landing). It renders one card per curated
+playable slice from registry-adjacent metadata (`src/world/samples/playableSlices.js`: `PLAYABLE_SLICES` +
+`listPlayableSlices`/`getPlayableSlice`/`isPlayableSlice`/`playableSliceStorageKey`); each card launches
+`?play=1&world=<id>`. The dev/test samples (`vertical-slice-v1`, `enemy-archetype-lab`) are deliberately excluded.
+Return paths: an optional completion-card "⌂ Slice Catalog" button + a mid-play "⌂ Slices" link, both → `catalog.html`.
+
+**Per-slice persistence (the central fix).** Persistence was GLOBAL (one `grass-world-builder-save` key), so
+launching slice B after completing A would contaminate state. `WorldSerializer` already accepts a `storageKey`,
+so a catalog-launched playable slice now boots under its OWN slot `grass-world-builder-save:slice:<id>` (boot
+resolves saved-first-else-fresh from that key). Each slice's completion/reward is isolated, persists per slice
+across relaunches, and **never touches the global editor save**. Gated on `playableSliceId` (a curated `?world=`
+id) — the editor / `?runtime=1` / `?play=1`-no-world / non-playable `?world=` boots are byte-unchanged (global key).
+
+**Byte-stable / reuse boundary (held).** The catalog is a thin player-facing access layer: vanilla-DOM cards over
+the existing registry + `WorldSerializer.storageKey` + the existing `?play=1` boot. NO Combat-2 / enemies /
+worldgen / renderer / shader / LOD / cloud / accounts / analytics / menu framework. The `CompletionCard` catalog
+button is appended ONLY when `onCatalog` is supplied → the card DOM is byte-identical for every existing slice/proof.
+The toolbar link is additive (`enter-play` keeps `btn-primary`). No slice builder, frozen slice, or global default
+is mutated; no `WORLD_DOCUMENT_VERSION` bump. `WORLD_STORAGE_KEY` moved to a THREE-free leaf
+(`src/world/storageKeys.js`) and is re-exported from `WorldDocument.js` (value unchanged, single-source).
+
+**Review finding (fixed).** The fresh-context 5-dim review confirmed **1 HIGH**: `playableSlices.js` imported the
+three FULL sample builders just to read three string-literal ids, which (via the ESM import closure) dragged the
+whole THREE engine + terrain/grass configs into the catalog page bundle (~606 kB raw / ~160 kB gz to render three
+text cards), falsifying the module's own "no THREE, the menu is cheap" invariant. Fixed: `playableSlices.js` is now
+a true leaf (the ids are literals pinned to the builders' canonical `*_ID` exports by `test:slice-select`; it
+imports only the THREE-free `storageKeys.js` leaf). The catalog page JS dropped from ~606 kB to **~3.4 kB**
+(verified THREE-free); a new bundle-purity gate (a strict leaf import allow-list) prevents regression.
+
+**Gates.** `test:slice-select` (8 Node: exactly the 3 curated slices with complete metadata; every id registered
++ dev samples excluded; each card title == the slice's authored `doc.slice.title`; per-slice keys distinct +
+derived-but-≠-global; the catalog entry is a leaf [import allow-list] + ids pinned to the canonical exports;
+purity; byte-stability guards) + `test:slice-select-proof` (SwiftShader 5272/9407: catalog renders 3 cards →
+launch each slice → its own identity, fresh → complete The Frost Causeway → relaunch The Ice Chapel
+`completed === false` [NOT contaminated] → relaunch The Frost Causeway `completed === true` [persisted per slice]
+→ the global key never written → 0 console errors). Full byte-stability sweep green (editor-ux1 / slice0a /
+frozen-cache / first-playable / slice-1 / slice-2 / visual-benchmark proofs) + build (emits `catalog.html`) + qa
+32/0/0. 5-dim review: 1 HIGH fixed + verified, 0 outstanding.
+
+**Non-goals (held).** No Combat-2/health/death/AI. Next: more authored slices / deeper environment, or — only when
+authored slices repeatedly show non-lethal threat is no longer enough — plan Combat-2 (separately approved).
+
+---
+
 ## Note — External blueprint rejected (defensive breadcrumb, not a stage)
 
 - External Three.js/AI/MMO/decentralized-state blueprint evaluated and rejected in `docs/BLUEPRINT_RECONCILIATION.md`: no source changes warranted; overlapping grass/terrain/player/debug systems are already superior in-repo, and networking/factions/ZK/on-chain state remain forbidden absent a charter-level ADR.

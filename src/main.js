@@ -27,6 +27,7 @@ import { WorldSerializer } from "./world/WorldSerializer.js";
 import { AssetLibrary } from "./assets/AssetLibrary.js";
 import { PrefabLibrary } from "./prefabs/PrefabLibrary.js";
 import { getSampleWorld } from "./world/samples/index.js";
+import { isPlayableSlice, playableSliceStorageKey } from "./world/samples/playableSlices.js";
 import { createAssetLibraryFromWorldPack } from "./export/PlayableBuildExport.js";
 import { ModRegistry } from "./mods/ModRegistry.js";
 import { AnimationRuntime } from "./animation/AnimationRuntime.js";
@@ -74,6 +75,11 @@ if (playMode) document.body.classList.add("play-mode");
 const worldParam = urlParams.get("world"); // e.g. ?world=vertical-slice-v1
 const worldpackParam = urlParams.get("worldpack"); // url of an exported .worldpack.json
 const modParam = urlParams.get("mod"); // id of an installed mod package to play
+// Slice Select-1: a CURATED playable slice launched from the catalog (a player-facing ?world= id) gets its OWN
+// persistence slot (a per-slice save key) so its completion/reward stay isolated from the editor save AND from
+// the other slices — no cross-slice contamination. Non-playable ?world= (dev samples) + the editor/default boot
+// are unchanged (the global key). Null unless the world param is one of the three curated slices.
+const playableSliceId = worldParam && isPlayableSlice(worldParam) ? worldParam : null;
 
 window.__WORLD_READY__ = false;
 window.__WORLD_MODE__ = runtimeMode ? "runtime" : "editor";
@@ -89,7 +95,8 @@ const scene = createScene({ fogNear: 70, fogFar: 225 });
 const camera = createCamera();
 const lights = createLights(scene);
 const input = new Input(renderer.domElement);
-const worldSerializer = new WorldSerializer();
+// A catalog-launched slice persists to its own per-slice slot; every other boot uses the global save key.
+const worldSerializer = new WorldSerializer(playableSliceId ? { storageKey: playableSliceStorageKey(playableSliceId) } : {});
 let assetLibrary = null;
 
 // --- world -------------------------------------------------------------------
@@ -208,11 +215,31 @@ const frozenCacheSlice = runtimeMode
       onRestart: () => {
         localStorage.removeItem(worldSerializer.storageKey);
         localStorage.removeItem("frozen-cache-tutorial-v1");
-        window.location.href = "/?play=1";
+        // Restart the SAME slice when launched from the catalog (its per-slice slot was just cleared); else the
+        // default play world.
+        window.location.href = playableSliceId ? `/?play=1&world=${encodeURIComponent(playableSliceId)}` : "/?play=1";
       },
+      // Slice Select-1: a catalog-launched slice gets a "return to the catalog" action on the completion card.
+      // Absent for every other boot (the proofs + editor) → the completion-card DOM stays byte-identical.
+      onCatalog: playableSliceId ? () => { window.location.href = "/catalog.html"; } : undefined,
       instrument: playMode,
     })
   : null;
+// Slice Select-1: an always-visible "return to the catalog" link during a catalog-launched slice, so a player
+// can leave mid-run (the pause/menu link). A plain anchor (the runtime-overlay idiom); absent otherwise.
+if (playMode && playableSliceId) {
+  const catalogLink = document.createElement("a");
+  catalogLink.href = "/catalog.html";
+  catalogLink.id = "exit-catalog";
+  catalogLink.textContent = "⌂ Slices";
+  Object.assign(catalogLink.style, {
+    position: "fixed", top: "12px", left: "12px", zIndex: "30", padding: "6px 11px",
+    font: "12px/1 ui-monospace, monospace", letterSpacing: "0.04em", textDecoration: "none",
+    color: "#d7e6dc", background: "rgba(14, 18, 16, 0.82)", border: "1px solid rgba(120, 200, 140, 0.3)",
+    borderRadius: "8px", backdropFilter: "blur(8px)",
+  });
+  document.body.appendChild(catalogLink);
+}
 if (particleRuntime && import.meta.env.DEV) window.__PARTICLE_RUNTIME__ = particleRuntime;
 // Runtime-only: guard-banded Visibility + Streaming Kernel (Stage 17A). Tiers
 // registered agents (currently animated objects) so far/off-screen ones sleep
@@ -1133,6 +1160,12 @@ async function boot() {
     } catch (error) {
       console.error("Failed to load worldpack; falling back to the default world.", error);
     }
+  }
+  // A catalog-launched slice resolves from its OWN save slot first (so its completion/reward persist per slice),
+  // falling back to a fresh build of the sample. worldSerializer is already bound to this slice's per-slice key.
+  if (!initialDoc && playableSliceId) {
+    const savedSlice = worldSerializer.load();
+    initialDoc = savedSlice?.document ?? getSampleWorld(playableSliceId);
   }
   if (!initialDoc) initialDoc = worldParam ? getSampleWorld(worldParam) : null;
   if (!initialDoc) {
