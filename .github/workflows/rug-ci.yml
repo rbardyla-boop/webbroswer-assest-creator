@@ -1,0 +1,39 @@
+name: RUG Multiplayer CI
+
+on:
+  push:
+    branches: [rug-multiplayer-v0]
+    paths:
+      - 'rug/**'
+      - '.github/workflows/rug-ci.yml'
+  pull_request:
+    paths:
+      - 'rug/**'
+      - '.github/workflows/rug-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rug
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: rug/package.json
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - name: Boot smoke test
+        run: |
+          RUG_DATA_DIR="$RUNNER_TEMP/rug-data" node server/index.mjs > "$RUNNER_TEMP/rug.log" 2>&1 &
+          pid=$!
+          trap 'kill $pid || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8787/api/health > /tmp/rug-health.json; then break; fi
+            sleep 0.5
+          done
+          cat /tmp/rug-health.json
+          grep -q '"ok": true' /tmp/rug-health.json
