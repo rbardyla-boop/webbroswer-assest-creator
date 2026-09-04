@@ -72,6 +72,10 @@ function showAuthError(error) {
   $('#auth-error').textContent = error?.data ? JSON.stringify(error.data, null, 2) : error?.message || String(error || '');
 }
 
+function showIntentError(error) {
+  $('#intent-result').textContent = error?.data ? JSON.stringify(error.data, null, 2) : error.message;
+}
+
 function saveSession(actor, token) {
   credentials.set(actor, token);
   $('#actor-badge').textContent = actor;
@@ -167,7 +171,7 @@ function renderHealth() {
   clear(target);
   for (const [name, value] of Object.entries(state.health || {})) {
     const wrap = node('div', `health ${value >= 70 ? 'good' : value >= 40 ? 'mid' : 'low'}`);
-    wrap.append(text(node('div'), `${name.replaceAll('_', ' ')} ${value}`));
+    wrap.append(text(node('div'), `${name.replaceAll('_', ' ')} ${Number(value).toFixed(Number.isInteger(value) ? 0 : 1)}`));
     const track = node('div', 'health-track');
     const fill = node('div', 'health-fill');
     fill.style.width = `${Math.max(0, Math.min(100, value))}%`;
@@ -191,6 +195,22 @@ async function submitIntent(type, payload, options = {}) {
   state = result.state;
   render();
   return result;
+}
+
+async function downloadArtifact(item) {
+  const res = await fetch(`/api/artifact/${encodeURIComponent(item.digest)}`, {
+    headers: { 'x-rug-actor': credentials.actor, 'x-rug-token': credentials.token }
+  });
+  if (!res.ok) throw new Error(`Artifact download failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = item.name || item.id || item.digest;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderWorld() {
@@ -230,7 +250,11 @@ function renderWorld() {
   const acceptedKnowledge = Object.values(state.knowledge || {}).filter(k => k.status === 'accepted');
   const artifacts = Object.values(state.artifacts || {});
   for (const item of acceptedKnowledge) grow.append(makeCard(item.title, item.body, [item.id, `promoted by ${item.promoted_by}`]));
-  for (const item of artifacts) grow.append(makeCard(item.name || item.id, item.uri, [item.id, shortHash(item.digest)]));
+  for (const item of artifacts) {
+    grow.append(makeCard(item.name || item.id, item.uri, [item.id, shortHash(item.digest), item.size != null ? `${item.size} bytes` : ''], [
+      { label: 'Download', run: () => downloadArtifact(item).catch(showIntentError) }
+    ]));
+  }
   if (!acceptedKnowledge.length && !artifacts.length) empty(grow, 'Nothing committed or promoted yet.');
 
   $('#read-count').textContent = observations.length;
@@ -293,12 +317,28 @@ function renderKnowledge() {
   if (!accepted.length) empty(target, q ? 'No matching accepted knowledge.' : 'No accepted knowledge yet.');
 }
 
+async function mergeIntoMain(source) {
+  try {
+    const main = await api('/api/state?branch=main');
+    const result = await api('/api/merge', {
+      method: 'POST',
+      body: JSON.stringify({ source, target: 'main', base_hash: main.head })
+    });
+    $('#intent-result').textContent = `MERGED ${source} → main\n${result.summary.event_hash}`;
+    await loadBranches();
+    if (currentBranch === 'main') await loadState();
+  } catch (error) { showIntentError(error); }
+}
+
 function renderBranches(branches = null) {
   const target = $('#branches');
-  if (!target) return;
-  if (!branches) return;
+  if (!target || !branches) return;
   clear(target);
-  for (const branch of branches) target.append(makeCard(branch.name, branch.name === currentBranch ? 'current world' : '', [shortHash(branch.head)]));
+  for (const branch of branches) {
+    const actions = [];
+    if (branch.name !== 'main') actions.push({ label: 'Merge into main', run: () => mergeIntoMain(branch.name) });
+    target.append(makeCard(branch.name, branch.name === currentBranch ? 'current world' : '', [shortHash(branch.head)], actions));
+  }
 }
 
 function renderMission() {
@@ -307,6 +347,21 @@ function renderMission() {
   $('#org-name').textContent = state.organization?.name || 'RUG Organization';
   $('#mission-title').textContent = mission?.title || 'No mission yet';
   $('#mission-desc').textContent = mission?.description || 'Create one to begin.';
+  const victory = $('#victory');
+  victory.className = 'victory';
+  if (!mission) {
+    victory.textContent = '';
+    return;
+  }
+  const result = state.victory?.[mission.id];
+  if (!result || result.total === 0) {
+    victory.textContent = 'No machine-checkable victory conditions declared.';
+  } else if (result.won) {
+    victory.textContent = `MISSION WON · ${result.met}/${result.total} conditions true`;
+    victory.classList.add('won');
+  } else {
+    victory.textContent = `VICTORY STATE · ${result.met}/${result.total} conditions true`;
+  }
 }
 
 function render() {
@@ -321,35 +376,40 @@ function render() {
 }
 
 const examples = {
-  MISSION_CREATED: () => ({ mission_id: `MISSION-${Date.now()}`, title: 'Make the thing work', description: 'A real objective whose useful artifact is the victory state.', goals: ['working output', 'verified evidence'] }),
+  MISSION_CREATED: () => ({
+    mission_id: `MISSION-${Date.now()}`,
+    title: 'Make the thing work',
+    description: 'A real objective whose useful artifact is the victory state.',
+    goals: ['working output', 'verified evidence'],
+    success_conditions: [
+      { path: 'artifacts.OUTPUT', op: 'exists' },
+      { path: 'health.integrity', op: 'gte', value: 80 }
+    ]
+  }),
   WORK_CREATED: () => ({ work_id: `WORK-${Date.now()}`, mission_id: Object.keys(state?.missions || {})[0] || null, title: 'Investigate next blocker', description: 'Take one bounded piece of the mission.', exclusive: true, dependencies: [] }),
   WORK_CLAIMED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID', lease_expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString() }),
   WORK_RELEASED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID' }),
   WORK_BLOCKED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID', reason: 'Need a prerequisite or human decision' }),
   WORK_COMPLETED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID' }),
   OBSERVATION_RECORDED: () => ({ observation_id: `OBS-${Date.now()}`, claim: 'A new fact or report entered the world.', source: 'human observation', confidence: 0.6 }),
-  EVIDENCE_ATTACHED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID', ref: 'file://evidence/example.txt', digest: null, note: 'Evidence supporting the work.' }),
+  EVIDENCE_ATTACHED: () => ({ work_id: Object.keys(state?.work || {})[0] || 'WORK-ID', ref: 'rug://sha256/example', digest: null, note: 'Evidence supporting the work.' }),
   DECISION_PROPOSED: () => ({ decision_id: `DEC-${Date.now()}`, title: 'Approve next move', proposal: 'Proceed with the proposed state change.', evidence: [] }),
   DECISION_APPROVED: () => ({ decision_id: Object.keys(state?.decisions || {})[0] || 'DEC-ID' }),
   DECISION_REJECTED: () => ({ decision_id: Object.keys(state?.decisions || {})[0] || 'DEC-ID', reason: 'Insufficient evidence' }),
-  ARTIFACT_COMMITTED: () => ({ artifact_id: `ART-${Date.now()}`, name: 'Output artifact', uri: 'file://artifacts/output.txt', digest: '0'.repeat(64), media_type: 'text/plain' }),
+  ARTIFACT_COMMITTED: () => ({ artifact_id: `ART-${Date.now()}`, name: 'Output artifact', uri: 'rug://sha256/example', digest: '0'.repeat(64), media_type: 'text/plain' }),
   KNOWLEDGE_PROPOSED: () => ({ knowledge_id: `KNOW-${Date.now()}`, title: 'Validated lesson', body: 'What the organization should know after this work.', provenance: ['ledger:event-or-artifact'] }),
   KNOWLEDGE_PROMOTED: () => ({ knowledge_id: Object.keys(state?.knowledge || {})[0] || 'KNOW-ID' }),
   KNOWLEDGE_RETRACTED: () => ({ knowledge_id: Object.keys(state?.knowledge || {})[0] || 'KNOW-ID', reason: 'Superseded or disproven' }),
   CONSTRAINT_SET: () => ({ constraint_id: `CON-${Date.now()}`, rule: 'Do not exceed the agreed budget.', severity: 'hard' }),
   CONSTRAINT_CLEARED: () => ({ constraint_id: Object.keys(state?.constraints || {})[0] || 'CON-ID' }),
   AGENT_STATUS_SET: () => ({ status: 'working', claim: null, confidence: 0.8, attention_request: null }),
-  HEALTH_CHANGED: () => ({ delta: { coherence: -2, mission_progress: 4 }, reason: 'Example game-state consequence' })
+  HEALTH_CHANGED: () => ({ delta: { coherence: -2, mission_progress: 4 }, reason: 'Example exogenous game-state consequence' })
 };
 
 function fillExample() {
   const type = $('#intent-type').value;
   const payload = examples[type]?.() || {};
   $('#intent-payload').value = JSON.stringify(payload, null, 2);
-}
-
-function showIntentError(error) {
-  $('#intent-result').textContent = error?.data ? JSON.stringify(error.data, null, 2) : error.message;
 }
 
 async function genericIntent(event) {
@@ -396,6 +456,33 @@ async function registerActor(event) {
   }
 }
 
+async function uploadArtifact(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const file = form.get('file');
+  if (!(file instanceof File) || !file.size) return;
+  const headers = {
+    'x-rug-actor': credentials.actor,
+    'x-rug-token': credentials.token,
+    'x-rug-branch': currentBranch,
+    'x-rug-base-hash': state.head,
+    'x-rug-artifact-name': file.name,
+    'content-type': file.type || 'application/octet-stream'
+  };
+  if (form.get('artifact_id')) headers['x-rug-artifact-id'] = String(form.get('artifact_id'));
+  if (form.get('work_id')) headers['x-rug-work-id'] = String(form.get('work_id'));
+  try {
+    const res = await fetch('/api/artifact', { method: 'POST', headers, body: file });
+    const result = await res.json();
+    if (!res.ok) throw Object.assign(new Error(result.message || result.error || `HTTP ${res.status}`), { data: result });
+    $('#artifact-result').textContent = `COMMITTED\n${result.artifact.id}\nsha256:${result.artifact.digest}\n${result.artifact.size} bytes`;
+    event.currentTarget.reset();
+    await loadState();
+  } catch (error) {
+    $('#artifact-result').textContent = error?.data ? JSON.stringify(error.data, null, 2) : error.message;
+  }
+}
+
 $('#bootstrap-form').addEventListener('submit', bootstrap);
 $('#login-form').addEventListener('submit', login);
 $('#intent-form').addEventListener('submit', genericIntent);
@@ -403,6 +490,7 @@ $('#fill-example').addEventListener('click', fillExample);
 $('#intent-type').addEventListener('change', fillExample);
 $('#branch-form').addEventListener('submit', createBranch);
 $('#actor-form').addEventListener('submit', registerActor);
+$('#artifact-form').addEventListener('submit', uploadArtifact);
 $('#knowledge-search').addEventListener('input', renderKnowledge);
 $('#refresh').addEventListener('click', () => loadState().catch(showIntentError));
 $('#branch-select').addEventListener('change', async event => {
