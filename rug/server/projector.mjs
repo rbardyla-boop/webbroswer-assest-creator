@@ -1,7 +1,42 @@
 import { DEFAULT_HEALTH, EVENT_TYPES } from './dna.mjs';
+import { evaluateMissions } from './rules.mjs';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function changeHealth(state, delta = {}) {
+  for (const [key, amount] of Object.entries(delta)) {
+    if (key in state.health) state.health[key] = Math.max(0, Math.min(100, state.health[key] + Number(amount || 0)));
+  }
+}
+
+function physiology(state, event) {
+  switch (event.type) {
+    case EVENT_TYPES.WORK_BLOCKED:
+      changeHealth(state, { energy: -1, coherence: -0.5 });
+      break;
+    case EVENT_TYPES.WORK_COMPLETED:
+      changeHealth(state, { mission_progress: 3, integrity: 0.5 });
+      break;
+    case EVENT_TYPES.EVIDENCE_ATTACHED:
+      changeHealth(state, { knowledge_quality: 0.5, trust: 0.25 });
+      break;
+    case EVENT_TYPES.ARTIFACT_COMMITTED:
+      changeHealth(state, { integrity: 1, mission_progress: 1 });
+      break;
+    case EVENT_TYPES.KNOWLEDGE_PROMOTED:
+      changeHealth(state, { knowledge_quality: 2, trust: 1, coherence: 0.5 });
+      break;
+    case EVENT_TYPES.KNOWLEDGE_RETRACTED:
+      changeHealth(state, { knowledge_quality: -1, trust: -1 });
+      break;
+    case EVENT_TYPES.BRANCH_MERGED:
+      changeHealth(state, { coherence: 1 });
+      break;
+    default:
+      break;
+  }
 }
 
 export function blankState(branch = 'main') {
@@ -19,6 +54,7 @@ export function blankState(branch = 'main') {
     constraints: {},
     agents: {},
     health: clone(DEFAULT_HEALTH),
+    victory: {},
     timeline: []
   };
 }
@@ -52,6 +88,7 @@ export function applyEvent(state, event) {
         description: p.description || '',
         status: 'active',
         goals: p.goals || [],
+        success_conditions: p.success_conditions || [],
         created_by: event.actor,
         created_at: now,
         updated_at: now
@@ -166,6 +203,7 @@ export function applyEvent(state, event) {
         name: p.name || p.artifact_id,
         uri: p.uri,
         digest: p.digest,
+        size: p.size ?? null,
         media_type: p.media_type || 'application/octet-stream',
         committed_by: event.actor,
         committed_at: now
@@ -226,9 +264,7 @@ export function applyEvent(state, event) {
       break;
     }
     case EVENT_TYPES.HEALTH_CHANGED:
-      for (const [key, delta] of Object.entries(p.delta || {})) {
-        if (key in state.health) state.health[key] = Math.max(0, Math.min(100, state.health[key] + Number(delta || 0)));
-      }
+      changeHealth(state, p.delta || {});
       break;
     case EVENT_TYPES.BRANCH_CREATED:
     case EVENT_TYPES.BRANCH_MERGED:
@@ -237,6 +273,7 @@ export function applyEvent(state, event) {
       throw new Error(`Projector cannot apply ${event.type}`);
   }
 
+  physiology(state, event);
   state.head = event.event_hash;
   state.timeline.push({ seq: event.seq, type: event.type, actor: event.actor, at: now, hash: event.event_hash });
   return state;
@@ -245,5 +282,6 @@ export function applyEvent(state, event) {
 export function project(events, branch = 'main') {
   const state = blankState(branch);
   for (const event of events) applyEvent(state, event);
+  state.victory = evaluateMissions(state);
   return state;
 }
