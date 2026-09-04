@@ -8,6 +8,7 @@ import { DNA, EVENT_TYPES, ROLES } from './dna.mjs';
 import { IdentityStore } from './identity.mjs';
 import { KnowledgePlane } from './knowledge.mjs';
 import { Ledger, LedgerConflict } from './ledger.mjs';
+import { mergeBranch } from './merge.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -125,18 +126,12 @@ async function api(req, res, url) {
   const actor = requireAuth(req, url);
   const branch = url.searchParams.get('branch') || 'main';
 
-  if (req.method === 'GET' && url.pathname === '/api/dna') {
-    return json(res, 200, DNA);
-  }
-  if (req.method === 'GET' && url.pathname === '/api/state') {
-    return json(res, 200, authority.state(branch));
-  }
+  if (req.method === 'GET' && url.pathname === '/api/dna') return json(res, 200, DNA);
+  if (req.method === 'GET' && url.pathname === '/api/state') return json(res, 200, authority.state(branch));
   if (req.method === 'GET' && url.pathname === '/api/ledger') {
     return json(res, 200, { branch, head: ledger.head(branch), events: ledger.eventsForBranch(branch), verification: ledger.verifyBranch(branch) });
   }
-  if (req.method === 'GET' && url.pathname === '/api/branches') {
-    return json(res, 200, ledger.listBranches());
-  }
+  if (req.method === 'GET' && url.pathname === '/api/branches') return json(res, 200, ledger.listBranches());
   if (req.method === 'GET' && url.pathname === '/api/knowledge') {
     const state = authority.state(branch);
     return json(res, 200, knowledge.search(state, url.searchParams.get('q') || ''));
@@ -145,11 +140,7 @@ async function api(req, res, url) {
     const state = authority.state(branch);
     const me = state.actors[actor] || null;
     return json(res, 200, {
-      protocol: 'rug/1',
-      branch,
-      head: state.head,
-      dna: DNA,
-      actor: me,
+      protocol: 'rug/1', branch, head: state.head, dna: DNA, actor: me,
       mission: Object.values(state.missions).filter(m => m.status === 'active'),
       available_work: Object.values(state.work).filter(w => w.status === 'open'),
       my_work: Object.values(state.work).filter(w => w.owner === actor && w.status !== 'complete'),
@@ -176,12 +167,8 @@ async function api(req, res, url) {
     const body = await readJson(req);
     requireBase(body);
     const event = authority.submit({
-      branch: body.branch || 'main',
-      actor,
-      type: body.type,
-      payload: body.payload || {},
-      base_hash: body.base_hash,
-      meta: { ...(body.meta || {}), client: body.client || 'api' }
+      branch: body.branch || 'main', actor, type: body.type, payload: body.payload || {},
+      base_hash: body.base_hash, meta: { ...(body.meta || {}), client: body.client || 'api' }
     });
     return json(res, 201, { accepted: true, event, state: authority.state(body.branch || 'main') });
   }
@@ -191,6 +178,18 @@ async function api(req, res, url) {
     requireBase(body);
     const event = authority.createBranch({ name: body.name, from: body.from || 'main', actor, base_hash: body.base_hash });
     return json(res, 201, { accepted: true, event, state: authority.state(body.name) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/merge') {
+    const body = await readJson(req);
+    requireBase(body);
+    const result = mergeBranch(authority, {
+      source: body.source,
+      target: body.target || 'main',
+      actor,
+      base_hash: body.base_hash
+    });
+    return json(res, 201, { accepted: true, ...result });
   }
 
   return json(res, 404, { error: 'NOT_FOUND' });
@@ -205,10 +204,8 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     const status = error instanceof LedgerConflict ? 409 : error instanceof IntentRejected ? 422 : error.status || 500;
     json(res, status, {
-      error: error.code || error.name || 'ERROR',
-      message: error.message,
-      current_head: error.currentHead,
-      details: error.details
+      error: error.code || error.name || 'ERROR', message: error.message,
+      current_head: error.currentHead, details: error.details
     });
   }
 });
@@ -237,15 +234,10 @@ const sweep = setInterval(() => {
       if (work.owner && work.lease_expires_at && Date.parse(work.lease_expires_at) <= Date.now() && work.status !== 'complete') {
         try {
           authority.submit({
-            branch,
-            actor: 'system:bootstrap',
-            type: EVENT_TYPES.LEASE_EXPIRED,
-            base_hash: ledger.head(branch),
-            payload: { work_id: work.id, owner: work.owner }
+            branch, actor: 'system:bootstrap', type: EVENT_TYPES.LEASE_EXPIRED,
+            base_hash: ledger.head(branch), payload: { work_id: work.id, owner: work.owner }
           });
-        } catch (error) {
-          console.error('lease sweep rejected', error.message);
-        }
+        } catch (error) { console.error('lease sweep rejected', error.message); }
       }
     }
   }
