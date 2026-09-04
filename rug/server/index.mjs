@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Authority, IntentRejected } from './authority.mjs';
+import { ArtifactStore, readBinary } from './artifacts.mjs';
 import { DNA, EVENT_TYPES, ROLES } from './dna.mjs';
 import { IdentityStore } from './identity.mjs';
 import { KnowledgePlane } from './knowledge.mjs';
@@ -19,6 +20,7 @@ const port = Number(process.env.PORT || 8787);
 const ledger = new Ledger(path.join(dataDir, 'ledger.jsonl'));
 const identities = new IdentityStore(path.join(dataDir, 'identities.json'));
 const knowledge = new KnowledgePlane(path.join(dataDir, 'knowledge'));
+const artifacts = new ArtifactStore(path.join(dataDir, 'artifacts'));
 const listeners = new Set();
 
 const authority = new Authority(ledger, {
@@ -125,6 +127,45 @@ async function api(req, res, url) {
 
   const actor = requireAuth(req, url);
   const branch = url.searchParams.get('branch') || 'main';
+
+  if (req.method === 'GET' && url.pathname.startsWith('/api/artifact/')) {
+    const digest = url.pathname.slice('/api/artifact/'.length);
+    const bytes = artifacts.read(digest);
+    if (!bytes) return json(res, 404, { error: 'ARTIFACT_NOT_FOUND' });
+    res.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-length': bytes.length,
+      'etag': `"sha256-${digest}"`,
+      'cache-control': 'private, immutable, max-age=31536000'
+    });
+    return res.end(bytes);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/artifact') {
+    const targetBranch = String(req.headers['x-rug-branch'] || 'main');
+    const baseHash = String(req.headers['x-rug-base-hash'] || '');
+    requireBase({ base_hash: baseHash });
+    const bytes = await readBinary(req);
+    const stored = artifacts.put(bytes);
+    const artifactId = String(req.headers['x-rug-artifact-id'] || `ART-${stored.digest.slice(0, 12)}`);
+    const event = authority.submit({
+      branch: targetBranch,
+      actor,
+      type: EVENT_TYPES.ARTIFACT_COMMITTED,
+      base_hash: baseHash,
+      payload: {
+        artifact_id: artifactId,
+        name: String(req.headers['x-rug-artifact-name'] || artifactId),
+        uri: `rug://sha256/${stored.digest}`,
+        digest: stored.digest,
+        media_type: String(req.headers['content-type'] || 'application/octet-stream'),
+        size: stored.size,
+        work_id: req.headers['x-rug-work-id'] ? String(req.headers['x-rug-work-id']) : null
+      },
+      meta: { client: String(req.headers['x-rug-client'] || 'artifact-api') }
+    });
+    return json(res, 201, { accepted: true, artifact: { id: artifactId, digest: stored.digest, size: stored.size }, event });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/dna') return json(res, 200, DNA);
   if (req.method === 'GET' && url.pathname === '/api/state') return json(res, 200, authority.state(branch));
