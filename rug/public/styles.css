@@ -42,6 +42,9 @@ main { width: min(1500px, calc(100% - 28px)); margin: 14px auto 60px; display: g
 .hud { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(500px, 2fr); gap: 20px; }
 .mission-block h2 { margin: 4px 0; font-size: 24px; }
 .mission-block p { color: var(--muted); margin: 0; }
+.victory { margin-top: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--warning); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.victory:empty { display: none; }
+.victory.won { color: var(--accent); border-color: #4b7133; background: #10200f; box-shadow: inset 0 0 20px #7bd44810; }
 .health-bars { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap: 8px; }
 .health { font-size: 10px; color: var(--muted); }
 .health-track { margin-top: 4px; height: 8px; border-radius: 99px; overflow: hidden; background: #070a0e; border: 1px solid #202a34; }
