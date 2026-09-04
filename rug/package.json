@@ -1,0 +1,19 @@
+{
+  "name": "rug-multiplayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.mjs",
+    "start": "node server/index.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:all": "npm test",
+    "seed": "node tools/seed-demo.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
