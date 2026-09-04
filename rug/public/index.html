@@ -49,6 +49,7 @@
           <span class="label">ACTIVE MISSION</span>
           <h2 id="mission-title">No mission yet</h2>
           <p id="mission-desc">Create one to begin.</p>
+          <div id="victory" class="victory"></div>
         </div>
         <div id="health-bars" class="health-bars"></div>
       </section>
@@ -143,15 +144,27 @@
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-title"><div><span class="label">ADMIN</span><h2>Add human or agent</h2></div></div>
-        <form id="actor-form" class="actor-form">
-          <input name="actor_id" placeholder="actor-id" required>
-          <input name="name" placeholder="display name" required>
-          <select name="kind"><option value="human">human</option><option value="agent">agent</option></select>
-          <button>Register actor</button>
-        </form>
-        <pre id="actor-result"></pre>
+      <section class="grid two">
+        <div class="panel">
+          <div class="panel-title"><div><span class="label">SHARED EXECUTION</span><h2>Immutable files</h2></div></div>
+          <form id="artifact-form" class="intent-form">
+            <input name="file" type="file" required>
+            <input name="artifact_id" placeholder="artifact id (optional)">
+            <input name="work_id" placeholder="work id (optional)">
+            <button>Commit file to world</button>
+          </form>
+          <pre id="artifact-result"></pre>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><div><span class="label">ADMIN</span><h2>Add human or agent</h2></div></div>
+          <form id="actor-form" class="actor-form">
+            <input name="actor_id" placeholder="actor-id" required>
+            <input name="name" placeholder="display name" required>
+            <select name="kind"><option value="human">human</option><option value="agent">agent</option></select>
+            <button>Register actor</button>
+          </form>
+          <pre id="actor-result"></pre>
+        </div>
       </section>
     </main>
   </div>
